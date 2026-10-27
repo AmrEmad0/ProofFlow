@@ -90,6 +90,9 @@ describe("Meta adapters with local transport fixtures", () => {
     expect(result.boxes[0]?.frame?.frameIndex).toBe(0);
     expect(result.rawOutput).toContain("<0f>");
     expect(result.diagnostics).toEqual([]);
-    await expect(segmentVideo(fixtureClient(samResponse("response.incomplete")), "file-shared", "cardboard box")).rejects.toThrow("did not complete");
+    const incomplete = await segmentVideo(fixtureClient(samResponse("response.incomplete")), "file-shared", "cardboard box");
+    expect(incomplete.outcome).toMatchObject({ status: "incomplete", reason: "response" });
+    expect(incomplete.boxes).toEqual(result.boxes);
+    expect(incomplete.rawOutput).toBe(result.rawOutput);
   });
 });

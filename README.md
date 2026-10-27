@@ -15,7 +15,7 @@ Open http://localhost:5173. Drafts and conversations are stored in SQLite and sc
 
 Configuration: `MODEL_API_KEY`, `META_API_BASE_URL`, `DATABASE_PATH`, `STORAGE_PATH`, `HOST`, `PORT`, `WEB_ORIGIN`, `FFMPEG_PATH`, `FFPROBE_PATH`, and `MEDIA_RETENTION_HOURS` (default 24); defaults are in `.env.example`. Keep SQLite and storage private. Run one application process per database; an expiring lease prevents duplicate verification workers.
 
-Commands: `bun run typecheck`, `bun test`, `bun run build`, and `bun run db:migrate`. For production, build first, then run `NODE_ENV=production bun start`.
+Commands: `bun run typecheck` generates routes and runs Bun's native type checker; `bun check --no-script` checks types directly. `bun run check` runs type-checking, tests, and the production build. Other commands: `bun test`, `bun run build`, and `bun run db:migrate`. For production, build first, then run `NODE_ENV=production bun start`.
 
 Uploads require an approved plan and explicit consent. MP4, MOV, and WebM recordings are limited to 20 seconds and 25 MB. Analysis uses a 6 fps H.264 copy with audio removed. Video, tracking artifacts, and receipts expire after the configured retention period; the worker removes expired local data and retries remote-file deletion after analysis. A server restart marks interrupted runs failed; queued runs resume. Keep the process running for cleanup.
 

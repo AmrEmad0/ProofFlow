@@ -13,7 +13,7 @@
     "dev:web": "vite",
     "build": "vite build",
     "start": "bun src/server/index.ts",
-    "typecheck": "bun run routes:generate && tsc --noEmit",
+    "typecheck": "bun run routes:generate && bun check --no-script",
     "routes:generate": "bun scripts/generate-routes.ts",
     "db:migrate": "bun scripts/migrate.ts",
     "test": "bun test",
