@@ -12,6 +12,7 @@ const envSchema = z.object({
   MODEL_API_KEY: z.string().optional(),
   FFMPEG_PATH: z.string().min(1).default("ffmpeg"),
   FFPROBE_PATH: z.string().min(1).default("ffprobe"),
+  MEDIA_RETENTION_HOURS: z.coerce.number().int().min(1).max(168).default(24),
 });
 
 export function loadConfig(env: Record<string, string | undefined> = process.env) {

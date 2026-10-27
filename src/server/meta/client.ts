@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import type { Config } from "../config";
 
-export const MODELS = { muse: "muse-spark-1.3", sam: "sam-3.1" } as const;
+export const MODELS = { muse: "muse-spark-1.3-contributor", sam: "sam-3.1" } as const;
 export const PROMPT_VERSION = "2026-10-27.1";
 
 // Lazy creation keeps health/template routes available without credentials.

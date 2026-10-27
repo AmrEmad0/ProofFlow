@@ -23,6 +23,9 @@ export const findingSchema = z.strictObject({
     || (finding.startMs !== null && finding.endMs !== null && finding.endMs < finding.startMs)) {
     ctx.addIssue({ code: "custom", path: ["endMs"], message: "Evidence needs a complete, ordered time window." });
   }
+  if (finding.status === "observed" && (finding.startMs === null || finding.endMs === null || new Set(finding.evidence.map((item) => item.frameIndex)).size < 2)) {
+    ctx.addIssue({ code: "custom", path: ["evidence"], message: "An observed finding needs a time window and inspectable evidence from multiple frames." });
+  }
 });
 
 export const receiptSchema = z.strictObject({
@@ -31,7 +34,7 @@ export const receiptSchema = z.strictObject({
   contractHash: z.string().regex(/^[a-f0-9]{64}$/),
   findings: z.array(findingSchema).min(1).max(3),
   provenance: z.strictObject({
-    museModel: z.literal("muse-spark-1.3"),
+    museModel: z.literal("muse-spark-1.3-contributor"),
     samModel: z.literal("sam-3.1"),
     promptVersion: z.string().min(1),
     verificationRuleVersion: z.string().min(1),

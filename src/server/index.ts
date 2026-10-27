@@ -3,11 +3,14 @@ import { mkdir } from "node:fs/promises";
 import { createApp } from "./app";
 import { loadConfig } from "./config";
 import { openDatabase } from "./db";
+import { createVerificationWorker } from "./verification/worker";
 
 const config = loadConfig();
 await mkdir(config.STORAGE_PATH, { recursive: true, mode: 0o700 });
 const db = openDatabase(config.DATABASE_PATH);
-const app = createApp(db, config);
+const worker = createVerificationWorker(db, config);
+await worker.startWhenAvailable();
+const app = createApp(db, config, undefined, worker);
 
 if (config.NODE_ENV === "production") {
   if (!await Bun.file("dist/index.html").exists()) {
@@ -32,7 +35,9 @@ async function shutdown() {
   if (stopping) return;
   stopping = true;
   await app.stop();
+  await worker.stop();
   db.close();
+  process.exit(0);
 }
 process.on("SIGINT", () => { void shutdown(); });
 process.on("SIGTERM", () => { void shutdown(); });

@@ -3,7 +3,7 @@ import { Elysia } from "elysia";
 import type { Config } from "../config";
 import { mediaReadiness } from "../media/process";
 
-export function healthRoutes(db: Database, config: Config) {
+export function healthRoutes(db: Database, config: Config, videoAnalysis: () => boolean = () => false) {
   return new Elysia().get("/api/health", async ({ set }) => {
     let database = false;
     try { database = db.query("SELECT 1").get() !== null; } catch { /* readiness reports a failure */ }
@@ -14,7 +14,7 @@ export function healthRoutes(db: Database, config: Config) {
       status: ready ? "ok" as const : "degraded" as const,
       services: { database, ...media },
       models: { configured: config.modelConfigured },
-      capabilities: { templates: true, videoAnalysis: false },
+      capabilities: { templates: true, planning: config.modelConfigured, approval: true, videoAnalysis: videoAnalysis() },
     };
   });
 }

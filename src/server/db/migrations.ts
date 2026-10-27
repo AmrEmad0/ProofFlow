@@ -62,6 +62,39 @@ const migrations = [{
     CREATE INDEX runs_state_created_at ON runs(state, created_at);
     CREATE INDEX plan_versions_plan_id ON plan_versions(plan_id);
   `,
+}, {
+  version: 2,
+  sql: `
+    CREATE TABLE planner_owners (
+      plan_id TEXT PRIMARY KEY REFERENCES plans(id),
+      session_hash TEXT NOT NULL,
+      revision INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX planner_owners_session ON planner_owners(session_hash);
+    CREATE TABLE planner_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      plan_id TEXT NOT NULL REFERENCES plans(id),
+      role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    );
+    CREATE INDEX planner_messages_plan ON planner_messages(plan_id, id);
+  `,
+}, {
+  version: 3,
+  sql: `
+    ALTER TABLE runs ADD COLUMN normalized_path TEXT;
+    ALTER TABLE runs ADD COLUMN remote_file_id TEXT;
+    ALTER TABLE runs ADD COLUMN media_json TEXT CHECK (media_json IS NULL OR json_valid(media_json));
+    ALTER TABLE runs ADD COLUMN receipt_json TEXT CHECK (receipt_json IS NULL OR json_valid(receipt_json));
+    ALTER TABLE runs ADD COLUMN timings_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(timings_json));
+    ALTER TABLE runs ADD COLUMN warnings_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(warnings_json));
+    ALTER TABLE runs ADD COLUMN consent_at TEXT;
+    ALTER TABLE runs ADD COLUMN expires_at TEXT;
+    CREATE TABLE verification_worker (
+      id INTEGER PRIMARY KEY CHECK (id = 1), owner TEXT NOT NULL, lease_until INTEGER NOT NULL
+    );
+  `,
 }];
 
 export function migrate(db: Database): void {

@@ -9,7 +9,7 @@ describe("SQLite migrations and constraints", () => {
     const db = openDatabase(":memory:");
     try {
       migrate(db);
-      expect(db.query("SELECT * FROM schema_migrations").all()).toHaveLength(1);
+      expect(db.query("SELECT * FROM schema_migrations").all()).toHaveLength(3);
       expect(db.query("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
       expect(() => db.query("INSERT INTO runs (id, plan_version_id, state, video_path) VALUES (?, ?, ?, ?)")
         .run("run", "missing", "queued", "/private/clip.mp4")).toThrow();

@@ -35,10 +35,10 @@ describe("foundation API", () => {
     expect((await response.json()).services.ffmpeg).toBe(false);
   });
 
-  test("unimplemented analysis endpoints return 404", async () => {
+  test("video uploads require a valid request body", async () => {
     const response = await app.handle(new Request("http://localhost/api/runs", { method: "POST" }));
-    expect(response.status).toBe(404);
-    expect(await response.json()).toEqual({ error: "Route not found" });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "Invalid request" });
   });
 
   test("development CORS permits only the configured origin", async () => {

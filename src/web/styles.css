@@ -49,24 +49,24 @@
 }
 
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
+    --background: oklch(0.984 0.003 85);
+    --foreground: oklch(0.235 0.014 65);
     --card: oklch(1 0 0);
     --card-foreground: oklch(0.145 0 0);
     --popover: oklch(1 0 0);
     --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.55 0.17 41);
+    --primary-foreground: oklch(1 0 0);
     --secondary: oklch(0.97 0 0);
     --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
+    --muted: oklch(0.962 0.004 85);
+    --muted-foreground: oklch(0.52 0.012 65);
     --accent: oklch(0.97 0 0);
     --accent-foreground: oklch(0.205 0 0);
     --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
+    --border: oklch(0.914 0.008 80);
+    --input: oklch(0.914 0.008 80);
+    --ring: oklch(0.55 0.17 41);
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);
@@ -115,6 +115,41 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer components {
+  .eyebrow { @apply text-[9px] font-semibold tracking-[0.12em] text-muted-foreground; }
+  .chat-panel, .plan-panel { @apply flex flex-col overflow-hidden rounded-2xl border bg-card shadow-[0_2px_8px_-4px_oklch(0.2_0.01_65/0.12)]; }
+  .chat-panel { @apply self-start lg:sticky lg:top-5; }
+  .chat-history { max-height: 24rem; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+  .plan-tag { @apply inline-flex items-center gap-1.5 rounded-md border bg-background px-2 py-1; }
+  .proof-step { @apply p-4; }
+  .workflow-steps { @apply flex items-center; }
+  .workflow-steps > li { @apply flex flex-1 items-center gap-3 text-xs font-medium text-muted-foreground; }
+  .workflow-steps > li:not(:last-child)::after { content: ""; @apply mr-3 h-px flex-1 bg-border; }
+  .workflow-steps > li:last-child { @apply flex-none; }
+  .step-number { @apply flex size-6 shrink-0 items-center justify-center rounded-full border text-[11px]; }
+  .workflow-steps .is-current { @apply text-primary; }
+  .is-current .step-number { @apply border-primary bg-primary text-primary-foreground; }
+  .is-complete .step-number { @apply border-primary/15 bg-primary/10 text-primary; }
+  .workflow-steps .is-approved { @apply text-emerald-700; }
+  .is-approved .step-number { @apply border-emerald-100 bg-emerald-100 text-emerald-700; }
+  .workspace-enter { animation: workspace-enter 350ms ease-out both; }
+}
+
+@media (max-width: 420px) {
+  .workflow-steps > li { gap: 0.375rem; font-size: 0.625rem; }
+  .workflow-steps > li:not(:last-child)::after { margin-right: 0.375rem; }
+  .step-number { width: 1.25rem; height: 1.25rem; }
+}
+
+@keyframes workspace-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }
 
 @layer base {
