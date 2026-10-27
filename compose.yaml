@@ -1,0 +1,25 @@
+services:
+  proofflow:
+    image: localhost/proofflow:dev
+    build: .
+    ports:
+      - "127.0.0.1:${PROOFFLOW_HTTP_PORT:-3000}:3000"
+    environment:
+      MODEL_API_KEY: ${MODEL_API_KEY:-}
+      META_API_BASE_URL: ${META_API_BASE_URL:-https://api.meta.ai/v1}
+    volumes:
+      - proofflow-data:/app/data
+    healthcheck:
+      test:
+        - CMD
+        - bun
+        - -e
+        - 'const response = await fetch("http://127.0.0.1:3000/api/health"); process.exit(response.ok ? 0 : 1)'
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  proofflow-data:
