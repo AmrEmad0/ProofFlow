@@ -2,7 +2,7 @@
 
 Turn a visible task into a reviewable Proof Plan through chat with Meta Muse Spark. Start from PackProof (product in, packing slip in, box closed), refine up to three checks, and explicitly approve a frozen version. Upload a short recording, then inspect findings with timestamp links and SAM object boxes.
 
-Requires Bun 1.4.4+, FFmpeg with libx264, FFprobe, and a Meta Model API key with Muse Spark Contributor and SAM 3.1 access.
+Requires Bun 1.4.4+, FFmpeg with libx264 and the subtitles filter (libass), FFprobe, and a Meta Model API key with Muse Spark Contributor and SAM 3.1 access.
 
 ```sh
 bun install

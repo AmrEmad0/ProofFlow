@@ -14,7 +14,7 @@ export function withFeedback<T>(task: Promise<T>, messages: TaskMessages<T>): Pr
   });
 }
 
-export function downloadJson(value: unknown, filename: string, label: "Plan" | "Evidence") {
+export function downloadJson(value: unknown, filename: string, label: "Plan" | "Evidence" | "Model diagnostics") {
   let url: string | undefined;
   let link: HTMLAnchorElement | undefined;
   try {

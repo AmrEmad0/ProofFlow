@@ -2,7 +2,7 @@ import { queryOptions } from "@tanstack/react-query";
 import { z } from "zod";
 import { api } from "./eden";
 import { savedPlanSchema } from "../../shared/planner";
-import { runDetailsSchema } from "../../shared/verification";
+import { runDetailsSchema, runSummarySchema } from "../../shared/verification";
 import { isActiveRun } from "../../shared/receipt";
 
 const healthStatusSchema = z.object({
@@ -78,6 +78,21 @@ export function savedPlanQuery(id: string | null) {
     },
     enabled: Boolean(id),
     retry: false,
+  });
+}
+
+export function planRunsQuery(versionId: string | null) {
+  return queryOptions({
+    queryKey: ["runs", versionId],
+    queryFn: async () => {
+      if (!versionId) throw new Error("Choose an approved plan to view its videos.");
+      const result = await api.api.runs.get({ query: { approvedVersionId: versionId } });
+      if (result.error) throw apiError(result.error.value, "Saved video runs could not be loaded.");
+      return z.array(runSummarySchema).parse(result.data);
+    },
+    enabled: Boolean(versionId),
+    retry: false,
+    refetchInterval: (query) => query.state.data?.some((run) => isActiveRun(run.state)) ? 2000 : false,
   });
 }
 

@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import { readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { ANALYSIS_FPS, conceptTrackSchema, type ConceptTrack } from "../../shared/verification";
+import type { TrackingDiagnostic } from "../../shared/diagnostics";
 import { trackedConcepts, type ApprovedPlan } from "../../shared/proof-plan";
 import { receiptSchema, type RunState } from "../../shared/receipt";
 import type { Config } from "../config";
@@ -10,7 +11,8 @@ import { uploadVideo, deleteVideo } from "../meta/files";
 import { observeVideo, observationSchema, VIDEO_PROMPT_VERSION } from "../meta/observe";
 import { segmentVideo } from "../meta/sam";
 import { normalizeVideo } from "../media/video";
-import { VERIFICATION_RULE_VERSION, verifyEvidence } from "../engine/verify";
+import { createVideoThumbnail } from "../media/thumbnail";
+import { VERIFICATION_RULE_VERSION, evaluateEvidence } from "../engine/verify";
 import { verificationStore, type RunRow } from "./store";
 import { runDirectory } from "./storage";
 
@@ -113,6 +115,9 @@ export function createVerificationWorker(db: Database, config: Config, adapters?
         fps: ANALYSIS_FPS, sha256: new Bun.CryptoHasher("sha256").update(await Bun.file(normalizedPath).arrayBuffer()).digest("hex") };
       db.query("UPDATE runs SET normalized_path = ?, duration_ms = ?, video_sha256 = ?, media_json = ? WHERE id = ?")
         .run(normalizedPath, normalized.durationMs, media.sha256, JSON.stringify(media), run.id);
+      await createVideoThumbnail(normalizedPath, join(directory, "thumbnail.jpg"), config).catch(() => {
+        console.warn("Video thumbnail unavailable", { runId: run.id });
+      });
       state("uploading");
       const uploaded = await measure("upload", () => models.upload(normalizedPath));
       db.query("UPDATE runs SET remote_file_id = ? WHERE id = ?").run(uploaded.id, run.id);
@@ -122,24 +127,30 @@ export function createVerificationWorker(db: Database, config: Config, adapters?
       async function trackConcept(concept: string, index: number) {
         let track: ConceptTrack;
         let raw: unknown = null;
+        const diagnostic: TrackingDiagnostic = { concept, receivedBoxes: 0, retainedBoxes: 0, lowConfidenceBoxes: 0, confidenceThreshold: 0.5, issue: "model_request" };
         try {
           const result = await measure(`sam_${index + 1}`, () => models.segment(uploaded.id, concept));
           raw = result;
+          diagnostic.receivedBoxes = result.boxes.length;
+          diagnostic.lowConfidenceBoxes = result.boxes.filter((box) => box.confidence !== undefined && box.confidence < diagnostic.confidenceThreshold).length;
+          diagnostic.issue = result.outcome.status !== "completed" ? "incomplete_output" : result.diagnostics.length > 0 ? "parser_diagnostics" : "invalid_geometry";
           if (result.outcome.status !== "completed" || result.diagnostics.length > 0) throw new Error("Incomplete or ambiguous SAM output.");
           // Parser boxes are half-open source pixels. Source frame N maps to N/6 seconds in our CFR copy.
           const dimensions = [...result.rawOutput.matchAll(/;w=(\d+);h=(\d+)/g)];
           if (result.boxes.length > 0 && (dimensions.length === 0 || dimensions.some((match) => Number(match[1]) !== media.width || Number(match[2]) !== media.height))) throw new Error("SAM coordinate dimensions do not match the analysis copy.");
-          track = conceptTrackSchema.parse({ concept, outcome: "completed", boxes: result.boxes.filter((box) => box.confidence === undefined || box.confidence >= 0.5).map((box) => {
+          track = conceptTrackSchema.parse({ concept, outcome: "completed", boxes: result.boxes.filter((box) => box.confidence === undefined || box.confidence >= diagnostic.confidenceThreshold).map((box) => {
             if (box.frame?.frameIndex === undefined || box.frame.frameIndex >= media.frameCount) throw new Error("SAM frame outside the analysis copy.");
-            return { objectId: box.objectId, frameIndex: box.frame.frameIndex, left: box.left / media.width,
+            return { objectId: box.objectId, frameIndex: box.frame.frameIndex, ...(box.confidence === undefined ? {} : { confidence: box.confidence }), left: box.left / media.width,
               top: box.top / media.height, right: box.right / media.width, bottom: box.bottom / media.height };
           }) });
+          diagnostic.retainedBoxes = track.boxes.length;
+          diagnostic.issue = null;
         } catch {
           track = { concept, outcome: "failed", boxes: [] };
           warnings.push(`Tracking for “${concept}” could not be used. Dependent findings remain uncertain.`);
         }
         const path = join(directory, `track-${index}.json`);
-        await Bun.write(path, JSON.stringify({ track, raw }), { mode: 0o600 });
+        await Bun.write(path, JSON.stringify({ track, diagnostic, raw }), { mode: 0o600 });
         db.query("INSERT INTO track_artifacts (run_id, concept, artifact_path, model_version, outcome) VALUES (?, ?, ?, ?, ?)")
           .run(run.id, concept, path, MODELS.sam, track.outcome);
         tracks.push(track);
@@ -158,7 +169,8 @@ export function createVerificationWorker(db: Database, config: Config, adapters?
       await Bun.write(join(directory, "muse.json"), JSON.stringify(observation), { mode: 0o600 });
       state("verifying");
       const started = performance.now();
-      const findings = verifyEvidence(plan, observation, tracks, media.frameCount);
+      const { findings, diagnostics } = evaluateEvidence(plan, observation, tracks, media.frameCount);
+      await Bun.write(join(directory, "verification.json"), JSON.stringify(diagnostics), { mode: 0o600 });
       timings.verification = Math.round(performance.now() - started);
       const receipt = receiptSchema.parse({ runId: run.id, approvedVersionId: plan.approvedVersionId, contractHash: plan.contractHash, findings,
         provenance: { museModel: MODELS.muse, samModel: MODELS.sam, promptVersion: VIDEO_PROMPT_VERSION,

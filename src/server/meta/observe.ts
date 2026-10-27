@@ -1,17 +1,9 @@
 import type OpenAI from "openai";
 import { z } from "zod";
 import { approvedPlanSchema, type ApprovedPlan } from "../../shared/proof-plan";
-import { museAnalysisSchema } from "./muse";
 import { MODELS } from "./client";
-
-export const observationSchema = museAnalysisSchema.extend({
-  candidates: z.array(museAnalysisSchema.shape.candidates.element.extend({
-    actionVisible: z.boolean(), beforeMatches: z.boolean(), afterMatches: z.boolean(),
-    visibility: z.enum(["clear", "occluded", "unclear"]),
-    nonOccurrenceVisible: z.boolean(), searchComplete: z.boolean(),
-  })).max(3),
-});
-export type Observation = z.infer<typeof observationSchema>;
+import { observationSchema, type Observation } from "../../shared/observation";
+export { observationSchema, type Observation } from "../../shared/observation";
 export const VIDEO_PROMPT_VERSION = "2026-10-27.2";
 
 export async function observeVideo(client: OpenAI, fileId: string, plan: ApprovedPlan, durationMs: number): Promise<Observation> {

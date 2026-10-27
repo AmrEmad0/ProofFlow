@@ -10,6 +10,9 @@ import { PlannerError } from "../planner/store";
 import { runDirectory } from "../verification/storage";
 import { verificationStore } from "../verification/store";
 import type { VerificationWorker } from "../verification/worker";
+import { readRunDiagnostics } from "../verification/diagnostics";
+import { createVideoThumbnail } from "../media/thumbnail";
+import { createAnnotatedVideo } from "../media/annotated-video";
 
 const idParams = t.Object({ id: t.String({ format: "uuid" }) });
 
@@ -31,6 +34,8 @@ export function videoResponse(file: ReturnType<typeof Bun.file>, range: string |
 export function runRoutes(db: Database, config: Config, worker?: VerificationWorker) {
   const store = verificationStore(db);
   const receiving = new Set<string>();
+  const thumbnails = new Map<string, Promise<void>>();
+  const videoExports = new Map<string, Promise<void>>();
   return new Elysia()
     .onBeforeHandle(({ request, set }) => {
       set.headers["cache-control"] = "no-store";
@@ -71,7 +76,7 @@ export function runRoutes(db: Database, config: Config, worker?: VerificationWor
     }, { additionalProperties: false }) })
     .get("/api/runs/:id", async ({ params, request }) => {
       const details = store.details(params.id, sessionHash(request));
-      if (details.state === "completed") {
+      if (details.state === "completed" || details.state === "failed") {
         const artifacts = db.query<{ artifact_path: string }, [string]>("SELECT artifact_path FROM track_artifacts WHERE run_id = ? ORDER BY concept").all(params.id);
         details.tracks = await Promise.all(artifacts.map(async ({ artifact_path }) => {
           const value: unknown = await Bun.file(artifact_path).json();
@@ -81,10 +86,57 @@ export function runRoutes(db: Database, config: Config, worker?: VerificationWor
       }
       return details;
     }, { params: idParams })
-    .get("/api/runs/:id/video", async ({ params, request }) => {
-      const run = store.row(params.id, sessionHash(request));
+    .get("/api/runs/:id/diagnostics", async ({ params, request }) => {
+      const details = store.details(params.id, sessionHash(request));
+      const artifacts = db.query<{ artifact_path: string }, [string]>("SELECT artifact_path FROM track_artifacts WHERE run_id = ? ORDER BY concept").all(params.id);
+      return readRunDiagnostics(runDirectory(config, params.id), details, artifacts.map((artifact) => artifact.artifact_path));
+    }, { params: idParams })
+    .get("/api/runs/:id/video", async ({ params, request, query }) => {
+      const hash = sessionHash(request);
+      const run = store.row(params.id, hash);
+      if (query.download && run.state !== "completed") throw new PlannerError(409, "Wait for verification to finish before downloading the final video.");
       if (!run.normalized_path || !await Bun.file(run.normalized_path).exists()) throw new PlannerError(404, "The analysis video is not available yet.");
-      return videoResponse(Bun.file(run.normalized_path), request.headers.get("range"));
+      let path = run.normalized_path;
+      if (query.download) {
+        path = join(runDirectory(config, params.id), "annotated-v1.mp4");
+        if (!await Bun.file(path).exists()) {
+          let pending = videoExports.get(run.id);
+          if (!pending) {
+            if (videoExports.size >= 2) throw new PlannerError(429, "Other video downloads are being prepared. Please try again shortly.");
+            const media = store.details(run.id, hash).media;
+            if (!media) throw new PlannerError(409, "The analysis video is not ready to export.");
+            const artifacts = db.query<{ artifact_path: string }, [string]>("SELECT artifact_path FROM track_artifacts WHERE run_id = ? ORDER BY concept").all(run.id);
+            const output = path;
+            pending = (async () => {
+              const tracks = await Promise.all(artifacts.map(async ({ artifact_path }) => conceptTrackSchema.parse((await Bun.file(artifact_path).json()).track)));
+              await createAnnotatedVideo(run.normalized_path!, output, media, tracks, config);
+            })().catch(() => { throw new PlannerError(502, "The video with SAM boxes could not be prepared. Check FFmpeg subtitles support and try again."); })
+              .finally(() => { videoExports.delete(run.id); });
+            videoExports.set(run.id, pending);
+          }
+          await pending;
+        }
+        store.row(params.id, hash);
+      }
+      const response = videoResponse(Bun.file(path), request.headers.get("range"));
+      if (query.download && response.ok) response.headers.set("content-disposition", `attachment; filename="proofflow-${run.id}-tracked.mp4"`);
+      return response;
+    }, { params: idParams, query: t.Object({ download: t.Optional(t.Literal("true")) }) })
+    .get("/api/runs/:id/thumbnail", async ({ params, request }) => {
+      const run = store.row(params.id, sessionHash(request));
+      const path = join(runDirectory(config, params.id), "thumbnail.jpg");
+      if (!await Bun.file(path).exists()) {
+        if (!run.normalized_path || !await Bun.file(run.normalized_path).exists()) throw new PlannerError(404, "The video thumbnail is not available yet.");
+        let pending = thumbnails.get(run.id);
+        if (!pending) {
+          pending = createVideoThumbnail(run.normalized_path, path, config).finally(() => { thumbnails.delete(run.id); });
+          thumbnails.set(run.id, pending);
+        }
+        await pending;
+      }
+      store.row(params.id, sessionHash(request));
+      return new Response(Bun.file(path), { headers: { "content-type": "image/jpeg", "cache-control": "no-store",
+        "x-content-type-options": "nosniff", "cross-origin-resource-policy": "same-origin" } });
     }, { params: idParams })
     .delete("/api/runs/:id", async ({ params, request }) => {
       const run = store.row(params.id, sessionHash(request));

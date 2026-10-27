@@ -19,10 +19,6 @@ export async function segmentVideo(client: OpenAI, fileId: string, concept: stri
   };
   const stream = await client.responses.create(request as unknown as ResponseCreateParamsStreaming);
   const result = await parseVideoStream(stream).finalResult;
-  if (result.outcome.status !== "completed") throw new Error("SAM segmentation did not complete.");
-  if (result.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
-    throw new Error("SAM segmentation returned invalid records.");
-  }
-  // Preserve rawOutput, diagnostics, and outcome for private artifact storage.
+  // The worker validates the result after retaining diagnostics privately.
   return { ...result, boxes: recordsOfKind(result.records, "box") };
 }

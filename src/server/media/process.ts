@@ -1,7 +1,7 @@
 import type { Config } from "../config";
 
-export async function runMediaCommand(args: string[], timeoutMs = 30_000): Promise<string> {
-  const child = Bun.spawn(args, { stdout: "pipe", stderr: "pipe", timeout: timeoutMs });
+export async function runMediaCommand(args: string[], timeoutMs = 30_000, cwd?: string): Promise<string> {
+  const child = Bun.spawn(args, { stdout: "pipe", stderr: "pipe", timeout: timeoutMs, cwd });
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),

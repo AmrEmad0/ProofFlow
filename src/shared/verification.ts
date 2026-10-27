@@ -3,9 +3,11 @@ import { approvedPlanSchema } from "./proof-plan";
 import { receiptSchema, runStateSchema } from "./receipt";
 
 export const ANALYSIS_FPS = 6;
+export const TRACK_COLORS = ["#c2410c", "#0369a1", "#047857", "#7c3aed"] as const;
 
 export const trackBoxSchema = z.strictObject({
   objectId: z.string().min(1), frameIndex: z.number().int().nonnegative(),
+  confidence: z.number().min(0).max(1).optional(),
   left: z.number().min(0).max(1), top: z.number().min(0).max(1),
   right: z.number().min(0).max(1), bottom: z.number().min(0).max(1),
 }).refine((box) => box.right > box.left && box.bottom > box.top, "Invalid tracked box");

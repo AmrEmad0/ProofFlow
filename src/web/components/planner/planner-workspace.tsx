@@ -7,7 +7,7 @@ import { toast } from "@/components/ui/toast";
 import { withFeedback } from "@/lib/feedback";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { api } from "@/lib/eden";
-import { apiError, plannerStatusQuery, plansQuery, savedPlanQuery } from "@/lib/queries";
+import { apiError, plannerStatusQuery, planRunsQuery, plansQuery, savedPlanQuery } from "@/lib/queries";
 import { deletePlanResultSchema, savedPlanSchema, type SavedPlan } from "../../../shared/planner";
 import { packproofTemplate } from "../../../shared/packproof";
 import { PlanPreview } from "./plan-preview";
@@ -36,7 +36,7 @@ export function PlannerWorkspace({ initialStarter = false }: { initialStarter?: 
   const [activeId, setActiveId] = useState<string | null>(() => initialStarter ? null : lastTemplate());
   const [error, setError] = useState<string | null>(null);
   const [input, setInput] = useState("");
-  const [view, setView] = useState<"plan" | "video">("plan");
+  const [view, setView] = useState<"auto" | "plan" | "video">("auto");
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
@@ -45,12 +45,14 @@ export function PlannerWorkspace({ initialStarter = false }: { initialStarter?: 
   const templates = useQuery(plansQuery);
   const current = useQuery(savedPlanQuery(activeId));
   const saved = current.data ?? null;
+  const approvedVersionId = saved?.status === "approved" ? saved.versionId : null;
+  const previousRuns = useQuery({ ...planRunsQuery(approvedVersionId), enabled: Boolean(approvedVersionId) && view === "auto" });
   const configured = health.data?.configured ?? false;
 
   function select(id: string | null, keepInput = false) {
     setActiveId(id);
     setError(null);
-    if (!keepInput) { setInput(""); setView("plan"); setPropertiesOpen(false); }
+    if (!keepInput) { setInput(""); setView("auto"); setPropertiesOpen(false); }
     try {
       if (id) localStorage.setItem("proofflow.activeTemplate", id);
       else localStorage.removeItem("proofflow.activeTemplate");
@@ -130,7 +132,8 @@ export function PlannerWorkspace({ initialStarter = false }: { initialStarter?: 
 
   const pending = mutation.isPending || removePlan.isPending;
   const sending = mutation.isPending && mutation.variables?.type === "send";
-  const loading = Boolean(activeId) && current.isPending;
+  const openingVideos = Boolean(approvedVersionId) && view === "auto" && previousRuns.isPending;
+  const loading = (Boolean(activeId) && current.isPending) || openingVideos;
   const starter = !saved && !activeId && initialStarter;
   const displayedError = error ?? (current.isError ? current.error.message : health.isError ? health.error.message : null);
 
@@ -138,13 +141,17 @@ export function PlannerWorkspace({ initialStarter = false }: { initialStarter?: 
 
   const approved = saved?.status === "approved";
   const hasPlan = Boolean(saved?.plan || starter);
-  const videoView = approved && view === "video";
+  const videoView = approved && (view === "video" || (view === "auto" && (previousRuns.isError || Boolean(previousRuns.data?.length))));
   const step = videoView ? 2 : hasPlan ? 1 : 0;
+
+  useEffect(() => {
+    if (approved && view === "auto" && (previousRuns.isError || previousRuns.data?.length)) setView("video");
+  }, [approved, view, previousRuns.isError, previousRuns.data]);
 
   useEffect(() => {
     heading.current?.focus({ preventScroll: true });
     window.scrollTo({ top: 0 });
-  }, [approved, hasPlan, view]);
+  }, [activeId, approved, hasPlan, view, videoView, openingVideos]);
 
   return (
     <SidebarProvider style={{ "--sidebar-width-icon": "4rem" } as CSSProperties}>
@@ -163,7 +170,7 @@ export function PlannerWorkspace({ initialStarter = false }: { initialStarter?: 
           <span className="shrink-0 text-xs text-muted-foreground" role="status">{pending ? "Saving…" : saved ? "Saved" : ""}</span>
         </header>
         <div className="px-4 pt-6 pb-8 sm:px-8 sm:pt-7">
-          <div className="workspace-enter mx-auto max-w-6xl">
+          <div className={`workspace-enter mx-auto ${videoView ? "max-w-[1500px]" : "max-w-6xl"}`}>
             <ol className="workflow-steps mb-6" aria-label="Verification progress">
               {["Create plan", "Review checks", "Verify video"].map((label, index) => (
                 <li key={label} aria-current={step === index ? "step" : undefined} className={`${step === index ? "is-current" : step > index ? "is-complete" : ""} ${approved && index === 1 ? "is-approved" : ""}`}>
@@ -172,11 +179,11 @@ export function PlannerWorkspace({ initialStarter = false }: { initialStarter?: 
               ))}
             </ol>
             <div className="mb-6">
-              <h1 ref={heading} tabIndex={-1} className="text-2xl font-semibold tracking-tight outline-none sm:text-3xl">{videoView ? "Verify your video" : approved ? "Your plan is ready" : hasPlan ? "Review your checks" : "What should the video show?"}</h1>
-              <p className="mt-2 text-sm text-muted-foreground">{videoView ? "Upload a recording of the approved checks." : approved ? "Add a video to check it against this plan." : hasPlan ? "Check the actions below, then approve your plan." : "Describe the task. We’ll turn it into visible checks."}</p>
+              <h1 ref={heading} tabIndex={-1} className="text-2xl font-semibold tracking-tight outline-none sm:text-3xl">{openingVideos ? "Opening your plan" : videoView ? "Videos & evidence" : approved ? "Your plan is ready" : hasPlan ? "Review your checks" : "What should the video show?"}</h1>
+              <p className="mt-2 text-sm text-muted-foreground">{openingVideos ? "Loading your videos and saved checks." : videoView ? "Manage this plan’s recordings and review their findings." : approved ? "Add a video to check it against this plan." : hasPlan ? "Check the actions below, then approve your plan." : "Describe the task. We’ll turn it into visible checks."}</p>
             </div>
             {displayedError && (approved || loading) && <p role="alert" className="mb-4 rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">{displayedError}</p>}
-            {loading ? <Skeleton className="h-96 rounded-2xl" aria-label="Loading saved plan" /> : videoView ? <VerificationWorkspace key={saved.versionId} saved={saved} /> : <div className={approved ? "mx-auto max-w-3xl" : hasPlan ? "grid items-start gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]" : "mx-auto max-w-2xl"}>
+            {loading ? <Skeleton className="h-96 rounded-2xl" aria-label={openingVideos ? "Loading plan videos" : "Loading saved plan"} /> : videoView ? <VerificationWorkspace key={saved.versionId} saved={saved} /> : <div className={approved ? "mx-auto max-w-3xl" : hasPlan ? "grid items-start gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]" : "mx-auto max-w-2xl"}>
               {hasPlan && <PlanPreview key={`${activeId}-${saved?.revision ?? "preview"}`} saved={saved} starter={starter ? packproofTemplate : null} pending={pending || current.isError} onApprove={() => act({ type: "approve" })} onRevise={() => act({ type: "revise" })} onUseStarter={() => act({ type: "create", template: "packproof" })} onVerify={() => setView("video")} />}
               {!approved && <PlannerChat saved={saved} starter={starter} pending={pending} sending={sending} pendingMessage={sending && mutation.variables?.type === "send" ? mutation.variables.message : null} configured={configured} error={displayedError} input={input} onInputChange={setInput} onSend={async (message) => { await mutation.mutateAsync({ type: "send", message }); }} onStarter={() => act({ type: "create", template: "packproof" })} onReload={() => { setError(null); void withFeedback(current.refetch({ throwOnError: true }), { loading: "Reloading draft…", success: "Draft reloaded", error: "Couldn’t reload draft" }).catch(() => {}); }} />}
             </div>}

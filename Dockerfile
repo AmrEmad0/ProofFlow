@@ -1,7 +1,7 @@
 FROM oven/bun:1.4.4-slim AS base
 WORKDIR /app
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg ca-certificates \
+    && apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 FROM base AS build
