@@ -106,5 +106,24 @@ export function planRoutes(db: Database, config: Config, conversation?: PlanConv
     })
     .post("/api/plans/:id/revise", ({ params, body, request }) => store.revise(params.id, sessionHash(request), body.revision), {
       params: planParams, body: revisionBody,
-    });
+    })
+    .post("/api/plans/:id/checks", ({ params, body, request }) => {
+      const hash = sessionHash(request);
+      if (busySessions.has(hash)) throw new PlannerError(409, "Wait for the current change to finish, then try saving again. Your edit is still here.");
+      return store.editChecks(params.id, hash, body);
+    }, { params: planParams, body: t.Object({ revision: t.Integer({ minimum: 0 }), steps: t.Array(t.Object({
+      id: t.String({ minLength: 1, maxLength: 80 }), subjectConcept: t.String({ minLength: 1, maxLength: 120 }),
+      targetConcept: t.Nullable(t.String({ minLength: 1, maxLength: 120 })),
+      beforeState: t.Nullable(t.String({ minLength: 1, maxLength: 240 })), afterState: t.Nullable(t.String({ minLength: 1, maxLength: 240 })),
+    }, { additionalProperties: false }), { minItems: 1, maxItems: 3 }) }, { additionalProperties: false }) })
+    .post("/api/plans/:id/restore", ({ params, body, request }) => {
+      const hash = sessionHash(request);
+      if (busySessions.has(hash)) throw new PlannerError(409, "Wait for the current change to finish before undoing it.");
+      return store.restore(params.id, hash, body.revision, body.versionId);
+    }, { params: planParams, body: t.Object({ revision: t.Integer({ minimum: 0 }), versionId: t.String({ format: "uuid" }) }, { additionalProperties: false }) })
+    .post("/api/plans/:id/copy", ({ params, body, request }) => {
+      const hash = sessionHash(request);
+      if (busySessions.has(hash)) throw new PlannerError(409, "Wait for the current change to finish before copying the plan.");
+      return store.copy(params.id, hash, body.revision);
+    }, { params: planParams, body: revisionBody });
 }

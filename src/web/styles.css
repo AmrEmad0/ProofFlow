@@ -6,6 +6,10 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+    --text-xs: 0.875rem;
+    --text-xs--line-height: 1.5;
+    --text-sm: 1rem;
+    --text-sm--line-height: 1.5;
     --font-heading: var(--font-sans);
     --font-sans: 'Inter Variable', sans-serif;
     --color-sidebar-ring: var(--sidebar-ring);
@@ -120,15 +124,15 @@
 @layer components {
   .eyebrow { @apply text-[9px] font-semibold tracking-[0.12em] text-muted-foreground; }
   .chat-panel, .plan-panel { @apply flex flex-col overflow-hidden rounded-2xl border bg-card shadow-[0_2px_8px_-4px_oklch(0.2_0.01_65/0.12)]; }
-  .chat-panel { @apply self-start lg:sticky lg:top-5; }
-  .chat-history { max-height: 24rem; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+  .chat-panel { @apply self-start xl:sticky xl:top-5; }
+  .chat-history { max-height: 16rem; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
   .plan-tag { @apply inline-flex items-center gap-1.5 rounded-md border bg-background px-2 py-1; }
-  .proof-step { @apply p-4; }
+  .proof-step { @apply px-3 py-3; }
   .workflow-steps { @apply flex items-center; }
-  .workflow-steps > li { @apply flex flex-1 items-center gap-3 text-xs font-medium text-muted-foreground; }
+  .workflow-steps > li { @apply flex flex-1 items-center gap-3 text-sm font-medium text-muted-foreground; }
   .workflow-steps > li:not(:last-child)::after { content: ""; @apply mr-3 h-px flex-1 bg-border; }
   .workflow-steps > li:last-child { @apply flex-none; }
-  .step-number { @apply flex size-6 shrink-0 items-center justify-center rounded-full border text-[11px]; }
+  .step-number { @apply flex size-8 shrink-0 items-center justify-center rounded-full border text-sm; }
   .workflow-steps .is-current { @apply text-primary; }
   .is-current .step-number { @apply border-primary bg-primary text-primary-foreground; }
   .is-complete .step-number { @apply border-primary/15 bg-primary/10 text-primary; }
@@ -138,9 +142,11 @@
 }
 
 @media (max-width: 420px) {
-  .workflow-steps > li { gap: 0.375rem; font-size: 0.625rem; }
-  .workflow-steps > li:not(:last-child)::after { margin-right: 0.375rem; }
-  .step-number { width: 1.25rem; height: 1.25rem; }
+  .workflow-steps { align-items: flex-start; gap: 0.75rem; }
+  .workflow-steps > li { flex: 1; font-size: 0.875rem; }
+  .workflow-steps > li:last-child { flex: 1; }
+  .workflow-steps > li > span, .workflow-steps > li > button { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+  .workflow-steps > li::after { display: none; }
 }
 
 @keyframes workspace-enter {
@@ -161,6 +167,13 @@
     }
   button:not(:disabled), [role="button"]:not(:disabled) {
     cursor: pointer;
+    }
+  button, [role="button"], summary {
+    min-height: 2.75rem;
+    }
+  button:focus-visible, summary:focus-visible, a:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 3px;
     }
   html {
     @apply font-sans;

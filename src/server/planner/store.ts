@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { savedPlanSchema, type PlannerMessage, type PlannerReply, type SavedPlan } from "../../shared/planner";
+import { describeEditedCheck, editChecksSchema, savedPlanSchema, type PlannerMessage, type PlannerReply, type SavedPlan } from "../../shared/planner";
 import { packproofTemplate } from "../../shared/packproof";
 import { proofPlanSchema, type ProofPlan } from "../../shared/proof-plan";
 import { hashContract } from "../engine/contract";
@@ -103,6 +103,60 @@ export function plannerStore(db: Database) {
     return read(id, sessionHash);
   }
 
+  function changeDraft(id: string, sessionHash: string, revision: number, change: (current: SavedPlan) => ProofPlan) {
+    db.transaction(() => {
+      const current = read(id, sessionHash);
+      if (current.revision !== revision) throw new PlannerError(409, "This plan changed. Reload the saved draft before trying again. Your edit is still here.");
+      if (current.status === "approved") throw new PlannerError(409, "Choose Make changes to open a new draft first.");
+      if (!current.plan) throw new PlannerError(400, "Create some checks first.");
+      const parsed = proofPlanSchema.safeParse(change(current));
+      if (!parsed.success) throw new PlannerError(400, "Use 1–3 checks with up to 4 different objects. Each check needs an object and any required destination or before and after states.");
+      addVersion(id, (current.version ?? 0) + 1, parsed.data);
+      db.query("UPDATE planner_owners SET revision = revision + 1 WHERE plan_id = ?").run(id);
+    })();
+    return read(id, sessionHash);
+  }
+
+  function editChecks(id: string, sessionHash: string, input: unknown) {
+    const parsed = editChecksSchema.safeParse(input);
+    if (!parsed.success) throw new PlannerError(400, "Keep at least one check and fill in the object names.");
+    const { revision, steps } = parsed.data;
+    return changeDraft(id, sessionHash, revision, (current) => {
+      const originals = current.plan!.steps;
+      if (new Set(steps.map((step) => step.id)).size !== steps.length) throw new PlannerError(400, "Each check can appear only once.");
+      const updated = steps.map((edit) => {
+        const original = originals.find((step) => step.id === edit.id);
+        if (!original) throw new PlannerError(400, "This check is no longer in the plan. Reload the saved draft.");
+        if (original.checkType === "object_enters_region" && !edit.targetConcept) throw new PlannerError(400, "Choose where the item should go.");
+        if (original.checkType === "visible_state_change" && (!edit.beforeState || !edit.afterState)) throw new PlannerError(400, "Describe what the object looks like before and after.");
+        const unchanged = ["subjectConcept", "targetConcept", "beforeState", "afterState"].every((key) => original[key as keyof typeof edit] === edit[key as keyof typeof edit]);
+        return unchanged ? original : describeEditedCheck(original, edit);
+      });
+      return { ...current.plan!, goal: updated.map((step) => step.label).join(". "), steps: updated };
+    });
+  }
+
+  function restore(id: string, sessionHash: string, revision: number, versionId: string) {
+    return changeDraft(id, sessionHash, revision, () => {
+      const row = db.query<VersionRow, [string, string]>("SELECT * FROM plan_versions WHERE id = ? AND plan_id = ?").get(versionId, id);
+      if (!row) throw new PlannerError(404, "That saved version could not be found.");
+      return proofPlanSchema.parse({ schemaVersion: 1, title: row.title_snapshot, goal: row.goal_snapshot,
+        steps: JSON.parse(row.steps_json), limitations: JSON.parse(row.limitations_json) });
+    });
+  }
+
+  function copy(id: string, sessionHash: string, revision: number) {
+    let copiedId = "";
+    db.transaction(() => {
+      const current = read(id, sessionHash);
+      if (current.revision !== revision) throw new PlannerError(409, "This plan changed. Reload it before making a copy.");
+      if (!current.plan) throw new PlannerError(400, "Create some checks before making a copy.");
+      copiedId = create(sessionHash, "blank").id;
+      addVersion(copiedId, 1, { ...current.plan, title: `${current.plan.title.slice(0, 153)} (copy)` });
+    })();
+    return read(copiedId, sessionHash);
+  }
+
   function markDeleted(id: string, sessionHash: string) {
     db.transaction(() => {
       read(id, sessionHash);
@@ -131,5 +185,5 @@ export function plannerStore(db: Database) {
     })();
   }
 
-  return { read, create, list, saveReply, approve, revise, markDeleted, restoreDeleted, finishDelete };
+  return { read, create, list, saveReply, approve, revise, editChecks, restore, copy, markDeleted, restoreDeleted, finishDelete };
 }

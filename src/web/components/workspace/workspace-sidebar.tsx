@@ -32,7 +32,7 @@ export function WorkspaceSidebar({ plans, activeId, pending, loading, error, can
   const matches = plans.filter((plan) => plan.title.toLocaleLowerCase().includes(query));
   function closeAfter(action: () => void) { setOpenMobile(false); action(); }
 
-  const menuButtonClass = "group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:size-10! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0! [&>svg]:size-5! group-has-data-[sidebar=menu-action]/menu-item:pr-12";
+  const menuButtonClass = "group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:size-11! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0! [&>svg]:size-5! group-has-data-[sidebar=menu-action]/menu-item:pr-12";
 
   return <Sidebar collapsible="icon">
     <SidebarHeader className="gap-4 px-3 pt-5 pb-4 group-data-[collapsible=icon]:px-0">
@@ -42,16 +42,16 @@ export function WorkspaceSidebar({ plans, activeId, pending, loading, error, can
     <SidebarContent className="group-data-[collapsible=icon]:overflow-y-auto">
       <SidebarGroup className="group-data-[collapsible=icon]:px-0">
         <SidebarGroupLabel className="justify-between"><span>Plans</span><span>{plans.length}</span></SidebarGroupLabel>
-        {plans.length > 0 && <div className="relative mt-1 mb-3 group-data-[collapsible=icon]:hidden"><Search className="pointer-events-none absolute top-2.5 left-3 size-3.5 text-muted-foreground" aria-hidden="true" /><label htmlFor={searchId} className="sr-only">Search plans</label><SidebarInput id={searchId} type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find a plan…" className="h-9 pl-9" /></div>}
+        {plans.length > 0 && <div className="relative mt-1 mb-3 group-data-[collapsible=icon]:hidden"><Search className="pointer-events-none absolute top-3.5 left-3 size-3.5 text-muted-foreground" aria-hidden="true" /><label htmlFor={searchId} className="sr-only">Search plans</label><SidebarInput id={searchId} type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find a plan…" className="h-9 pl-9" /></div>}
         <SidebarGroupContent>
           {loading && <p className="px-2 py-3 text-xs text-muted-foreground group-data-[collapsible=icon]:sr-only" role="status">Loading plans…</p>}
           {error ? <div role="alert" className="px-2 py-3 text-xs leading-5 text-destructive group-data-[collapsible=icon]:sr-only">{error}<button onClick={onRetry} className="mt-2 block underline">Retry</button></div> : !loading && matches.length === 0 ? <p className="px-2 py-3 text-xs text-muted-foreground group-data-[collapsible=icon]:sr-only">{query ? "No matching plans." : "No saved plans yet."}</p> : <nav aria-label="Saved plans"><SidebarMenu className="gap-1 group-data-[collapsible=icon]:gap-2">{matches.map((plan) => <SidebarMenuItem key={plan.id}>
-            <SidebarMenuButton onClick={() => closeAfter(() => onSelect(plan.id))} disabled={pending} isActive={activeId === plan.id} aria-current={activeId === plan.id ? "page" : undefined} size="lg" title={plan.title} tooltip={plan.title} aria-label={collapsed ? plan.title : undefined} className={`${menuButtonClass} data-active:bg-primary/8 data-active:text-foreground`}>
+            <SidebarMenuButton onClick={() => closeAfter(() => onSelect(plan.id))} disabled={pending} isActive={activeId === plan.id} aria-current={activeId === plan.id ? "page" : undefined} size="lg" title={plan.title} tooltip={plan.title} aria-label={collapsed ? plan.title : undefined} className={`${menuButtonClass} h-16 data-active:bg-primary/8 data-active:text-foreground`}>
               {plan.status === "approved" ? <LockKeyhole aria-hidden="true" /> : <FileText className="text-muted-foreground" aria-hidden="true" />}
-              <span className="min-w-0 group-data-[collapsible=icon]:hidden"><span className="block truncate text-sm font-medium">{plan.title}</span><span className={`mt-0.5 block text-[11px] ${plan.status === "approved" ? "text-emerald-700" : "text-muted-foreground"}`}>{plan.status === "approved" ? "Approved" : "Draft"}</span></span>
+              <span className="min-w-0 group-data-[collapsible=icon]:hidden"><span className="block truncate text-sm font-medium">{plan.title}</span><span className={`mt-0.5 block text-xs ${plan.status === "approved" ? "text-emerald-700" : "text-muted-foreground"}`}>{plan.status === "approved" ? "Approved" : "Draft"}</span></span>
             </SidebarMenuButton>
-            <SidebarMenuAction showOnHover onClick={() => closeAfter(() => onDelete(plan))} disabled={pending} aria-label={`Delete ${plan.title}`} title="Delete plan" className="top-2! right-1 size-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive [@media(hover:none)]:opacity-100!"><Trash2 aria-hidden="true" /></SidebarMenuAction>
-            {activeId === plan.id && <SidebarMenuSub><SidebarMenuSubItem><SidebarMenuSubButton render={<button type="button" disabled={!canInspect || pending} />} onClick={() => closeAfter(onProperties)}><SlidersHorizontal aria-hidden="true" /><span>Properties</span></SidebarMenuSubButton></SidebarMenuSubItem></SidebarMenuSub>}
+            <SidebarMenuAction showOnHover onClick={() => closeAfter(() => onDelete(plan))} disabled={pending} aria-label={`Delete ${plan.title}`} title="Delete plan" className="top-2.5! right-0.5 size-11 text-muted-foreground hover:bg-destructive/10 hover:text-destructive [@media(hover:none)]:opacity-100!"><Trash2 aria-hidden="true" /></SidebarMenuAction>
+            {activeId === plan.id && <SidebarMenuSub><SidebarMenuSubItem><SidebarMenuSubButton render={<button type="button" disabled={!canInspect || pending} />} onClick={() => closeAfter(onProperties)}><SlidersHorizontal aria-hidden="true" /><span>About this plan</span></SidebarMenuSubButton></SidebarMenuSubItem></SidebarMenuSub>}
           </SidebarMenuItem>)}</SidebarMenu></nav>}
         </SidebarGroupContent>
       </SidebarGroup>

@@ -1,25 +1,48 @@
-import { LoaderCircle, LockKeyhole, ShieldCheck, Upload, Video } from "lucide-react";
+import { useId, useRef, useState } from "react";
+import { Check, LoaderCircle, ShieldCheck, Upload, Video, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LIMITS } from "../../../shared/proof-plan";
 
-export function VideoUpload({ file, localUrl, consent, development, uploading, processing, available, retentionHours, version, onChoose, onConsent, onInvalid, onUpload }: {
-  file: File | null; localUrl: string | null; consent: boolean; development: boolean;
+export function VideoUpload({ file, localUrl, consent, uploading, processing, available, retentionHours, version, onChoose, onClear, onConsent, onInvalid, onUpload }: {
+  file: File | null; localUrl: string | null; consent: boolean;
   uploading: boolean; processing: boolean; available: boolean; retentionHours: number; version: number | null;
   onChoose: (file: File | undefined) => void; onConsent: (consent: boolean) => void;
+  onClear: () => void;
   onInvalid: (message: string) => void; onUpload: () => void;
 }) {
-  return <section className="rounded-2xl border bg-card p-5 sm:p-6" aria-label="Upload a new video">
-    <div className="mb-5 flex items-center justify-between gap-3"><h2 className="flex items-center gap-2 text-sm font-semibold"><Upload className="size-4 text-primary" aria-hidden="true" />New video</h2><span className="flex items-center gap-1 text-xs text-emerald-700"><LockKeyhole className="size-3" aria-hidden="true" />Plan v{version}</span></div>
-    <label className={`flex min-h-48 flex-col items-center justify-center rounded-xl border border-dashed bg-muted/20 p-5 text-center focus-within:ring-2 focus-within:ring-primary ${uploading ? "opacity-50" : "cursor-pointer hover:border-primary/50"}`} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); if (!uploading) onChoose(event.dataTransfer.files[0]); }}>
-      <input type="file" aria-label="Choose a video recording" accept=".mp4,.mov,.webm,video/mp4,video/quicktime,video/webm" className="sr-only" disabled={uploading} onChange={(event) => { onChoose(event.target.files?.[0]); event.target.value = ""; }} />
-      <span className="mb-3 flex size-12 items-center justify-center rounded-xl border bg-background text-primary"><Video className="size-5" aria-hidden="true" /></span><span className="max-w-full break-all text-sm font-medium">{file ? file.name : "Choose a video or drop it here"}</span><span className="mt-2 text-xs text-muted-foreground">{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB · choose another` : `MP4, MOV, WebM · ${LIMITS.durationMs / 1000} sec max · ${LIMITS.uploadBytes / 1024 / 1024} MB max`}</span>
-    </label>
-    {localUrl && <video src={localUrl} controls playsInline className="mt-4 max-h-64 w-full rounded-lg bg-black" aria-label="Selected recording preview" onLoadedMetadata={(event) => { if (event.currentTarget.duration * 1000 > LIMITS.durationMs) onInvalid("This recording is longer than 20 seconds. Choose a shorter, complete clip."); }} />}
-    <label className="mt-5 flex cursor-pointer items-start gap-2.5 text-xs leading-5 text-muted-foreground"><input type="checkbox" checked={development || consent} disabled={development || uploading} onChange={(event) => onConsent(event.target.checked)} className="mt-1 size-3.5 shrink-0 accent-primary" />I have permission to share this recording with Meta for Muse Spark and SAM analysis.</label>
-    <p className="mt-2 pl-6 text-[10px] leading-4 text-muted-foreground">Muse uses Contributor mode. Submitted content may be used to improve Meta models. The analysis copy removes audio.</p>
-    <Button onClick={onUpload} disabled={!file || !(development || consent) || !available || processing || uploading} className="mt-5 h-11 w-full gap-2 rounded-lg">{uploading ? <><LoaderCircle className="size-4 animate-spin" />Uploading…</> : <><ShieldCheck className="size-4" />Verify video</>}</Button>
-    {processing && <p className="mt-3 text-xs leading-5 text-muted-foreground">A video is processing. You can prepare your next recording while it finishes.</p>}
-    {!available && <p className="mt-3 text-xs leading-5 text-muted-foreground">Video verification is currently unavailable. Your approved plan is saved.</p>}
-    <p className="mt-3 flex items-start gap-1.5 text-xs leading-5 text-muted-foreground"><ShieldCheck className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />Private to this workspace. Expires after {retentionHours} hours.</p>
+  const chooser = useRef<HTMLInputElement>(null);
+  const descriptionId = useId();
+  const [failedPreviewUrl, setFailedPreviewUrl] = useState<string | null>(null);
+  const reason = uploading ? "Your video is uploading. Keep this page open until it finishes."
+    : processing ? "Another video is being checked. You can prepare this one while it finishes."
+    : !available ? "Video checking is currently unavailable. Your approved checks are saved."
+    : file && !consent ? "Tick the permission box to check this video." : null;
+
+  return <section className="rounded-2xl border bg-card p-4 sm:p-5" aria-label="Upload a new video">
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><h2 className="flex items-center gap-2 text-lg font-semibold"><Upload className="size-5 text-primary" aria-hidden="true" />Check a video</h2><span className="flex items-center gap-1.5 text-sm text-emerald-700"><Check className="size-4" aria-hidden="true" />Approved checks · v{version}</span></div>
+    <input ref={chooser} type="file" aria-label="Choose a video recording" accept=".mp4,.mov,.webm,video/mp4,video/quicktime,video/webm" className="sr-only" tabIndex={-1} disabled={uploading} onChange={(event) => { onChoose(event.target.files?.[0]); event.target.value = ""; }} />
+    <div onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); if (!uploading) onChoose(event.dataTransfer.files[0]); }}>
+      {file ? <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-muted/20 p-3">
+        <Video className="size-5 shrink-0 text-primary" aria-hidden="true" />
+        <div className="min-w-0 flex-1 basis-40"><p className="break-all text-base font-medium">{file.name}</p><p className="mt-1 text-sm text-muted-foreground">{(file.size / 1024 / 1024).toFixed(1)} MB · selected on this device</p></div>
+        <Button variant="outline" disabled={uploading} onClick={() => chooser.current?.click()}>Choose another</Button>
+        <Button variant="ghost" size="icon" aria-label="Remove selected video" disabled={uploading} onClick={onClear}><X className="size-4" /></Button>
+      </div> : <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed bg-muted/20 px-4 py-6 text-center">
+        <Video className="size-7 text-primary" aria-hidden="true" />
+        <Button onClick={() => chooser.current?.click()} disabled={uploading}>Choose a video</Button>
+        <p className="text-sm leading-6 text-muted-foreground">Or drop it here. MP4, MOV, or WebM · up to {LIMITS.durationMs / 1000} seconds and {LIMITS.uploadBytes / 1024 / 1024} MB.</p>
+      </div>}
+    </div>
+    {file && localUrl && <figure className="mt-4">
+      <div className="flex justify-center rounded-xl bg-muted/40 p-2"><video key={localUrl} src={localUrl} controls playsInline preload="metadata" className="block h-auto max-h-72 w-auto max-w-full rounded-lg" aria-label="Selected recording preview" onError={() => setFailedPreviewUrl(localUrl)} onLoadedMetadata={(event) => { if (event.currentTarget.duration * 1000 > LIMITS.durationMs) onInvalid("This video is longer than 20 seconds. Choose a shorter clip that shows the whole task."); }} /></div>
+      <figcaption className="mt-2 text-sm leading-6 text-muted-foreground">{failedPreviewUrl === localUrl ? "Your browser can’t preview this file. You can choose another or continue to check it." : "Play the video to make sure the whole task is visible. It stays on this device until you choose Check video."}</figcaption>
+    </figure>}
+    {file && <div className="mt-4 border-t pt-3">
+      <label className="flex min-h-12 cursor-pointer items-start gap-3 text-base leading-6"><input type="checkbox" checked={consent} disabled={uploading} onChange={(event) => onConsent(event.target.checked)} aria-describedby={`${descriptionId}-sharing`} className="mt-1 size-5 shrink-0 accent-primary" />I have permission to send this video to Meta for analysis.</label>
+      <p id={`${descriptionId}-sharing`} className="mt-1 text-sm leading-6 text-muted-foreground">Meta Muse Spark (Contributor mode) and SAM 3.1 process the video. Submitted content may be used to improve Meta models. Audio is removed from the analysis copy.</p>
+      <div className="mt-4 flex flex-wrap items-center gap-3"><Button onClick={onUpload} disabled={!consent || !available || processing || uploading} aria-describedby={reason ? `${descriptionId}-status` : undefined} className="w-full gap-2 sm:w-auto">{uploading ? <><LoaderCircle className="size-4 animate-spin" />Uploading…</> : <><ShieldCheck className="size-4" />Check video</>}</Button>{reason && <p id={`${descriptionId}-status`} role="status" className="min-w-0 flex-1 basis-48 text-sm leading-6 text-muted-foreground">{reason}</p>}</div>
+    </div>}
+    {!file && reason && <p role="status" className="mt-3 text-sm leading-6 text-muted-foreground">{reason}</p>}
+    <p className="mt-3 text-sm leading-6 text-muted-foreground">Videos and evidence saved in this workspace expire after {retentionHours} hours.</p>
   </section>;
 }
