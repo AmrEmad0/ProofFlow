@@ -26,3 +26,5 @@ export const savedPlanSchema = z.strictObject({
 export type PlannerMessage = z.infer<typeof plannerMessageSchema>;
 export type PlannerReply = z.infer<typeof plannerReplySchema>;
 export type SavedPlan = z.infer<typeof savedPlanSchema>;
+
+export const deletePlanResultSchema = z.strictObject({ deleted: z.literal(true) });

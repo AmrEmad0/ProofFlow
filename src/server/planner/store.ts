@@ -17,7 +17,7 @@ type VersionRow = {
 export function plannerStore(db: Database) {
   function read(id: string, sessionHash: string): SavedPlan {
     const owner = db.query<{ revision: number }, [string, string]>(
-      "SELECT revision FROM planner_owners WHERE plan_id = ? AND session_hash = ?",
+      "SELECT o.revision FROM planner_owners o JOIN plans p ON p.id = o.plan_id WHERE o.plan_id = ? AND o.session_hash = ? AND p.deleted_at IS NULL",
     ).get(id, sessionHash);
     if (!owner) throw new PlannerError(404, "This template could not be found in your workspace.");
     const row = db.query<VersionRow, [string]>("SELECT * FROM plan_versions WHERE plan_id = ? ORDER BY version DESC LIMIT 1").get(id);
@@ -44,7 +44,7 @@ export function plannerStore(db: Database) {
   }
 
   function create(sessionHash: string, template: "blank" | "packproof") {
-    const count = db.query<{ count: number }, [string]>("SELECT count(*) AS count FROM planner_owners WHERE session_hash = ?").get(sessionHash)?.count ?? 0;
+    const count = db.query<{ count: number }, [string]>("SELECT count(*) AS count FROM planner_owners o JOIN plans p ON p.id = o.plan_id WHERE o.session_hash = ? AND p.deleted_at IS NULL").get(sessionHash)?.count ?? 0;
     if (count >= 50) throw new PlannerError(429, "Your workspace has reached its limit of 50 templates.");
     const id = crypto.randomUUID();
     db.transaction(() => {
@@ -60,7 +60,7 @@ export function plannerStore(db: Database) {
       SELECT p.id, p.title, COALESCE(v.status, 'draft') AS status FROM plans p
       JOIN planner_owners o ON o.plan_id = p.id
       LEFT JOIN plan_versions v ON v.plan_id = p.id AND v.version = (SELECT max(version) FROM plan_versions WHERE plan_id = p.id)
-      WHERE o.session_hash = ? ORDER BY p.created_at DESC, p.rowid DESC`).all(sessionHash);
+      WHERE o.session_hash = ? AND p.deleted_at IS NULL ORDER BY p.created_at DESC, p.rowid DESC`).all(sessionHash);
   }
 
   function saveReply(id: string, sessionHash: string, revision: number, message: string, reply: PlannerReply) {
@@ -103,5 +103,33 @@ export function plannerStore(db: Database) {
     return read(id, sessionHash);
   }
 
-  return { read, create, list, saveReply, approve, revise };
+  function markDeleted(id: string, sessionHash: string) {
+    db.transaction(() => {
+      read(id, sessionHash);
+      const active = db.query(`SELECT 1 FROM runs r JOIN plan_versions v ON v.id = r.plan_version_id
+        WHERE v.plan_id = ? AND r.state NOT IN ('completed', 'failed') LIMIT 1`).get(id);
+      if (active) throw new PlannerError(409, "Wait for this plan’s video verification to finish before deleting it.");
+      // Hide the plan before asynchronous cleanup so uploads cannot create new runs against it.
+      db.query("UPDATE plans SET deleted_at = ? WHERE id = ?").run(new Date().toISOString(), id);
+      db.query("UPDATE planner_owners SET revision = revision + 1 WHERE plan_id = ?").run(id);
+    })();
+  }
+
+  function restoreDeleted(id: string) {
+    db.query("UPDATE plans SET deleted_at = NULL WHERE id = ?").run(id);
+  }
+
+  function finishDelete(id: string) {
+    db.transaction(() => {
+      db.query("DELETE FROM planner_messages WHERE plan_id = ?").run(id);
+      db.query("DELETE FROM plan_versions WHERE plan_id = ? AND status = 'draft'").run(id);
+      // Approved snapshots stay immutable even after the workspace plan and evidence are removed.
+      if (!db.query("SELECT 1 FROM plan_versions WHERE plan_id = ? LIMIT 1").get(id)) {
+        db.query("DELETE FROM planner_owners WHERE plan_id = ?").run(id);
+        db.query("DELETE FROM plans WHERE id = ?").run(id);
+      }
+    })();
+  }
+
+  return { read, create, list, saveReply, approve, revise, markDeleted, restoreDeleted, finishDelete };
 }

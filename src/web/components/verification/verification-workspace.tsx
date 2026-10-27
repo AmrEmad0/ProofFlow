@@ -4,10 +4,13 @@ import { z } from "zod";
 import { ArrowDownToLine, Check, CircleHelp, Clock3, Film, LoaderCircle, LockKeyhole, RefreshCw, ShieldCheck, Trash2, Upload, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/eden";
-import { apiError } from "@/lib/queries";
+import { apiError, runDetailsQuery, verificationStatusQuery } from "@/lib/queries";
+import { toast } from "@/components/ui/toast";
+import { downloadJson, withFeedback } from "@/lib/feedback";
+import { useVerificationFeedback } from "./verification-feedback";
 import type { SavedPlan } from "../../../shared/planner";
 import { isActiveRun } from "../../../shared/receipt";
-import { runDetailsSchema, runSummarySchema } from "../../../shared/verification";
+import { runSummarySchema } from "../../../shared/verification";
 import { EvidencePlayer } from "./evidence-player";
 
 const stages = ["queued", "preprocessing", "uploading", "analyzing", "verifying", "completed"] as const;
@@ -15,6 +18,7 @@ const stageLabels = { queued: "Waiting in the queue", preprocessing: "Preparing 
 
 export function VerificationWorkspace({ saved }: { saved: SavedPlan }) {
   const queryClient = useQueryClient();
+  const watchRun = useVerificationFeedback();
   const [file, setFile] = useState<File | null>(null);
   const [consent, setConsent] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -23,23 +27,14 @@ export function VerificationWorkspace({ saved }: { saved: SavedPlan }) {
   const [localUrl, setLocalUrl] = useState<string | null>(null);
   const versionId = saved.versionId!;
   const listKey = ["runs", versionId];
-  const readiness = useQuery({ queryKey: ["verification-status"], queryFn: async () => {
-    const result = await api.api.verification.status.get();
-    if (result.error) throw apiError(result.error.value, "Video verification could not be reached.");
-    return z.object({ available: z.boolean(), retentionHours: z.number() }).parse(result.data);
-  }, refetchInterval: 30_000 });
+  const readiness = useQuery(verificationStatusQuery);
   const runs = useQuery({ queryKey: listKey, queryFn: async () => {
     const result = await api.api.runs.get({ query: { approvedVersionId: versionId } });
     if (result.error) throw apiError(result.error.value, "Saved video runs could not be loaded.");
     return z.array(runSummarySchema).parse(result.data);
   }, refetchInterval: (query) => query.state.data?.some((run) => isActiveRun(run.state)) ? 2000 : false });
   const runId = activeId ?? runs.data?.[0]?.id ?? null;
-  const details = useQuery({ queryKey: ["run", runId], enabled: Boolean(runId), queryFn: async () => {
-    if (!runId) throw new Error("Choose a video run.");
-    const result = await api.api.runs({ id: runId }).get();
-    if (result.error) throw apiError(result.error.value, "This video run could not be loaded.");
-    return runDetailsSchema.parse(result.data);
-  }, retry: false, refetchInterval: (query) => query.state.data && isActiveRun(query.state.data.state) ? 1000 : false });
+  const details = useQuery({ ...runDetailsQuery(runId), refetchInterval: false });
   const run = details.data;
   const processing = runs.data?.some((item) => isActiveRun(item.state)) || (run && isActiveRun(run.state));
 
@@ -53,41 +48,62 @@ export function VerificationWorkspace({ saved }: { saved: SavedPlan }) {
     if (run && !isActiveRun(run.state)) void queryClient.invalidateQueries({ queryKey: listKey });
   }, [run?.state, queryClient, versionId]);
 
+  useEffect(() => {
+    if (run && isActiveRun(run.state)) watchRun(run.id);
+  }, [run?.id, run?.state, watchRun]);
+
+  function selectionError(message: string) {
+    setError(message);
+    setFile(null);
+    toast.add({ id: "video-selection", type: "error", title: "Video not accepted", description: message });
+  }
+
   function choose(value: File | undefined) {
     setError(null); setConsent(false);
     if (!value) return;
-    if (!value.size || value.size > 25 * 1024 * 1024) { setError("Choose a nonempty recording up to 25 MB."); setFile(null); return; }
-    if (!/\.(mp4|mov|webm)$/i.test(value.name)) { setError("Choose an MP4, MOV, or WebM recording."); setFile(null); return; }
+    if (!value.size || value.size > 25 * 1024 * 1024) { selectionError("Choose a nonempty recording up to 25 MB."); return; }
+    if (!/\.(mp4|mov|webm)$/i.test(value.name)) { selectionError("Choose an MP4, MOV, or WebM recording."); return; }
     setFile(value);
+    toast.add({ id: "video-selection", type: "info", title: "Video selected" });
   }
 
-  const upload = useMutation({ mutationFn: async () => {
+  async function uploadVideo() {
     if (!file || !consent || !saved.contractHash) throw new Error("Choose a recording and consent to analysis first.");
     const result = await api.api.runs.post({ video: file, consent: "true", approvedVersionId: versionId, contractHash: saved.contractHash });
     if (result.error) throw apiError(result.error.value, "The recording could not be uploaded.");
     return runSummarySchema.parse(result.data);
-  }, onSuccess: (result) => {
+  }
+
+  const upload = useMutation({ mutationFn: () => withFeedback(uploadVideo(), { loading: "Uploading video…", success: "Video uploaded", error: "Couldn’t upload video" }), onSuccess: (result) => {
+    watchRun(result.id);
     setActiveId(result.id); setFile(null); setConsent(false); setError(null);
     void queryClient.invalidateQueries({ queryKey: listKey });
   }, onError: (failure) => setError(failure.message), retry: false });
 
-  const remove = useMutation({ mutationFn: async () => {
+  async function deleteVideo() {
     if (!runId) return;
     const result = await api.api.runs({ id: runId }).delete();
     if (result.error) throw apiError(result.error.value, "The video could not be deleted.");
-  }, onSuccess: () => {
+  }
+
+  const remove = useMutation({ mutationFn: () => withFeedback(deleteVideo(), { loading: "Deleting video…", success: "Video and evidence deleted", error: "Couldn’t delete video" }), onSuccess: () => {
     queryClient.removeQueries({ queryKey: ["run", runId] }); setActiveId(null); setConfirmDelete(false);
     void queryClient.invalidateQueries({ queryKey: listKey });
   }, onError: (failure) => setError(failure.message) });
 
   function exportReceipt() {
     if (!run?.receipt) return;
-    const url = URL.createObjectURL(new Blob([JSON.stringify({ ...run.receipt, approvedPlan: run.approvedPlan, media: run.media, timings: run.timings, warnings: run.warnings }, null, 2)], { type: "application/json" }));
-    const anchor = document.createElement("a"); anchor.href = url; anchor.download = `proofflow-evidence-${run.id}.json`; anchor.click(); URL.revokeObjectURL(url);
+    downloadJson({ ...run.receipt, approvedPlan: run.approvedPlan, media: run.media, timings: run.timings, warnings: run.warnings }, `proofflow-evidence-${run.id}.json`, "Evidence");
+  }
+
+  function refreshRuns() {
+    setError(null);
+    const task = Promise.all([runs.refetch({ throwOnError: true }), runId ? details.refetch({ throwOnError: true }) : Promise.resolve()]);
+    void withFeedback(task, { loading: "Refreshing videos…", success: "Videos refreshed", error: "Couldn’t refresh videos" }).catch(() => {});
   }
 
   const displayedError = error ?? (runs.isError ? runs.error.message : details.isError ? details.error.message : readiness.isError ? readiness.error.message : null);
-  return <div className={`grid items-start gap-5 ${run ? "lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]" : "lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]"}`}>
+  return <div className={`grid items-start gap-5 ${run ? "xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]" : "xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]"}`}>
     <div className="space-y-5">
       <section className="rounded-2xl border bg-card p-5 sm:p-6">
         <div className="mb-5 flex items-center justify-between gap-3"><h2 className="flex items-center gap-2 text-sm font-semibold"><Upload className="size-4 text-primary" aria-hidden="true" />Upload video</h2><span className="flex items-center gap-1 text-xs text-emerald-700"><LockKeyhole className="size-3" aria-hidden="true" />Plan v{saved.version}</span></div>
@@ -95,7 +111,7 @@ export function VerificationWorkspace({ saved }: { saved: SavedPlan }) {
           <input type="file" aria-label="Choose a video recording" accept=".mp4,.mov,.webm,video/mp4,video/quicktime,video/webm" className="sr-only" disabled={Boolean(processing || upload.isPending)} onChange={(event) => { choose(event.target.files?.[0]); event.target.value = ""; }} />
           <span className="mb-3 flex size-10 items-center justify-center rounded-xl border bg-background text-primary"><Video className="size-5" aria-hidden="true" /></span><span className="max-w-full break-all text-sm font-medium">{file ? file.name : "Choose video or drop it here"}</span><span className="mt-2 text-xs text-muted-foreground">{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB · change file` : "MP4, MOV, WebM · 20 sec max · 25 MB max"}</span>
         </label>
-        {localUrl && <video src={localUrl} controls playsInline className="mt-4 max-h-52 w-full rounded-lg bg-black" aria-label="Selected recording preview" onLoadedMetadata={(event) => { if (event.currentTarget.duration > 20) { setError("This recording is longer than 20 seconds. Choose a shorter, complete clip."); setFile(null); } }} />}
+        {localUrl && <video src={localUrl} controls playsInline className="mt-4 max-h-52 w-full rounded-lg bg-black" aria-label="Selected recording preview" onLoadedMetadata={(event) => { if (event.currentTarget.duration > 20) { selectionError("This recording is longer than 20 seconds. Choose a shorter, complete clip."); } }} />}
         <label className="mt-5 flex cursor-pointer items-start gap-2.5 text-xs leading-5 text-muted-foreground"><input type="checkbox" checked={consent} disabled={Boolean(processing || upload.isPending)} onChange={(event) => setConsent(event.target.checked)} className="mt-1 size-3.5 shrink-0 accent-primary" />I have permission to share this recording with Meta for Muse Spark and SAM analysis.</label>
         <p className="mt-2 pl-6 text-[10px] leading-4 text-muted-foreground">Muse uses Contributor mode. Submitted content may be used to improve Meta models. The analysis copy removes audio.</p>
         <Button onClick={() => upload.mutate()} disabled={!file || !consent || !readiness.data?.available || Boolean(processing) || upload.isPending || remove.isPending} className="mt-5 h-11 w-full gap-2 rounded-lg">{upload.isPending ? <><LoaderCircle className="size-4 animate-spin" />Uploading…</> : <><ScanIcon />Verify video</>}</Button>
@@ -103,8 +119,8 @@ export function VerificationWorkspace({ saved }: { saved: SavedPlan }) {
         <p className="mt-3 flex items-start gap-1.5 text-xs leading-5 text-muted-foreground"><ShieldCheck className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />Private to this workspace. Expires after {readiness.data?.retentionHours ?? 24} hours.</p>
       </section>
       {run && <RecordingChecklist saved={saved} />}
-      {runs.data && runs.data.length > 0 && <section className="rounded-2xl border bg-card p-5"><div className="mb-3 flex items-center justify-between"><h2 className="text-sm font-semibold">Video runs</h2><Button variant="ghost" size="icon" aria-label="Refresh video runs" onClick={() => { void runs.refetch(); void details.refetch(); }}><RefreshCw /></Button></div><div className="space-y-2">{runs.data.map((item, index) => <button key={item.id} onClick={() => { setActiveId(item.id); setConfirmDelete(false); setError(null); }} className={`flex w-full items-center justify-between gap-3 rounded-lg border p-3 text-left text-xs ${runId === item.id ? "border-primary/40 bg-primary/5" : "hover:bg-muted/40"}`}><span className="flex items-center gap-2"><Film className="size-3.5 text-muted-foreground" aria-hidden="true" />Recording {runs.data.length - index}</span><span className="text-[10px] text-muted-foreground">{item.state === "completed" ? "Ready for review" : item.state === "failed" ? "Failed" : "Processing"}</span></button>)}</div></section>}
-      {displayedError && <div role="alert" className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-xs leading-5 text-destructive">{displayedError}<button className="ml-2 underline" onClick={() => { setError(null); void runs.refetch(); if (runId) void details.refetch(); }}>Reload runs</button></div>}
+      {runs.data && runs.data.length > 0 && <section className="rounded-2xl border bg-card p-5"><div className="mb-3 flex items-center justify-between"><h2 className="text-sm font-semibold">Video runs</h2><Button variant="ghost" size="icon" aria-label="Refresh video runs" onClick={refreshRuns}><RefreshCw /></Button></div><div className="space-y-2">{runs.data.map((item, index) => <button key={item.id} onClick={() => { setActiveId(item.id); setConfirmDelete(false); setError(null); }} className={`flex w-full items-center justify-between gap-3 rounded-lg border p-3 text-left text-xs ${runId === item.id ? "border-primary/40 bg-primary/5" : "hover:bg-muted/40"}`}><span className="flex items-center gap-2"><Film className="size-3.5 text-muted-foreground" aria-hidden="true" />Recording {runs.data.length - index}</span><span className="text-[10px] text-muted-foreground">{item.state === "completed" ? "Ready for review" : item.state === "failed" ? "Failed" : "Processing"}</span></button>)}</div></section>}
+      {displayedError && <div role="alert" className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-xs leading-5 text-destructive">{displayedError}<button className="ml-2 underline" onClick={refreshRuns}>Reload runs</button></div>}
     </div>
     <div className="min-w-0 space-y-5">
       {run ? <>

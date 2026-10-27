@@ -95,6 +95,9 @@ const migrations = [{
       id INTEGER PRIMARY KEY CHECK (id = 1), owner TEXT NOT NULL, lease_until INTEGER NOT NULL
     );
   `,
+}, {
+  version: 4,
+  sql: `ALTER TABLE plans ADD COLUMN deleted_at TEXT;`,
 }];
 
 export function migrate(db: Database): void {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, CircleHelp, Eye, Play, ScanLine, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/toast";
 import type { RunDetails } from "../../../shared/verification";
 
 const colors = ["#c2410c", "#0369a1", "#047857", "#7c3aed"];
@@ -28,20 +29,25 @@ export function EvidencePlayer({ run }: { run: RunDetails }) {
     return () => element.cancelVideoFrameCallback(id);
   }, [run.id, run.media]);
 
+  function reportPlaybackError(message: string) {
+    setPlaybackError(message);
+    toast.add({ id: `playback-${run.id}`, type: "error", title: "Video playback unavailable", description: message });
+  }
+
   function seek(stepId: string, startMs: number) {
     setSelected(stepId);
     const element = video.current;
     if (!element) return;
     element.currentTime = startMs / 1000;
     setTime(startMs / 1000);
-    void element.play().catch(() => { setPlaybackError("Playback could not start. Use the video controls to inspect the evidence."); });
+    void element.play().catch(() => { reportPlaybackError("Playback could not start. Use the video controls to inspect the evidence."); });
   }
 
   return <section className="overflow-hidden rounded-2xl border bg-card" aria-label="Video evidence and findings">
     <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4"><h2 className="flex items-center gap-2 text-sm font-semibold"><Eye className="size-4 text-primary" aria-hidden="true" />Inspect the evidence</h2><label className="flex cursor-pointer items-center gap-2 text-[11px] text-muted-foreground"><input type="checkbox" checked={overlays} onChange={(event) => setOverlays(event.target.checked)} className="accent-primary" />SAM object boxes</label></div>
     {run.media ? <>
       <div className="bg-stone-950 p-3 sm:p-5"><div className="relative mx-auto w-full max-w-2xl" style={{ aspectRatio: `${run.media.width}/${run.media.height}` }}>
-        <video ref={video} controls playsInline preload="metadata" src={`/api/runs/${run.id}/video`} className="size-full" aria-label="Analysis video for this approved proof plan" onTimeUpdate={(event) => setTime(event.currentTarget.currentTime)} onError={() => setPlaybackError("The video could not be loaded. It may have expired; reload the run to check.")} />
+        <video ref={video} controls playsInline preload="metadata" src={`/api/runs/${run.id}/video`} className="size-full" aria-label="Analysis video for this approved proof plan" onTimeUpdate={(event) => setTime(event.currentTarget.currentTime)} onError={() => reportPlaybackError("The video could not be loaded. It may have expired; reload the run to check.")} />
         {overlays && <svg className="pointer-events-none absolute inset-0 size-full" viewBox="0 0 1 1" preserveAspectRatio="none" aria-label={`Tracked object geometry at ${formatTime(time * 1000)}`}>{run.tracks.flatMap((track, index) => track.boxes.filter((box) => box.frameIndex === frame).map((box) => <rect key={`${track.concept}-${box.objectId}-${box.frameIndex}`} x={box.left} y={box.top} width={box.right - box.left} height={box.bottom - box.top} fill="none" stroke={colors[index % colors.length]} strokeWidth="2" vectorEffect="non-scaling-stroke" />))}</svg>}
       </div></div>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b px-5 py-3 text-[10px] text-muted-foreground"><span>Analysis copy · 6 fps · audio removed</span><span>Frame {frame} · {formatTime(time * 1000)}</span></div>

@@ -7,11 +7,13 @@ import { createMetaClient, MODELS, PROMPT_VERSION } from "../meta/client";
 import { conversePlan, type PlanConversation } from "../planner/chat";
 import { PlannerError, plannerStore } from "../planner/store";
 import { requireWorkspaceOrigin, sessionHash, sessionToken } from "../http/session";
+import type { VerificationWorker } from "../verification/worker";
+import type { RunRow } from "../verification/store";
 
 const revisionBody = t.Object({ revision: t.Integer({ minimum: 0 }) }, { additionalProperties: false });
 const planParams = t.Object({ id: t.String({ format: "uuid" }) });
 
-export function planRoutes(db: Database, config: Config, conversation?: PlanConversation) {
+export function planRoutes(db: Database, config: Config, conversation?: PlanConversation, worker?: VerificationWorker) {
   const store = plannerStore(db);
   const busySessions = new Set<string>();
   const converse: PlanConversation = conversation ?? ((messages, plan) => conversePlan(createMetaClient(config), messages, plan));
@@ -34,6 +36,28 @@ export function planRoutes(db: Database, config: Config, conversation?: PlanConv
       return store.create(hash, body.template);
     }, { body: t.Object({ template: t.Union([t.Literal("blank"), t.Literal("packproof")]) }, { additionalProperties: false }) })
     .get("/api/plans/:id", ({ params, request }) => store.read(params.id, sessionHash(request)), { params: planParams })
+    .delete("/api/plans/:id", async ({ params, request }) => {
+      const hash = sessionHash(request);
+      store.read(params.id, hash);
+      if (busySessions.has(hash)) throw new PlannerError(409, "Wait for the current plan change to finish before deleting a plan.");
+      store.markDeleted(params.id, hash);
+      busySessions.add(hash);
+      try {
+        const runs = db.query<RunRow, [string]>(`SELECT r.* FROM runs r JOIN plan_versions v ON v.id = r.plan_version_id WHERE v.plan_id = ?`).all(params.id);
+        if (runs.length && !worker) throw new PlannerError(503, "Video cleanup is unavailable. The plan has been kept; please try again later.");
+        for (const run of runs) {
+          if (!await worker!.removeRun(run)) throw new PlannerError(502, "Video cleanup could not be completed. The plan has been kept so you can retry.");
+        }
+        store.finishDelete(params.id);
+        return { deleted: true as const };
+      } catch (error) {
+        store.restoreDeleted(params.id);
+        if (error instanceof PlannerError) throw error;
+        throw new PlannerError(502, "The plan could not be deleted. Please try again.");
+      } finally {
+        busySessions.delete(hash);
+      }
+    }, { params: planParams })
     .post("/api/plans/:id/messages", async ({ params, body, request }) => {
       const hash = sessionHash(request);
       const current = store.read(params.id, hash);

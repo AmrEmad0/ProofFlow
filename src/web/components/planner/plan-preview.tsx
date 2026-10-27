@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ArrowDownToLine, ArrowRight, Check, ChevronDown, LockKeyhole, PencilLine, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { downloadJson } from "@/lib/feedback";
 import type { SavedPlan } from "../../../shared/planner";
 import type { ProofPlan } from "../../../shared/proof-plan";
 
@@ -27,16 +28,10 @@ export function PlanPreview({ saved, starter, pending, onApprove, onRevise, onUs
 
   function downloadPlan() {
     if (!saved?.plan) return;
-    const blob = new Blob([JSON.stringify({
+    downloadJson({
       ...saved.plan,
       ...(approved ? { approvedVersionId: saved.versionId, contractHash: saved.contractHash } : {}),
-    }, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `proofflow-${saved.id}-v${saved.version}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
+    }, `proofflow-${saved.id}-v${saved.version}.json`, "Plan");
   }
 
   if (!plan) return null;

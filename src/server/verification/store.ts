@@ -16,8 +16,8 @@ export function verificationStore(db: Database) {
   function approved(versionId: string, sessionHash?: string) {
     const row = db.query<{
       id: string; title_snapshot: string; goal_snapshot: string; steps_json: string; limitations_json: string; contract_hash: string;
-    }, [string, string | null, string | null]>(`SELECT v.* FROM plan_versions v JOIN planner_owners o ON o.plan_id = v.plan_id
-      WHERE v.id = ? AND v.status = 'approved' AND (? IS NULL OR o.session_hash = ?)`).get(versionId, sessionHash ?? null, sessionHash ?? null);
+    }, [string, string | null, string | null]>(`SELECT v.* FROM plan_versions v JOIN planner_owners o ON o.plan_id = v.plan_id JOIN plans p ON p.id = v.plan_id
+      WHERE v.id = ? AND v.status = 'approved' AND p.deleted_at IS NULL AND (? IS NULL OR o.session_hash = ?)`).get(versionId, sessionHash ?? null, sessionHash ?? null);
     if (!row) throw new PlannerError(404, "The approved plan could not be found in your workspace.");
     const plan = approvedPlanSchema.parse({ schemaVersion: 1, title: row.title_snapshot, goal: row.goal_snapshot,
       steps: JSON.parse(row.steps_json), limitations: JSON.parse(row.limitations_json),
@@ -29,8 +29,8 @@ export function verificationStore(db: Database) {
 
   function row(id: string, sessionHash?: string): RunRow {
     const result = db.query<RunRow, [string, string | null, string | null]>(`SELECT r.* FROM runs r
-      JOIN plan_versions v ON v.id = r.plan_version_id JOIN planner_owners o ON o.plan_id = v.plan_id
-      WHERE r.id = ? AND (? IS NULL OR o.session_hash = ?) AND r.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`).get(id, sessionHash ?? null, sessionHash ?? null);
+      JOIN plan_versions v ON v.id = r.plan_version_id JOIN planner_owners o ON o.plan_id = v.plan_id JOIN plans p ON p.id = v.plan_id
+      WHERE r.id = ? AND p.deleted_at IS NULL AND (? IS NULL OR o.session_hash = ?) AND r.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`).get(id, sessionHash ?? null, sessionHash ?? null);
     if (!result) throw new PlannerError(404, "This video run could not be found or has expired.");
     return result;
   }

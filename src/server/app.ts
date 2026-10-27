@@ -26,7 +26,7 @@ export function createApp(db: Database, config: Config, conversation?: PlanConve
     })
     .use(healthRoutes(db, config, () => Boolean(worker?.ready && config.modelConfigured)))
     .use(templateRoutes)
-    .use(planRoutes(db, config, conversation))
+    .use(planRoutes(db, config, conversation, worker))
     .use(runRoutes(db, config, worker));
 }
 
