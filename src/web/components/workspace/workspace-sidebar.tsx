@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useId, useState } from "react";
-import { BookOpen, FileText, LockKeyhole, Package, Plus, ScanLine, Search, Settings2, SlidersHorizontal, Trash2 } from "lucide-react";
+import { BookOpen, FileText, LockKeyhole, Package, Plus, ScanLine, Search, Moon, Sun, Settings2, SlidersHorizontal, Trash2 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
   SidebarGroupLabel, SidebarHeader, SidebarInput, SidebarMenu, SidebarMenuButton,
@@ -28,6 +28,15 @@ export function WorkspaceSidebar({ plans, activeId, pending, loading, error, can
   const { setOpenMobile, state, isMobile } = useSidebar();
   const searchId = useId();
   const [search, setSearch] = useState("");
+  const [darkMode, setDarkMode] = useState(() => document.documentElement.classList.contains("dark"));
+  const themeAction = darkMode ? "Switch to light mode" : "Switch to dark mode";
+  function toggleTheme() {
+    const next = !darkMode;
+    document.documentElement.classList.toggle("dark", next);
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", next ? "#171717" : "#f9fafb");
+    try { localStorage.setItem("proofflow.theme", next ? "dark" : "light"); } catch { /* Keep the selected theme for this page when storage is unavailable. */ }
+    setDarkMode(next);
+  }
   const collapsed = state === "collapsed" && !isMobile;
   const query = collapsed ? "" : search.trim().toLocaleLowerCase();
   const matches = plans.filter((plan) => plan.title.toLocaleLowerCase().includes(query));
@@ -61,6 +70,7 @@ export function WorkspaceSidebar({ plans, activeId, pending, loading, error, can
       <SidebarMenu className="gap-2">
         <SidebarMenuItem><SidebarMenuButton render={<Link to="/" />} onClick={() => setOpenMobile(false)} aria-label="Home & guide" tooltip="Home & guide" className={menuButtonClass}><BookOpen aria-hidden="true" /><span className="group-data-[collapsible=icon]:hidden">Home & guide</span></SidebarMenuButton></SidebarMenuItem>
         <SidebarMenuItem><SidebarMenuButton onClick={() => closeAfter(() => { setSearch(""); onExample(); })} disabled={pending} aria-label="Box packing example" tooltip="Box packing example" className={menuButtonClass}><Package aria-hidden="true" /><span className="group-data-[collapsible=icon]:hidden">Box packing example</span></SidebarMenuButton></SidebarMenuItem>
+        <SidebarMenuItem><SidebarMenuButton onClick={toggleTheme} aria-label={themeAction} tooltip={themeAction} className={menuButtonClass}>{darkMode ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}<span className="group-data-[collapsible=icon]:hidden">{darkMode ? "Light mode" : "Dark mode"}</span></SidebarMenuButton></SidebarMenuItem>
         <SidebarMenuItem><SidebarMenuButton onClick={() => closeAfter(onSettings)} aria-label="Settings" tooltip="Settings" className={menuButtonClass}><Settings2 aria-hidden="true" /><span className="group-data-[collapsible=icon]:hidden">Settings</span></SidebarMenuButton></SidebarMenuItem>
       </SidebarMenu>
     </SidebarFooter>

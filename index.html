@@ -6,6 +6,14 @@
     <meta name="theme-color" content="#f9fafb" />
     <meta name="description" content="Turn observable goals into clear video evidence plans with ProofFlow." />
     <title>ProofFlow</title>
+    <script>
+      try {
+        if (localStorage.getItem("proofflow.theme") === "dark") {
+          document.documentElement.classList.add("dark");
+          document.querySelector('meta[name="theme-color"]').setAttribute("content", "#171717");
+        }
+      } catch {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
