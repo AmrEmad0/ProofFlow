@@ -122,10 +122,79 @@
 }
 
 @layer components {
+  .frame-scrubber {
+    appearance: none;
+    background-size: 100% 3px;
+    background-repeat: no-repeat;
+    background-position: center;
+    border-radius: 2px;
+  }
+  .frame-scrubber::-webkit-slider-thumb {
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--card);
+    border-radius: 50%;
+    background: var(--primary);
+    box-shadow: 0 0 0 1px var(--primary);
+  }
+  .frame-scrubber::-moz-range-thumb {
+    width: 8px;
+    height: 8px;
+    border: 2px solid var(--card);
+    border-radius: 50%;
+    background: var(--primary);
+    box-shadow: 0 0 0 1px var(--primary);
+  }
+  .frame-scrubber:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   .eyebrow { @apply text-[9px] font-semibold tracking-[0.12em] text-muted-foreground; }
   .chat-panel, .plan-panel { @apply flex flex-col overflow-hidden rounded-2xl border bg-card shadow-[0_2px_8px_-4px_oklch(0.2_0.01_65/0.12)]; }
   .chat-panel { @apply self-start xl:sticky xl:top-5; }
-  .chat-history { max-height: min(32rem, 55dvh); scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+
+  .chat-header { @apply flex shrink-0 items-center gap-3 border-b px-4 py-4 sm:px-5; }
+  .chat-avatar { @apply flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary; }
+  .chat-header-status { @apply hidden shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] text-muted-foreground sm:flex; }
+  .chat-welcome { @apply px-5 pt-7 pb-2 sm:px-6; }
+  .chat-history { min-height: 10rem; max-height: min(36rem, 52dvh); overflow-anchor: none; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+  .chat-message-user { @apply ml-6 min-w-0 rounded-2xl rounded-tr-sm border border-border/50 bg-muted/65 px-4 py-3; overflow-wrap: anywhere; }
+  .chat-message-assistant { @apply pr-1; overflow-wrap: anywhere; }
+  .chat-composer-area { @apply shrink-0; }
+  .chat-panel-active .chat-composer-area { @apply border-t bg-muted/15; }
+  .chat-composer { box-shadow: 0 2px 8px -4px oklch(0.2 0.01 65 / 0.16); }
+  .planner-intro { @apply mx-auto max-w-[720px] justify-start pt-3 pb-1 text-left; }
+  .planner-intro h1 { @apply text-2xl sm:text-[28px] sm:leading-tight; }
+  .planner-intro p { @apply max-w-[600px] text-sm leading-6; }
+  .workflow-steps-start { @apply mx-auto max-w-[400px]; }
+  .workflow-steps-start > li { @apply text-[13px]; }
+  .workflow-steps-start .step-number { @apply size-7 text-xs; }
+  .chat-panel-start { @apply rounded-[22px] border-border/80; box-shadow: 0 4px 6px -4px oklch(0.2 0.01 65 / 0.04), 0 16px 48px -24px oklch(0.2 0.01 65 / 0.15); }
+  .chat-panel-start .chat-header { @apply gap-3 bg-muted/25 px-5 py-4 sm:px-7; }
+  .chat-panel-start .chat-avatar { @apply rounded-xl bg-foreground text-background; box-shadow: inset 0 0 0 1px oklch(1 0 0 / 0.12); }
+  .chat-panel-start .chat-header-status { @apply border-border/70 bg-card text-[11px]; }
+  .chat-panel-start .chat-welcome { @apply px-5 pt-6 pb-0 sm:px-7; }
+  .chat-panel-start .eyebrow { @apply text-[10px] tracking-[0.13em] text-primary; }
+  .chat-panel-start .chat-welcome h3 { @apply mt-2 text-[23px] leading-tight; }
+  .chat-panel-start .chat-welcome p { @apply mt-2 max-w-[540px] text-sm leading-6; }
+  .chat-panel-start .chat-composer-area { @apply px-5 pt-5 pb-5 sm:px-7 sm:pb-6; }
+  .chat-panel-start .chat-composer { @apply rounded-2xl border-border bg-background/40 p-3; box-shadow: inset 0 1px 2px oklch(0.2 0.01 65 / 0.025); }
+  .chat-panel-start .chat-composer:focus-within { @apply border-primary/60 bg-card ring-3 ring-primary/8; }
+  .composer-label { @apply block px-2 pt-1 text-xs font-medium; }
+  .chat-panel-start textarea { @apply min-h-24 pt-3 text-sm leading-6 placeholder:text-muted-foreground/85; }
+  .chat-panel-start .composer-toolbar { @apply gap-2 px-0 pb-0; }
+  .chat-panel-start .composer-toolbar > span { @apply text-[11px]; }
+  .composer-submit { @apply shadow-sm; }
+  .reference-limits { @apply mt-2.5 flex flex-wrap items-center gap-x-1.5 text-[11px] leading-5 text-muted-foreground; }
+  .process-ideas { @apply mt-5 border-t border-border/70 pt-4; }
+  .starter-label { @apply mb-3 text-xs font-medium text-muted-foreground; }
+  .process-idea-grid { @apply grid gap-2 sm:grid-cols-2; }
+  .process-idea { @apply flex min-w-0 items-center gap-3 rounded-xl border border-border/80 bg-card p-3 text-left transition-colors hover:border-primary/35 hover:bg-primary/3 disabled:opacity-50; }
+  .process-idea .text-xs { @apply text-[11px]; }
+  .idea-arrow { @apply ml-auto -rotate-45 text-muted-foreground; }
+  .starter-example { @apply mt-4 flex w-full items-center gap-3 rounded-xl bg-muted/60 p-3 text-left transition-colors hover:bg-muted disabled:opacity-50; }
+  .starter-example-icon { @apply flex size-10 shrink-0 items-center justify-center rounded-lg border border-border/80 bg-card text-primary; }
+
+  .chat-cursor { display: inline-block; width: 0.35rem; height: 1em; margin-left: 0.25rem; border-radius: 2px; vertical-align: -0.1em; background: var(--primary); animation: chat-cursor 1s ease-in-out infinite; }
+
   .plan-tag { @apply inline-flex items-center gap-1.5 rounded-md border bg-background px-2 py-1; }
   .proof-step { @apply px-3 py-3; }
   .workflow-steps { @apply flex items-center; }
@@ -141,13 +210,23 @@
   .workspace-enter { animation: workspace-enter 350ms ease-out both; }
 }
 
+@media (min-width: 1280px) {
+  .chat-panel-active { max-height: max(38rem, calc(100dvh - 2.5rem)); }
+  .chat-panel-active .chat-history { min-height: 0; }
+  .chat-panel-active .chat-composer-area { max-height: 65dvh; overflow-y: auto; }
+}
+
 @media (max-width: 420px) {
   .workflow-steps { align-items: flex-start; gap: 0.75rem; }
   .workflow-steps > li { flex: 1; font-size: 0.875rem; }
   .workflow-steps > li:last-child { flex: 1; }
   .workflow-steps > li > span, .workflow-steps > li > button { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
   .workflow-steps > li::after { display: none; }
+  .workflow-steps-start > li > span { flex-direction: row; align-items: center; font-size: 12px; }
+  .workflow-steps-start > li:last-child { justify-content: flex-end; }
 }
+
+@keyframes chat-cursor { 50% { opacity: 0.25; } }
 
 @keyframes workspace-enter {
   from { opacity: 0; transform: translateY(6px); }

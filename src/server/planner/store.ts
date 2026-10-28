@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
-import { describeEditedCheck, editChecksSchema, savedPlanSchema, type PlannerMessage, type PlannerReply, type SavedPlan } from "../../shared/planner";
+import { describeEditedCheck, editChecksSchema, savedPlanSchema, type PlannerMessage, type PlannerReply, type SavedPlan, type ReferenceMedia } from "../../shared/planner";
 import { packproofTemplate } from "../../shared/packproof";
-import { proofPlanSchema, type ProofPlan } from "../../shared/proof-plan";
+import { LIMITS, proofPlanSchema, type ProofPlan } from "../../shared/proof-plan";
 import { hashContract } from "../engine/contract";
 
 export class PlannerError extends Error {
@@ -16,8 +16,8 @@ type VersionRow = {
 
 export function plannerStore(db: Database) {
   function read(id: string, sessionHash: string): SavedPlan {
-    const owner = db.query<{ revision: number }, [string, string]>(
-      "SELECT o.revision FROM planner_owners o JOIN plans p ON p.id = o.plan_id WHERE o.plan_id = ? AND o.session_hash = ? AND p.deleted_at IS NULL",
+    const owner = db.query<{ revision: number; video_consent_at: string | null; reference_media_json: string | null }, [string, string]>(
+      "SELECT o.revision, p.video_consent_at, p.reference_media_json FROM planner_owners o JOIN plans p ON p.id = o.plan_id WHERE o.plan_id = ? AND o.session_hash = ? AND p.deleted_at IS NULL",
     ).get(id, sessionHash);
     if (!owner) throw new PlannerError(404, "This template could not be found in your workspace.");
     const row = db.query<VersionRow, [string]>("SELECT * FROM plan_versions WHERE plan_id = ? ORDER BY version DESC LIMIT 1").get(id);
@@ -29,7 +29,7 @@ export function plannerStore(db: Database) {
     return savedPlanSchema.parse({
       id, revision: owner.revision, version: row?.version ?? null, versionId: row?.id ?? null,
       status: row?.status ?? "draft", contractHash: plan ? hashContract(plan) : null,
-      approvedAt: row?.approved_at ?? null, plan, messages,
+      approvedAt: row?.approved_at ?? null, videoConsentAt: owner.video_consent_at, plan, messages, referenceMedia: owner.reference_media_json ? JSON.parse(owner.reference_media_json) : null,
     });
   }
 
@@ -63,7 +63,7 @@ export function plannerStore(db: Database) {
       WHERE o.session_hash = ? AND p.deleted_at IS NULL ORDER BY p.created_at DESC, p.rowid DESC`).all(sessionHash);
   }
 
-  function saveReply(id: string, sessionHash: string, revision: number, message: string, reply: PlannerReply) {
+  function saveReply(id: string, sessionHash: string, revision: number, message: string, reply: PlannerReply, reference?: ReferenceMedia) {
     db.transaction(() => {
       const current = read(id, sessionHash);
       if (current.revision !== revision) throw new PlannerError(409, "This template changed. Reload it before sending again.");
@@ -71,18 +71,20 @@ export function plannerStore(db: Database) {
       const insert = db.query("INSERT INTO planner_messages (plan_id, role, content) VALUES (?, ?, ?)");
       insert.run(id, "user", message);
       insert.run(id, "assistant", reply.reply);
+      if (reference) db.query("UPDATE plans SET reference_media_json = ? WHERE id = ?").run(JSON.stringify(reference), id);
       db.query("UPDATE planner_owners SET revision = revision + 1 WHERE plan_id = ?").run(id);
     })();
     return read(id, sessionHash);
   }
 
-  function approve(id: string, sessionHash: string, revision: number, contractHash: string) {
+  function approve(id: string, sessionHash: string, revision: number, contractHash: string, videoConsent = false) {
     db.transaction(() => {
       const current = read(id, sessionHash);
       if (current.revision !== revision || current.contractHash !== contractHash) {
         throw new PlannerError(409, "The draft changed. Review the latest version before approving.");
       }
       if (!current.plan || !current.versionId) throw new PlannerError(400, "Create a proof plan before approving it.");
+      if (videoConsent && !current.videoConsentAt) db.query("UPDATE plans SET video_consent_at = ? WHERE id = ?").run(new Date().toISOString(), id);
       if (current.status === "approved") return;
       db.query("UPDATE plan_versions SET status = 'approved', contract_hash = ?, approved_at = ? WHERE id = ?")
         .run(hashContract(current.plan), new Date().toISOString(), current.versionId);
@@ -109,7 +111,7 @@ export function plannerStore(db: Database) {
       if (current.status === "approved" && !allowApproved) throw new PlannerError(409, "Choose Make changes to edit the checks first.");
       if (!current.plan) throw new PlannerError(400, "Create some checks first.");
       const parsed = proofPlanSchema.safeParse(change(current));
-      if (!parsed.success) throw new PlannerError(400, "Use 1–3 checks with up to 4 different objects. Each check needs an object and any required destination or before and after states.");
+      if (!parsed.success) throw new PlannerError(400, `Use 1–${LIMITS.steps} checks with up to ${LIMITS.concepts} different objects. Each check needs an object and any required destination or before and after states.`);
       if (hashContract(parsed.data) === current.contractHash) return;
       addVersion(id, (current.version ?? 0) + 1, parsed.data);
       db.query("UPDATE planner_owners SET revision = revision + 1 WHERE plan_id = ?").run(id);
@@ -176,6 +178,7 @@ export function plannerStore(db: Database) {
 
   function finishDelete(id: string) {
     db.transaction(() => {
+      db.query("UPDATE plans SET reference_media_json = NULL WHERE id = ?").run(id);
       db.query("DELETE FROM planner_messages WHERE plan_id = ?").run(id);
       db.query("DELETE FROM plan_versions WHERE plan_id = ? AND status = 'draft'").run(id);
       // Approved snapshots stay immutable even after the workspace plan and evidence are removed.

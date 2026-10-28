@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LIMITS } from "./proof-plan";
 
 export const findingStatusSchema = z.enum(["observed", "not_observed", "uncertain"]);
 export const runStateSchema = z.enum([
@@ -13,6 +14,10 @@ export const findingSchema = z.strictObject({
   startMs: z.number().int().nonnegative().nullable(),
   endMs: z.number().int().nonnegative().nullable(),
   explanation: z.string().min(1),
+  moments: z.array(z.strictObject({
+    phase: z.enum(["before", "action", "after"]), timestampMs: z.number().int().nonnegative(),
+    description: z.string().min(1),
+  })).max(3).optional(),
   evidence: z.array(z.strictObject({
     concept: z.string().min(1),
     objectId: z.string().min(1),
@@ -32,7 +37,7 @@ export const receiptSchema = z.strictObject({
   runId: z.uuid(),
   approvedVersionId: z.uuid(),
   contractHash: z.string().regex(/^[a-f0-9]{64}$/),
-  findings: z.array(findingSchema).min(1).max(3),
+  findings: z.array(findingSchema).min(1).max(LIMITS.steps),
   provenance: z.strictObject({
     museModel: z.literal("muse-spark-1.3-contributor"),
     samModel: z.literal("sam-3.1"),

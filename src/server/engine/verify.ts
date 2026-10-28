@@ -1,10 +1,10 @@
 import type { ApprovedPlan, ProofStep } from "../../shared/proof-plan";
 import { findingSchema, type Finding } from "../../shared/receipt";
 import { ANALYSIS_FPS, type ConceptTrack, type TrackBox } from "../../shared/verification";
-import type { Observation } from "../../shared/observation";
+import { structuredConflicts, type Observation } from "../../shared/observation";
 import { verificationDiagnosticsSchema, type StepCheck, type TrackWindow } from "../../shared/diagnostics";
 
-export const VERIFICATION_RULE_VERSION = "2026-10-28.1";
+export const VERIFICATION_RULE_VERSION = "2026-10-28.5";
 type Candidate = Observation["candidates"][number];
 type Anchor = { objectId: string; firstFrame: number };
 const canonical = (concept: string) => concept.trim().toLowerCase();
@@ -18,6 +18,15 @@ function continuousTrack(track: ConceptTrack | undefined, first: number, last: n
     boxes.push(matches[0]!);
   }
   return new Set(boxes.map((box) => box.objectId)).size === 1 ? boxes : null;
+}
+
+function visibleStateInstances(track: ConceptTrack | undefined, first: number, last: number): string[] {
+  return [...new Set(track?.boxes.map(box => box.objectId))].filter(id => {
+    const boxes = continuousTrack(track, first, last, id);
+    // A frame-edge fragment cannot establish an object's visible before/after
+    // states. Keep all fully framed continuous alternatives, regardless of size.
+    return boxes && [boxes[0]!, boxes.at(-1)!].every(box => box.left > 0 && box.top > 0 && box.right < 1 && box.bottom < 1);
+  });
 }
 
 function describeTrack(concept: string, track: ConceptTrack | undefined, first: number, last: number): TrackWindow {
@@ -125,18 +134,70 @@ function evaluate(step: ProofStep, candidate: Candidate | undefined, tracks: Con
   const check: StepCheck = { stepId: step.id, firstFrame: null, lastFrame: null, subject: null, target: null,
     regionCandidates: [], decision: "no_window", finding: base };
   function finish(decision: StepCheck["decision"], finding: Finding): StepCheck { return { ...check, decision, finding }; }
-  if (!candidate || candidate.startMs === null || candidate.endMs === null) return check;
+  if (!candidate) return check;
+  if (candidate.startMs === null || candidate.endMs === null) {
+    // A visible non-event has no event timestamp. Whole-clip coverage can still
+    // support a negative; the same geometry and visibility rules apply below.
+    if (candidate.startMs === null && candidate.endMs === null && !candidate.actionVisible
+      && candidate.nonOccurrenceVisible && candidate.searchComplete && step.checkType !== "object_present_at_end") {
+      candidate = { ...candidate, startMs: 0, endMs: Math.round((frameCount - 1) * 1000 / ANALYSIS_FPS) };
+    }
+  }
+  if (candidate.startMs === null || candidate.endMs === null) return check;
   // Muse's millisecond windows are approximate; map to the nearest sample so
   // 1167ms does not accidentally exclude frame 7 (1166.67ms).
-  const first = Math.max(0, Math.round(candidate.startMs * ANALYSIS_FPS / 1000));
-  const last = Math.min(frameCount - 1, Math.round(candidate.endMs * ANALYSIS_FPS / 1000));
+  const explicit = candidate.subject !== undefined;
+  const padding = explicit ? 500 : 0;
+  const first = Math.max(0, Math.round((candidate.startMs - padding) * ANALYSIS_FPS / 1000));
+  const last = Math.min(frameCount - 1, Math.round((candidate.endMs + padding) * ANALYSIS_FPS / 1000));
   if (first >= last || candidate.startMs > candidate.endMs) return check;
   check.firstFrame = first; check.lastFrame = last;
+  const identityFirst = step.checkType === "object_present_at_end" ? Math.max(0, frameCount - 3)
+    : Math.min(frameCount - 1, Math.round((candidate.before?.timestampMs ?? candidate.startMs) * ANALYSIS_FPS / 1000));
+  const identityLast = step.checkType === "object_present_at_end" ? frameCount - 1
+    : Math.min(frameCount - 1, Math.round((candidate.after?.timestampMs ?? candidate.endMs) * ANALYSIS_FPS / 1000));
+  for (const ref of candidate.grounding ?? []) {
+    const matching = tracks.find(track => canonical(track.concept) === canonical(ref.concept));
+    if (!matching || matching.outcome !== "completed" || !matching.boxes.some(box => box.objectId === ref.objectId
+      && box.frameIndex === Math.round(ref.timestampMs * ANALYSIS_FPS / 1000))) {
+      return finish("ambiguous_proposal", { ...base, explanation: "A proposed object reference does not match actual SAM geometry at its timestamp." });
+    }
+  }
+  for (const concept of [step.subjectConcept, step.targetConcept].filter((value): value is string => value !== null)) {
+    let ids = new Set((candidate.grounding ?? []).filter(ref => canonical(ref.concept) === canonical(concept)).map(ref => ref.objectId));
+    if (ids.size > 1 && step.checkType !== "object_enters_region") {
+      const track = tracks.find(track => canonical(track.concept) === canonical(concept));
+      ids = new Set(visibleStateInstances(track, identityFirst, identityLast).filter(id => ids.has(id)));
+      if (ids.size !== 1) return finish("subject_track", { ...base, explanation: "No unique continuous identity supports the timestamped state evidence. Competing objects remain uncertain." });
+    }
+    if (ids.size > 1) return finish("ambiguous_proposal", { ...base, explanation: "The proposal references competing object identities for the same approved concept." });
+    if (ids.size === 1) {
+      const established = canonical(concept) === canonical(step.subjectConcept) ? anchors : targetAnchors;
+      // An ID label is not evidence that this is the intended instance. Entry
+      // geometry must remain unique before filtering; other checks need either
+      // an established identity or one continuous instance across their evidence.
+      if (established.length === 0) {
+        if (step.checkType === "object_enters_region") continue;
+        const track = tracks.find(track => canonical(track.concept) === canonical(concept));
+        const possible = visibleStateInstances(track, identityFirst, identityLast);
+        if (possible.length !== 1 || !ids.has(possible[0]!)) return finish("subject_track", { ...base,
+          explanation: "Several object identities remain plausible, or the proposed identity lacks continuous support. Selecting a SAM label cannot establish the intended object." });
+      }
+      tracks = tracks.map(track => canonical(track.concept) === canonical(concept)
+        ? { ...track, boxes: track.boxes.filter(box => ids.has(box.objectId)) } : track);
+    }
+  }
+  if (explicit && step.checkType === "visible_state_change" && anchors.length === 0) {
+    const subjectTrack = tracks.find(track => canonical(track.concept) === canonical(step.subjectConcept));
+    const possible = visibleStateInstances(subjectTrack, identityFirst, identityLast);
+    if (possible.length === 1) tracks = tracks.map(track => canonical(track.concept) === canonical(step.subjectConcept)
+      ? { ...track, boxes: track.boxes.filter(box => box.objectId === possible[0]) } : track);
+  }
   const subjectTrack = tracks.find((track) => canonical(track.concept) === canonical(step.subjectConcept));
   const regionTrack = tracks.find((track) => canonical(track.concept) === canonical(step.targetConcept ?? ""));
   check.subject = describeTrack(step.subjectConcept, subjectTrack, first, last);
   if (step.targetConcept) check.target = describeTrack(step.targetConcept, regionTrack, first, last);
-  if (candidate.actionVisible && candidate.nonOccurrenceVisible) return finish("contradictory_proposal", { ...base, explanation: "The visual proposal contains contradictory action evidence. Human review is needed." });
+  if (structuredConflicts(candidate).length > 0) return finish("contradictory_proposal", { ...base, explanation: "The visual proposal contains contradictory action evidence. Human review is needed." });
   if (candidate.visibility !== "clear" || candidate.ambiguities.length > 0) {
     return finish("ambiguous_proposal", { ...base, explanation: "The proposed evidence is occluded or ambiguous. Review the recording; a missed or hidden action cannot be ruled out." });
   }
@@ -148,6 +209,9 @@ function evaluate(step: ProofStep, candidate: Candidate | undefined, tracks: Con
   const anchor = new Set(anchors.map((item) => item.objectId)).size === 1 ? anchors[0] : undefined;
   const targetAnchor = targetAnchors[0];
   if (step.checkType === "object_enters_region") {
+    if (explicit && candidate.actionVisible && (!candidate.action?.visible || !candidate.action.matchesRequirement)) {
+      return finish("ambiguous_proposal", { ...base, explanation: "Entry needs timestamped evidence of the visible action; geometry alone is insufficient." });
+    }
     const entry = evaluateEntry(step, candidate, check, subjectTrack, regionTrack, anchor, targetAnchor);
     if (entry.finding.status === "observed" || entry.regionCandidates.some(region => region.qualifies)) return entry;
     const allSubjects = continuousTrack(subjectTrack, 0, frameCount - 1, anchor?.objectId);
@@ -162,12 +226,12 @@ function evaluate(step: ProofStep, candidate: Candidate | undefined, tracks: Con
     }
     return entry;
   }
-  const subjectFirst = step.checkType === "object_present_at_end" ? Math.max(0, frameCount - 3) : first;
-  const subjectLast = step.checkType === "object_present_at_end" ? frameCount - 1 : last;
+  const subjectFirst = step.checkType === "object_present_at_end" ? Math.max(0, frameCount - 3) : candidate.before ? Math.min(frameCount - 1, Math.round(candidate.before.timestampMs * ANALYSIS_FPS / 1000)) : first;
+  const subjectLast = step.checkType === "object_present_at_end" ? frameCount - 1 : candidate.after ? Math.min(frameCount - 1, Math.round(candidate.after.timestampMs * ANALYSIS_FPS / 1000)) : last;
   if (step.checkType === "object_present_at_end") {
     check.firstFrame = subjectFirst; check.lastFrame = subjectLast;
     check.subject = describeTrack(step.subjectConcept, subjectTrack, subjectFirst, subjectLast);
-    if (last < subjectFirst) return finish("final_presence", { ...base, explanation: "The visual proposal does not cover the end of the recording. Final presence remains uncertain." });
+    if (Math.round(candidate.endMs * ANALYSIS_FPS / 1000) < subjectFirst || explicit && (!candidate.after?.visible || !candidate.after.matchesRequirement || Math.round(candidate.after.timestampMs * ANALYSIS_FPS / 1000) < subjectFirst)) return finish("final_presence", { ...base, explanation: "The visual proposal does not cover the end of the recording. Final presence remains uncertain." });
   }
   const linked = anchor ? continuousTrack(subjectTrack, Math.min(subjectFirst, anchor.firstFrame), subjectLast, anchor.objectId) : null;
   const subject = anchor ? linked?.filter((box) => box.frameIndex >= subjectFirst) ?? null : continuousTrack(subjectTrack, subjectFirst, subjectLast);
@@ -189,9 +253,14 @@ function evaluate(step: ProofStep, candidate: Candidate | undefined, tracks: Con
   }
 
   if (step.checkType === "visible_state_change") {
-    if (supported) return finish("state_change", { ...base, status: "observed", explanation: "Muse proposes the required visible before/after change, grounded by one continuous SAM subject track. Inspect the clip to review those states." });
+    const stateEvidence = !explicit || Boolean(candidate.before?.visible && candidate.before.matchesRequirement
+      && candidate.after?.visible && candidate.after.matchesRequirement && candidate.action?.visible && candidate.action.matchesRequirement
+      && candidate.before.timestampMs < candidate.after.timestampMs
+      && candidate.before.description.trim().toLowerCase() !== candidate.after.description.trim().toLowerCase());
+    if (supported && stateEvidence) return finish("state_change", { ...base, status: "observed", explanation: "Muse proposes the required visible before/after change, grounded by one continuous SAM subject track. Inspect the clip to review those states." });
     // Negative findings require continuous positive scene coverage, never a missing detection.
     if (!candidate.actionVisible && candidate.beforeMatches && !candidate.afterMatches && candidate.nonOccurrenceVisible && candidate.searchComplete
+      && (!explicit || candidate.before?.visible && candidate.before.matchesRequirement && candidate.after?.visible && !candidate.after.matchesRequirement)
       && continuousTrack(subjectTrack, 0, frameCount - 1)) {
       return finish("state_change", { ...base, status: "not_observed", startMs: 0, endMs: Math.round((frameCount - 1) * 1000 / ANALYSIS_FPS),
         evidence: refs(continuousTrack(subjectTrack, 0, frameCount - 1)!, step.subjectConcept),
@@ -211,17 +280,29 @@ export function evaluateEvidence(plan: ApprovedPlan, observation: Observation, t
     const check = evaluate(step, observation.candidates.find((candidate) => candidate.stepId === step.id), tracks, frameCount,
       grounded.get(canonical(step.subjectConcept)) ?? [], grounded.get(canonical(step.targetConcept ?? "")) ?? []);
     const finding = check.finding;
-    if (finding.status === "observed" && finding.startMs !== null) {
-      if (finding.startMs < latestEnd) {
+    const candidate = observation.candidates.find(item => item.stepId === step.id);
+    // Order the actual grounded evidence, not Muse's broader search windows.
+    // Entry findings contain the sampled transition; state findings contain the
+    // explicit before/after moments, never the padded inspection context.
+    const eventStart = finding.startMs;
+    const eventEnd = finding.endMs;
+    if (finding.status === "observed" && eventStart !== null) {
+      if (eventStart < latestEnd) {
         finding.status = "uncertain"; check.decision = "step_order";
         finding.explanation = "The proposed event conflicts with the approved step order. Review the recording to resolve the sequence.";
       } else {
-        latestEnd = finding.endMs ?? finding.startMs;
+        latestEnd = eventEnd ?? eventStart;
         for (const ref of finding.evidence) {
           const key = canonical(ref.concept);
           grounded.set(key, [...grounded.get(key) ?? [], { objectId: ref.objectId, firstFrame: ref.frameIndex }]);
         }
       }
+    }
+    if (candidate?.subject && finding.status === "observed") {
+      finding.moments = (["before", "action", "after"] as const).flatMap(phase => {
+        const moment = candidate[phase];
+        return moment?.visible && moment.matchesRequirement ? [{ phase, timestampMs: moment.timestampMs, description: moment.description }] : [];
+      });
     }
     check.finding = findingSchema.parse(finding);
     checks.push(check);

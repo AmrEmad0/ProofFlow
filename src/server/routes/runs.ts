@@ -76,7 +76,7 @@ export function runRoutes(db: Database, config: Config, worker?: VerificationWor
     }, { additionalProperties: false }) })
     .get("/api/runs/:id", async ({ params, request }) => {
       const details = store.details(params.id, sessionHash(request));
-      if (details.state === "completed" || details.state === "failed") {
+      {
         const artifacts = db.query<{ artifact_path: string }, [string]>("SELECT artifact_path FROM track_artifacts WHERE run_id = ? ORDER BY concept").all(params.id);
         details.tracks = await Promise.all(artifacts.map(async ({ artifact_path }) => {
           const value: unknown = await Bun.file(artifact_path).json();

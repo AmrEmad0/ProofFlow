@@ -1,6 +1,6 @@
 # ProofFlow
 
-Turn a visible task into a reviewable Proof Plan through chat with Meta Muse Spark. Start from PackProof (product in, packing slip in, box closed), refine up to three checks, and explicitly approve a frozen version. Upload a short recording, then inspect findings with timestamp links and SAM object boxes.
+Turn a visible task into a reviewable Proof Plan through chat with Meta Muse Spark. Attach a reference image or video to suggest a draft, or start from PackProof (product in, packing slip in, box closed), refine up to five checks, and explicitly approve a frozen version. Upload a short recording, then inspect findings with timestamp links and SAM object boxes.
 
 Requires Bun 1.4.4+, FFmpeg with libx264 and the subtitles filter (libass), FFprobe, and a Meta Model API key with Muse Spark Contributor and SAM 3.1 access.
 
@@ -17,7 +17,7 @@ Configuration: `MODEL_API_KEY`, `META_API_BASE_URL`, `DATABASE_PATH`, `STORAGE_P
 
 Commands: `bun run typecheck` generates routes and runs Bun's native type checker; `bun check --no-script` checks types directly. `bun run check` runs type-checking, tests, and the production build. Other commands: `bun test`, `bun run build`, and `bun run db:migrate`. For production, build first, then run `NODE_ENV=production bun start`.
 
-Uploads require an approved plan and explicit consent. MP4, MOV, and WebM recordings are limited to 20 seconds and 25 MB. Analysis uses a 6 fps H.264 copy with audio removed. Video, tracking artifacts, and receipts expire after the configured retention period; the worker removes expired local data and retries remote-file deletion after analysis. A server restart marks interrupted runs failed; queued runs resume. Keep the process running for cleanup.
+Reference planning accepts JPG, PNG, or WebP images up to 10 MB and MP4, MOV, or WebM clips up to 30 seconds and 25 MB, with explicit sharing consent. Temporary reference files are removed after drafting; process notes remain with the conversation for refinement. Images cannot establish motion or step order. Reference analysis produces proposals, not verified findings. Verification uploads require an approved plan and explicit consent. MP4, MOV, and WebM recordings are limited to 30 seconds and 25 MB. Analysis uses a 6 fps H.264 copy with audio removed. Video, tracking artifacts, and receipts expire after the configured retention period; the worker removes expired local data and retries remote-file deletion after analysis. A server restart marks interrupted runs failed; queued runs resume. Keep the process running for cleanup.
 
 Muse proposes events; SAM supplies geometry; conservative application rules classify evidence as observed, not observed, or uncertain. Missing tracks, occlusion, ambiguous insertion, or conflicting step order cannot support a positive finding. Sampling can miss fast events. This is a prototype, not a certification system, and accuracy on real packing recordings has not been established.
 

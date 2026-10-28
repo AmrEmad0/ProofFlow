@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 import { ArrowDownToLine, ArrowRight, Check, ChevronDown, Copy, PencilLine, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { downloadJson } from "@/lib/feedback";
 import type { EditableCheck, SavedPlan } from "../../../shared/planner";
 import type { ProofPlan, ProofStep } from "../../../shared/proof-plan";
@@ -29,7 +30,6 @@ type Props = {
   saved: SavedPlan | null;
   starter: ProofPlan | null;
   pending: boolean;
-  onApprove: () => void;
   onRevise: () => void;
   editingApproved: boolean;
   onFinishEditing: () => void;
@@ -42,10 +42,10 @@ type Props = {
   changedIds: string[];
 };
 
-export function PlanPreview({ saved, starter, pending, onApprove, onRevise, editingApproved, onFinishEditing, onUseStarter, onVerify, onCopy, onEdit, onRemove, onReload, changedIds }: Props) {
+export function PlanPreview({ saved, starter, pending, onRevise, editingApproved, onFinishEditing, onUseStarter, onVerify, onCopy, onEdit, onRemove, onReload, changedIds }: Props) {
   const detailsId = useId();
-  const [reviewedRevision, setReviewedRevision] = useState<number | null>(null);
-  const reviewed = reviewedRevision !== null && reviewedRevision === saved?.revision;
+  const [videoConsent, setVideoConsent] = useState(false);
+  const canContinue = Boolean(saved?.videoConsentAt || videoConsent);
   const [editing, setEditing] = useState<ProofStep | null>(null);
   const [expandedChecks, setExpandedChecks] = useState<string[]>([]);
   const plan = saved?.plan ?? starter;
@@ -63,9 +63,9 @@ export function PlanPreview({ saved, starter, pending, onApprove, onRevise, edit
 
   return (
     <section className="plan-panel min-w-0" aria-label="Proof Plan preview" aria-busy={pending}>
-      {approved && <div className="flex flex-wrap items-center justify-between gap-4 border-b bg-emerald-50/60 px-5 py-4 sm:px-6">
-        <span className="flex items-center gap-2 text-sm font-medium text-emerald-800"><Check className="size-4" aria-hidden="true" />Plan approved</span>
-        <Button onClick={onVerify} disabled={pending} className="gap-2"><Upload className="size-4" />Check a video<ArrowRight className="size-4" /></Button>
+      {approved && canContinue && <div className="flex flex-wrap items-center justify-between gap-4 border-b bg-emerald-50/60 px-5 py-4 sm:px-6">
+        <span className="flex items-center gap-2 text-sm font-medium text-emerald-800"><Check className="size-4" aria-hidden="true" />Ready to use</span>
+        <Button onClick={onVerify} disabled={pending || !canContinue} className="gap-2"><Upload className="size-4" />Check a video<ArrowRight className="size-4" /></Button>
       </div>}
       <div className="p-4 sm:p-5">
         <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
@@ -105,14 +105,36 @@ export function PlanPreview({ saved, starter, pending, onApprove, onRevise, edit
           </div>
         </details>
       </div>
-      <div className="border-t bg-muted/20 px-4 py-3 sm:px-5">
+      <div className="border-t bg-muted/20 p-4 sm:p-5">
+        {saved?.plan && !saved.videoConsentAt && <div className="mb-4 border-b border-border/70 pb-4">
+          <div className="grid grid-cols-[1rem_minmax(0,1fr)] items-start gap-x-3 gap-y-1.5">
+          <input id={`${detailsId}-consent`} type="checkbox" checked={videoConsent} onChange={event => setVideoConsent(event.target.checked)} disabled={pending} aria-describedby={`${detailsId}-consent-note`} className="mt-0.5 size-4 accent-primary" />
+          <label htmlFor={`${detailsId}-consent`} className="cursor-pointer text-[14px] font-medium leading-5">I have permission to share videos with Meta.</label>
+          <div id={`${detailsId}-consent-note`} className="col-start-2 text-[12px] leading-5 text-muted-foreground">
+            <span>Meta may use videos to improve its models.</span>{" "}
+            <Dialog>
+              <DialogTrigger className="inline-flex min-h-6 items-center rounded-sm px-1 align-baseline text-[12px] leading-5 underline underline-offset-4">Details</DialogTrigger>
+              <DialogContent className="p-6 sm:max-w-md">
+                <DialogTitle className="pr-6 text-lg font-semibold">Video analysis & privacy</DialogTitle>
+                <DialogDescription className="text-sm leading-6">Videos are sent to Meta for analysis using Muse Spark (Contributor mode) and SAM 3.1. Meta may use uploads to improve its models.</DialogDescription>
+                <div className="space-y-3 text-sm leading-6 text-muted-foreground">
+                  <p>Audio is removed from the analysis copy. Your permission applies to videos in this plan and is saved for future uploads.</p>
+                  <p>Make sure the full task is visible. Videos stay on your device until you choose Check video on the next screen.</p>
+                  <p>Continuing approves this version of your checks. You can revise them later; earlier videos keep their original checks.</p>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+          </div>
+          {approved && <Button onClick={onVerify} disabled={pending || !canContinue} className="mt-3">Continue to videos<ArrowRight className="size-4" /></Button>}
+        </div>}
         {approved ? <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="w-full text-base leading-7 text-muted-foreground">Your plan stays approved until you save changed checks. Earlier videos keep their original checks.</p>
+          <p className="w-full text-base leading-7 text-muted-foreground">You can reuse or change these checks. Earlier videos keep their original checks.</p>
           {editingApproved ? <Button onClick={onFinishEditing} disabled={pending} variant="outline">Done editing</Button> : <Button onClick={onRevise} disabled={pending} variant="outline"><PencilLine className="size-4" />Make changes</Button>}
           <Button onClick={downloadPlan} variant="ghost"><ArrowDownToLine className="size-4" />Download plan</Button>
-        </div> : !saved?.plan ? <Button onClick={onUseStarter} disabled={pending} className="h-11 w-full gap-2">Use this plan<ArrowRight className="size-4" /></Button> : <div className="space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2"><label className="flex min-h-12 cursor-pointer items-center gap-3 text-base"><input type="checkbox" checked={reviewed} onChange={(event) => setReviewedRevision(event.target.checked ? saved!.revision : null)} disabled={pending} className="size-5 shrink-0 accent-primary" />I’ve reviewed these checks.</label><Button onClick={onApprove} disabled={!reviewed || pending} aria-describedby="approval-help"><Check className="size-4" />Approve these checks</Button></div>
-          <p id="approval-help" className="text-sm leading-6 text-muted-foreground">We’ll use these checks for your video. Changes later create a new draft.</p>
+        </div> : !saved?.plan ? <Button onClick={onUseStarter} disabled={pending} className="h-11 w-full gap-2">Use this plan<ArrowRight className="size-4" /></Button> : <div className="grid items-center gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-5">
+          <p id="approval-help" className="max-w-[28ch] text-[12px] leading-5 text-muted-foreground">Approve these checks, then choose a video.</p>
+          <Button onClick={onVerify} disabled={pending || !canContinue} aria-describedby="approval-help" className="h-11 w-full gap-2 rounded-lg px-4 text-sm sm:w-auto">Approve & continue<ArrowRight className="size-4" /></Button>
         </div>}
       </div>
       {editing && <CheckEditor step={editing} pending={pending} onClose={() => setEditing(null)} onSave={onEdit} onReload={onReload} />}

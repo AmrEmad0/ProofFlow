@@ -1,9 +1,9 @@
 import { z } from "zod";
 
 export const LIMITS = {
-  steps: 3,
+  steps: 5,
   concepts: 4,
-  durationMs: 20_000,
+  durationMs: 30_000,
   uploadBytes: 25 * 1024 * 1024,
 } as const;
 

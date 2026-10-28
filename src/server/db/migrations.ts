@@ -98,6 +98,54 @@ const migrations = [{
 }, {
   version: 4,
   sql: `ALTER TABLE plans ADD COLUMN deleted_at TEXT;`,
+}, {
+  version: 5,
+  sql: `ALTER TABLE runs ADD COLUMN activity_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(activity_json));`,
+}, {
+  version: 6,
+  sql: `
+    ALTER TABLE runs ADD COLUMN partial_findings_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(partial_findings_json));
+    ALTER TABLE plans ADD COLUMN video_consent_at TEXT;
+  `,
+}, {
+  version: 7,
+  sql: `
+    CREATE TABLE runs_expanded (
+      id TEXT PRIMARY KEY,
+      plan_version_id TEXT NOT NULL REFERENCES plan_versions(id),
+      state TEXT NOT NULL CHECK (state IN ('queued', 'preprocessing', 'uploading', 'analyzing', 'verifying', 'completed', 'failed')),
+      video_path TEXT NOT NULL,
+      video_sha256 TEXT,
+      duration_ms INTEGER CHECK (duration_ms > 0 AND duration_ms <= 30000),
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+      completed_at TEXT,
+      error_message TEXT,
+      normalized_path TEXT,
+      remote_file_id TEXT,
+      media_json TEXT CHECK (media_json IS NULL OR json_valid(media_json)),
+      receipt_json TEXT CHECK (receipt_json IS NULL OR json_valid(receipt_json)),
+      timings_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(timings_json)),
+      warnings_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(warnings_json)),
+      consent_at TEXT,
+      expires_at TEXT,
+      activity_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(activity_json)),
+      partial_findings_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(partial_findings_json))
+    );
+    INSERT INTO runs_expanded SELECT * FROM runs;
+    DROP TABLE runs;
+    ALTER TABLE runs_expanded RENAME TO runs;
+    CREATE INDEX runs_state_created_at ON runs(state, created_at);
+    CREATE TRIGGER runs_require_approved_plan BEFORE INSERT ON runs
+      WHEN (SELECT status FROM plan_versions WHERE id = NEW.plan_version_id) != 'approved'
+      BEGIN SELECT RAISE(ABORT, 'Runs require an approved plan'); END;
+  `,
+}, {
+  version: 8,
+  sql: `ALTER TABLE plans ADD COLUMN reference_video_json TEXT CHECK (reference_video_json IS NULL OR json_valid(reference_video_json));`,
+}, {
+  version: 9,
+  sql: `ALTER TABLE plans RENAME COLUMN reference_video_json TO reference_media_json;
+    CREATE TABLE planner_remote_files (id TEXT PRIMARY KEY, cleanup_after INTEGER NOT NULL);`,
 }];
 
 export function migrate(db: Database): void {
@@ -105,9 +153,20 @@ export function migrate(db: Database): void {
   const applied = db.query<{ version: number }, []>("SELECT version FROM schema_migrations").all();
   for (const migration of migrations) {
     if (applied.some((row) => row.version === migration.version)) continue;
-    db.transaction(() => {
-      db.exec(migration.sql);
-      db.query("INSERT INTO schema_migrations (version) VALUES (?)").run(migration.version);
-    })();
+    // Rebuilding runs must preserve its dependent findings and tracking rows.
+    const rebuildRuns = migration.version === 7;
+    const foreignKeys = db.query<{ foreign_keys: number }, []>("PRAGMA foreign_keys").get()!.foreign_keys;
+    if (rebuildRuns) db.exec("PRAGMA foreign_keys = OFF");
+    try {
+      db.transaction(() => {
+        db.exec(migration.sql);
+        if (rebuildRuns && db.query("PRAGMA foreign_key_check").all().length) {
+          throw new Error("Video limit migration would leave invalid references.");
+        }
+        db.query("INSERT INTO schema_migrations (version) VALUES (?)").run(migration.version);
+      })();
+    } finally {
+      if (rebuildRuns) db.exec(`PRAGMA foreign_keys = ${foreignKeys}`);
+    }
   }
 }

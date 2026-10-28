@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LIMITS } from "./proof-plan";
 import { findingSchema } from "./receipt";
 import { observationSchema } from "./observation";
 
@@ -27,7 +28,7 @@ export const stepCheckSchema = z.strictObject({
 });
 
 export const verificationDiagnosticsSchema = z.strictObject({
-  ruleVersion: z.string(), checks: z.array(stepCheckSchema).max(3),
+  ruleVersion: z.string(), checks: z.array(stepCheckSchema).max(LIMITS.steps),
 });
 
 export const trackingDiagnosticSchema = z.strictObject({

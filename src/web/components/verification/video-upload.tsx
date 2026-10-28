@@ -1,12 +1,12 @@
 import { useId, useRef, useState } from "react";
-import { Check, LoaderCircle, ShieldCheck, Upload, Video, X } from "lucide-react";
+import { Check, LoaderCircle, Upload, Video, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LIMITS } from "../../../shared/proof-plan";
 
-export function VideoUpload({ file, localUrl, consent, uploading, processing, available, retentionHours, version, onChoose, onClear, onConsent, onInvalid, onUpload }: {
-  file: File | null; localUrl: string | null; consent: boolean;
+export function VideoUpload({ file, localUrl, uploading, processing, available, retentionHours, version, onChoose, onClear, onInvalid, onUpload }: {
+  file: File | null; localUrl: string | null;
   uploading: boolean; processing: boolean; available: boolean; retentionHours: number; version: number | null;
-  onChoose: (file: File | undefined) => void; onConsent: (consent: boolean) => void;
+  onChoose: (file: File | undefined) => void;
   onClear: () => void;
   onInvalid: (message: string) => void; onUpload: () => void;
 }) {
@@ -16,7 +16,7 @@ export function VideoUpload({ file, localUrl, consent, uploading, processing, av
   const reason = uploading ? "Your video is uploading. Keep this page open until it finishes."
     : processing ? "Another video is being checked. You can prepare this one while it finishes."
     : !available ? "Video checking is currently unavailable. Your approved checks are saved."
-    : file && !consent ? "Tick the permission box to check this video." : null;
+    : null;
 
   return <section className="rounded-2xl border bg-card p-4 sm:p-5" aria-label="Upload a new video">
     <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><h2 className="flex items-center gap-2 text-lg font-semibold"><Upload className="size-5 text-primary" aria-hidden="true" />Check a video</h2><span className="flex items-center gap-1.5 text-sm text-emerald-700"><Check className="size-4" aria-hidden="true" />Approved checks · v{version}</span></div>
@@ -34,13 +34,11 @@ export function VideoUpload({ file, localUrl, consent, uploading, processing, av
       </div>}
     </div>
     {file && localUrl && <figure className="mt-4">
-      <div className="flex justify-center rounded-xl bg-muted/40 p-2"><video key={localUrl} src={localUrl} controls playsInline preload="metadata" className="block h-auto max-h-72 w-auto max-w-full rounded-lg" aria-label="Selected recording preview" onError={() => setFailedPreviewUrl(localUrl)} onLoadedMetadata={(event) => { if (event.currentTarget.duration * 1000 > LIMITS.durationMs) onInvalid("This video is longer than 20 seconds. Choose a shorter clip that shows the whole task."); }} /></div>
-      <figcaption className="mt-2 text-sm leading-6 text-muted-foreground">{failedPreviewUrl === localUrl ? "Your browser can’t preview this file. You can choose another or continue to check it." : "Play the video to make sure the whole task is visible. It stays on this device until you choose Check video."}</figcaption>
+      <div className="flex justify-center rounded-xl bg-muted/40 p-2"><video key={localUrl} src={localUrl} controls playsInline preload="metadata" className="block h-auto max-h-72 w-auto max-w-full rounded-lg" aria-label="Selected recording preview" onError={() => setFailedPreviewUrl(localUrl)} onLoadedMetadata={(event) => { if (event.currentTarget.duration * 1000 > LIMITS.durationMs) onInvalid(`This video is longer than ${LIMITS.durationMs / 1000} seconds. Choose a shorter clip that shows the whole task.`); }} /></div>
+      {failedPreviewUrl === localUrl && <figcaption className="mt-2 text-sm leading-6 text-muted-foreground">Your browser can’t preview this file. You can choose another or continue to check it.</figcaption>}
     </figure>}
     {file && <div className="mt-4 border-t pt-3">
-      <label className="flex min-h-12 cursor-pointer items-start gap-3 text-base leading-6"><input type="checkbox" checked={consent} disabled={uploading} onChange={(event) => onConsent(event.target.checked)} aria-describedby={`${descriptionId}-sharing`} className="mt-1 size-5 shrink-0 accent-primary" />I have permission to send this video to Meta for analysis.</label>
-      <p id={`${descriptionId}-sharing`} className="mt-1 text-sm leading-6 text-muted-foreground">Meta Muse Spark (Contributor mode) and SAM 3.1 process the video. Submitted content may be used to improve Meta models. Audio is removed from the analysis copy.</p>
-      <div className="mt-4 flex flex-wrap items-center gap-3"><Button onClick={onUpload} disabled={!consent || !available || processing || uploading} aria-describedby={reason ? `${descriptionId}-status` : undefined} className="w-full gap-2 sm:w-auto">{uploading ? <><LoaderCircle className="size-4 animate-spin" />Uploading…</> : <><ShieldCheck className="size-4" />Check video</>}</Button>{reason && <p id={`${descriptionId}-status`} role="status" className="min-w-0 flex-1 basis-48 text-sm leading-6 text-muted-foreground">{reason}</p>}</div>
+      <div className="mt-4 flex flex-wrap items-center gap-3"><Button onClick={onUpload} disabled={!available || processing || uploading} aria-describedby={reason ? `${descriptionId}-status` : undefined} className="w-full gap-2 sm:w-auto">{uploading ? <><LoaderCircle className="size-4 animate-spin" />Uploading…</> : <><Upload className="size-4" />Check video</>}</Button>{reason && <p id={`${descriptionId}-status`} role="status" className="min-w-0 flex-1 basis-48 text-sm leading-6 text-muted-foreground">{reason}</p>}</div>
     </div>}
     {!file && reason && <p role="status" className="mt-3 text-sm leading-6 text-muted-foreground">{reason}</p>}
     <p className="mt-3 text-sm leading-6 text-muted-foreground">Videos and evidence saved in this workspace expire after {retentionHours} hours.</p>

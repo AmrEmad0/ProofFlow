@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { proofPlanSchema, proofStepSchema, type ProofStep } from "./proof-plan";
+import { LIMITS, proofPlanSchema, proofStepSchema, type ProofStep } from "./proof-plan";
 
 export const editableCheckSchema = z.strictObject({
   id: proofStepSchema.shape.id,
@@ -10,7 +10,7 @@ export const editableCheckSchema = z.strictObject({
 });
 export const editChecksSchema = z.strictObject({
   revision: z.number().int().nonnegative(),
-  steps: z.array(editableCheckSchema).min(1).max(3),
+  steps: z.array(editableCheckSchema).min(1).max(LIMITS.steps),
 });
 export type EditableCheck = z.infer<typeof editableCheckSchema>;
 
@@ -42,6 +42,14 @@ export const plannerReplySchema = z.strictObject({
   plan: proofPlanSchema.nullable(),
 });
 
+export const referenceMediaSchema = z.strictObject({
+  name: z.string().min(1).max(255),
+  kind: z.enum(["image", "video"]),
+  durationMs: z.number().int().positive().max(LIMITS.durationMs).nullable(),
+  summary: z.string().trim().min(1).max(6000),
+});
+export type ReferenceMedia = z.infer<typeof referenceMediaSchema>;
+
 export const savedPlanSchema = z.strictObject({
   id: z.uuid(),
   revision: z.number().int().nonnegative(),
@@ -50,8 +58,10 @@ export const savedPlanSchema = z.strictObject({
   status: z.enum(["draft", "approved"]),
   contractHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   approvedAt: z.string().nullable(),
+  videoConsentAt: z.string().nullable().default(null),
   plan: proofPlanSchema.nullable(),
   messages: z.array(plannerMessageSchema),
+  referenceMedia: referenceMediaSchema.nullable().default(null),
 });
 
 export type PlannerMessage = z.infer<typeof plannerMessageSchema>;

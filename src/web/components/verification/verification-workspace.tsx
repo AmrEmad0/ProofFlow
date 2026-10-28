@@ -32,7 +32,8 @@ export function VerificationWorkspace({ saved, heading, visible, startNewUpload,
   const container = useRef<HTMLDivElement>(null);
   const versionId = saved.versionId!;
   const [file, setFile] = useState<File | null>(null);
-  const [consent, setConsent] = useState(false);
+  const consent = Boolean(saved.videoConsentAt);
+  const chooser = useRef<HTMLInputElement>(null);
   const [selection, setSelection] = useState<string | null>(() => rememberedVideo(saved.id));
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -83,32 +84,35 @@ export function VerificationWorkspace({ saved, heading, visible, startNewUpload,
   }
 
   function selectionError(message: string) {
-    setError(message); setFile(null); setConsent(false);
+    setError(message); setFile(null);
     toast.add({ id: "video-selection", type: "error", title: "Video not accepted", description: message });
   }
 
-  function choose(value: File | undefined) {
-    if (!value) return;
+  function choose(value: File | undefined, openPreview = true) {
+    if (!value) return false;
     setError(null);
-    if (!value.size || value.size > LIMITS.uploadBytes) { selectionError("Choose a nonempty recording up to 25 MB."); return; }
-    if (!/\.(mp4|mov|webm)$/i.test(value.name)) { selectionError("Choose an MP4, MOV, or WebM recording."); return; }
+    if (!value.size || value.size > LIMITS.uploadBytes) { selectionError("Choose a nonempty recording up to 25 MB."); return false; }
+    if (!/\.(mp4|mov|webm)$/i.test(value.name)) { selectionError("Choose an MP4, MOV, or WebM recording."); return false; }
     setFile(value);
-    setConsent(false);
-    toast.add({ id: "video-selection", type: "info", title: "Video selected" });
+    if (openPreview) setSelection("upload");
+    setConfirmDelete(false);
+
+    if (openPreview) toast.add({ id: "video-selection", type: "info", title: "Video selected" });
+    return true;
   }
 
-  async function uploadVideo() {
+  async function uploadVideo(selectedFile: File | null) {
     if (saved.status !== "approved") throw new Error("Review and approve your current checks before uploading a video.");
-    if (!file || !consent || !saved.contractHash) throw new Error("Choose a video and give permission to send it to Meta first.");
-    const result = await api.api.runs.post({ video: file, consent: "true", approvedVersionId: versionId, contractHash: saved.contractHash });
+    if (!selectedFile || !consent || !saved.contractHash) throw new Error("Choose a video and give permission to send it to Meta first.");
+    const result = await api.api.runs.post({ video: selectedFile, consent: "true", approvedVersionId: versionId, contractHash: saved.contractHash });
     if (result.error) throw apiError(result.error.value, "The recording could not be uploaded.");
     return runSummarySchema.parse(result.data);
   }
 
-  const upload = useMutation({ mutationFn: () => withFeedback(uploadVideo(), { loading: "Uploading video…", success: "Video uploaded", error: "Couldn’t upload video" }), onSuccess: (result) => {
+  const upload = useMutation({ mutationFn: (selectedFile: File | undefined) => withFeedback(uploadVideo(selectedFile ?? file), { loading: "Uploading video…", success: "Video uploaded", error: "Couldn’t upload video" }), onSuccess: (result) => {
     queryClient.setQueryData<RunSummary[]>(listKey, (current) => [result, ...(current ?? []).filter((item) => item.id !== result.id)]);
     watchRun(result.id);
-    setSelection(result.id); setFile(null); setConsent(false); setError(null);
+    setSelection(result.id); setFile(null); setError(null);
     void queryClient.invalidateQueries({ queryKey: listKey });
   }, onError: (failure) => setError(failure.message), retry: false });
 
@@ -137,22 +141,23 @@ export function VerificationWorkspace({ saved, heading, visible, startNewUpload,
   const displayedError = error ?? (details.isError ? details.error.message : readiness.isError ? readiness.error.message : null);
   const showLibrary = runs.isPending || runs.isError || recordings.length > 0;
   return <div ref={container} className="min-w-0">
-    <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+    <input ref={chooser} type="file" accept=".mp4,.mov,.webm,video/mp4,video/quicktime,video/webm" aria-label="Upload another video" className="sr-only" tabIndex={-1} disabled={upload.isPending} onChange={event => { const selected = event.target.files?.[0]; if (choose(selected, false)) upload.mutate(selected); event.target.value = ""; }} />
+    <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
       {heading}
-      {runId && run && <div className="min-w-0 sm:text-right"><h2 className="text-lg font-semibold tracking-tight">{recordingName(recordings, run.id)}</h2><p className="mt-1 text-xs leading-5 text-muted-foreground">{new Date(run.createdAt).toLocaleString()}{run.durationMs ? ` · ${(run.durationMs / 1000).toFixed(1)} seconds` : ""} · Plan v{run.planVersion}</p></div>}
+      {runId && run && <div className="min-w-0 sm:text-right"><h2 className="text-[14px] font-semibold tracking-tight">{recordingName(recordings, run.id)}</h2><p className="mt-1 text-[12px] leading-5 text-muted-foreground">{new Date(run.createdAt).toLocaleString()}{run.durationMs ? ` · ${(run.durationMs / 1000).toFixed(1)} seconds` : ""} · Plan v{run.planVersion}</p></div>}
     </div>
-    <div className={`grid min-w-0 items-start gap-5 ${showLibrary ? "lg:grid-cols-[16rem_minmax(0,1fr)]" : "mx-auto max-w-5xl"}`}>
-      {showLibrary && <VideoLibrary runs={recordings} selectedId={runId} loading={runs.isPending} error={runs.error?.message ?? null} uploading={upload.isPending} refreshing={runs.isRefetching} onSelect={selectVideo} onNew={() => saved.status === "approved" ? selectVideo(null) : onReviewPlan()} onRefresh={refreshRuns} />}
-      <div className="min-w-0 space-y-5">
+    <div className="min-w-0 space-y-3">
+      {showLibrary && <VideoLibrary runs={recordings} selectedId={runId} loading={runs.isPending} error={runs.error?.message ?? null} uploading={upload.isPending || processing} refreshing={runs.isRefetching} onSelect={selectVideo} onNew={() => saved.status === "approved" && consent ? chooser.current?.click() : onReviewPlan()} onRefresh={refreshRuns} />}
+      <div className="min-w-0 space-y-3">
         {displayedError && <div role="alert" className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm leading-6 text-destructive">{displayedError}{!error && <button className="ml-2 underline" onClick={refreshRuns}>Reload videos</button>}</div>}
         {runId ? run ? <>
-          <VerificationStatus run={run} onNewVideo={() => selectVideo(null)} />
+          <VerificationStatus run={run} />
           {run.warnings.map((warning) => <p key={warning} className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900">{warning}</p>)}
           <EvidencePlayer key={run.id} run={run} />
-          {!isActiveRun(run.state) && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4"><span className="text-sm text-muted-foreground">Expires {new Date(run.expiresAt).toLocaleString()}</span><div className="flex flex-wrap gap-2">{run.receipt && <Button variant="outline" className="h-8 gap-2 rounded-lg px-3" onClick={exportReceipt}><ArrowDownToLine />Export evidence</Button>}{confirmDelete ? <><Button variant="destructive" className="h-8 px-3" disabled={remove.isPending} onClick={() => remove.mutate(run.id)}>Delete video & evidence</Button><Button variant="ghost" disabled={remove.isPending} onClick={() => setConfirmDelete(false)}>Cancel</Button></> : <Button variant="ghost" className="h-8 gap-2 px-3" onClick={() => setConfirmDelete(true)}><Trash2 />Delete</Button>}</div></div>}
-        </> : details.isPending ? <div role="status" className="flex min-h-64 items-center justify-center gap-2 rounded-2xl border bg-card p-6 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Loading video…</div> : <div className="rounded-2xl border bg-card p-6 text-sm text-muted-foreground">This video could not be opened. Select another recording or add a new video.</div> : runs.isPending && selection === null ? <p role="status" className="p-6 text-sm text-muted-foreground">Loading your video library…</p> : saved.status !== "approved" ? <section className="rounded-2xl border bg-card p-5"><h2 className="text-lg font-semibold">Review your updated checks</h2><p className="mt-2 text-sm text-muted-foreground">Your earlier recordings are still available. Approve your updated checks before checking a new video.</p><Button variant="outline" className="mt-4" onClick={onReviewPlan}>Review checks</Button></section> : <>
-          <RecordingChecklist saved={saved} onReviewPlan={onReviewPlan} />
-          <VideoUpload file={file} localUrl={localUrl} consent={consent} uploading={upload.isPending} processing={processing} available={readiness.data?.available ?? false} retentionHours={readiness.data?.retentionHours ?? 24} version={saved.version} onChoose={choose} onClear={() => { setFile(null); setConsent(false); setError(null); }} onConsent={setConsent} onInvalid={selectionError} onUpload={() => upload.mutate()} />
+          {!isActiveRun(run.state) && <div className="flex flex-wrap items-center justify-between gap-3 px-1 py-2"><span className="text-[12px] text-muted-foreground">Expires {new Date(run.expiresAt).toLocaleString()}</span><div className="flex flex-wrap gap-2">{run.receipt && <Button variant="outline" className="h-8 gap-2 rounded-lg px-3" onClick={exportReceipt}><ArrowDownToLine />Export evidence</Button>}{confirmDelete ? <><Button variant="destructive" className="h-8 px-3" disabled={remove.isPending} onClick={() => remove.mutate(run.id)}>Delete video & evidence</Button><Button variant="ghost" disabled={remove.isPending} onClick={() => setConfirmDelete(false)}>Cancel</Button></> : <Button variant="ghost" className="h-8 gap-2 px-3" onClick={() => setConfirmDelete(true)}><Trash2 />Delete</Button>}</div></div>}
+        </> : details.isPending ? <div role="status" className="flex min-h-64 items-center justify-center gap-2 rounded-2xl border bg-card p-6 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Loading video…</div> : <div className="rounded-2xl border bg-card p-6 text-sm text-muted-foreground">This video could not be opened. Select another recording or add a new video.</div> : runs.isPending && selection === null ? <p role="status" className="p-6 text-sm text-muted-foreground">Loading your video library…</p> : saved.status !== "approved" || !consent ? <section className="rounded-2xl border bg-card p-5"><h2 className="text-lg font-semibold">Review your updated checks</h2><p className="mt-2 text-sm text-muted-foreground">Your earlier recordings are still available. Review your updated plan, then choose Check a video.</p><Button variant="outline" className="mt-4" onClick={onReviewPlan}>Review checks</Button></section> : <>
+          <details className="rounded-xl border bg-card px-4 py-2"><summary className="cursor-pointer py-1 text-sm font-medium">Plan checks & filming tips</summary><RecordingChecklist saved={saved} onReviewPlan={onReviewPlan} /></details>
+          <VideoUpload file={file} localUrl={localUrl} uploading={upload.isPending} processing={processing} available={readiness.data?.available ?? false} retentionHours={readiness.data?.retentionHours ?? 24} version={saved.version} onChoose={choose} onClear={() => { setFile(null); setError(null); }} onInvalid={selectionError} onUpload={() => upload.mutate()} />
         </>}
       </div>
     </div>
@@ -163,6 +168,6 @@ function RecordingChecklist({ saved, onReviewPlan }: { saved: SavedPlan; onRevie
   return <section className="rounded-2xl border bg-card p-4 sm:p-5" aria-label="Approved recording checklist">
     <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h2 className="text-lg font-semibold">What to record</h2><Button variant="ghost" className="px-2 text-sm" onClick={onReviewPlan}>Review approved checks</Button></div>
     <ol className="grid gap-3 sm:grid-cols-3">{saved.plan?.steps.map((step, index) => <li key={step.id} className="flex min-w-0 items-start gap-2 text-base leading-6"><span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-medium text-primary">{index + 1}</span><p className="break-words font-medium">{step.label}</p></li>)}</ol>
-    <details className="mt-2"><summary className="w-fit cursor-pointer rounded-md py-2 text-sm font-medium">Filming tips</summary><p className="mt-1 text-sm leading-6 text-muted-foreground">Show the whole task in one video of up to 20 seconds. Keep the items and actions in view.</p><ol className="mt-3 space-y-3">{saved.plan?.steps.map((step, index) => <li key={step.id} className="text-base leading-7"><p className="font-medium">{index + 1}. {step.label}</p><p className="text-muted-foreground">{step.observableEvidence}</p></li>)}</ol></details>
+    <details className="mt-2"><summary className="w-fit cursor-pointer rounded-md py-2 text-sm font-medium">Filming tips</summary><p className="mt-1 text-sm leading-6 text-muted-foreground">Show the whole task in one video of up to {LIMITS.durationMs / 1000} seconds. Keep the items and actions in view.</p><ol className="mt-3 space-y-3">{saved.plan?.steps.map((step, index) => <li key={step.id} className="text-base leading-7"><p className="font-medium">{index + 1}. {step.label}</p><p className="text-muted-foreground">{step.observableEvidence}</p></li>)}</ol></details>
   </section>;
 }

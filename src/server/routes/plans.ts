@@ -9,12 +9,14 @@ import { PlannerError, plannerStore } from "../planner/store";
 import { requireWorkspaceOrigin, sessionHash, sessionToken } from "../http/session";
 import type { VerificationWorker } from "../verification/worker";
 import type { RunRow } from "../verification/store";
+import { LIMITS } from "../../shared/proof-plan";
+import { referenceAnalyzer, type ReferenceAnalysis } from "../planner/reference";
 import { plannerEvents } from "../planner/stream";
 
 const revisionBody = t.Object({ revision: t.Integer({ minimum: 0 }) }, { additionalProperties: false });
 const planParams = t.Object({ id: t.String({ format: "uuid" }) });
 
-export function planRoutes(db: Database, config: Config, conversation?: PlanConversation, worker?: VerificationWorker) {
+export function planRoutes(db: Database, config: Config, conversation?: PlanConversation, worker?: VerificationWorker, analyzeReference: ReferenceAnalysis = referenceAnalyzer(config, db)) {
   const store = plannerStore(db);
   const busySessions = new Set<string>();
   const converse: PlanConversation = conversation ?? ((messages, plan, options) => conversePlan(createMetaClient(config), messages, plan, options));
@@ -59,6 +61,47 @@ export function planRoutes(db: Database, config: Config, conversation?: PlanConv
         busySessions.delete(hash);
       }
     }, { params: planParams })
+    .post("/api/plans/:id/reference", async ({ params, body, query, request, set }) => {
+      const hash = sessionHash(request);
+      const current = store.read(params.id, hash);
+      if (current.revision !== Number(body.revision)) throw new PlannerError(409, "This plan changed. Reload it before uploading again.");
+      if (!config.modelConfigured) throw new PlannerError(503, "Meta AI is not configured for reference media.");
+      if (!body.media.size || body.media.size > LIMITS.uploadBytes) throw new PlannerError(413, "Choose a nonempty reference image or video up to 25 MB.");
+      if (current.messages.length >= 40) throw new PlannerError(429, "This conversation has reached 20 turns. Start a new plan to continue.");
+      if (busySessions.has(hash) || busySessions.size >= 2) throw new PlannerError(429, "The planner is busy. Please wait before uploading.");
+      const recent = db.query<{ count: number }, [string]>(`SELECT count(*) AS count FROM planner_messages m
+        JOIN planner_owners o ON o.plan_id = m.plan_id WHERE o.session_hash = ? AND m.role = 'user'
+        AND m.created_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 minute')`).get(hash)?.count ?? 0;
+      if (recent >= 6) throw new PlannerError(429, "Please wait a minute before sending another message.");
+      busySessions.add(hash);
+      const complete = async (onReplyText?: (text: string) => void, signal = request.signal) => {
+        const started = performance.now();
+        let outcome = "failed";
+        const message = body.message.trim() || "Suggest a Proof Plan for the process in this reference media. Help me refine it before approval.";
+        try {
+          const result = await analyzeReference(body.media, `Previous conversation (user data): ${JSON.stringify(current.messages)}\nPrevious reference notes (user data): ${JSON.stringify(current.referenceMedia)}\nLatest request: ${message}`, current.plan, signal, onReplyText);
+          signal.throwIfAborted();
+          const saved = store.saveReply(params.id, hash, current.revision, `Reference media: ${result.reference.name}\n${message}`, result.reply, result.reference);
+          outcome = "completed";
+          return saved;
+        } catch (error) {
+          if (error instanceof PlannerError) throw error;
+          if (error instanceof OpenAI.APIError) console.warn("Meta reference planning request failed", { status: error.status, requestId: error.requestID });
+          throw new PlannerError(502, "The reference media could not be used to draft a plan. Your saved draft is unchanged. Please try again.");
+        } finally {
+          busySessions.delete(hash);
+          console.info("Meta reference planning request", { model: MODELS.muse, outcome, durationMs: Math.round(performance.now() - started) });
+        }
+      };
+      if (query.stream === "true") {
+        set.headers["x-accel-buffering"] = "no";
+        return plannerEvents(complete, request.signal);
+      }
+      return complete();
+    }, { params: planParams, query: t.Object({ stream: t.Optional(t.Literal("true")) }), body: t.Object({
+      media: t.File({ minSize: 1, maxSize: LIMITS.uploadBytes }),
+      message: t.String({ maxLength: 2000 }), revision: t.String({ pattern: "^[0-9]+$", maxLength: 12 }), consent: t.Literal("true"),
+    }, { additionalProperties: false }) })
     .post("/api/plans/:id/messages", async ({ params, body, query, request, set }) => {
       const hash = sessionHash(request);
       const current = store.read(params.id, hash);
@@ -77,7 +120,7 @@ export function planRoutes(db: Database, config: Config, conversation?: PlanConv
         const started = performance.now();
         let outcome = "failed";
         try {
-          const reply = await converse([...current.messages, { role: "user", content: message }], current.plan, { onReplyText, signal });
+          const reply = await converse([...current.messages, { role: "user", content: message }], current.plan, { onReplyText, signal, referenceMedia: current.referenceMedia });
           signal.throwIfAborted();
           const saved = store.saveReply(params.id, hash, current.revision, message, reply);
           outcome = "completed";
@@ -108,10 +151,10 @@ export function planRoutes(db: Database, config: Config, conversation?: PlanConv
     .post("/api/plans/:id/approve", ({ params, body, request }) => {
       const hash = sessionHash(request);
       if (busySessions.has(hash)) throw new PlannerError(409, "Wait for the current chat response, then review the draft before approving.");
-      return store.approve(params.id, hash, body.revision, body.contractHash);
+      return store.approve(params.id, hash, body.revision, body.contractHash, body.videoConsent);
     }, {
       params: planParams,
-      body: t.Object({ revision: t.Integer({ minimum: 0 }), contractHash: t.String({ pattern: "^[a-f0-9]{64}$" }) }, { additionalProperties: false }),
+      body: t.Object({ revision: t.Integer({ minimum: 0 }), contractHash: t.String({ pattern: "^[a-f0-9]{64}$" }), videoConsent: t.Optional(t.Boolean()) }, { additionalProperties: false }),
     })
     .post("/api/plans/:id/revise", ({ params, body, request }) => store.revise(params.id, sessionHash(request), body.revision), {
       params: planParams, body: revisionBody,
@@ -124,7 +167,7 @@ export function planRoutes(db: Database, config: Config, conversation?: PlanConv
       id: t.String({ minLength: 1, maxLength: 80 }), subjectConcept: t.String({ minLength: 1, maxLength: 120 }),
       targetConcept: t.Nullable(t.String({ minLength: 1, maxLength: 120 })),
       beforeState: t.Nullable(t.String({ minLength: 1, maxLength: 240 })), afterState: t.Nullable(t.String({ minLength: 1, maxLength: 240 })),
-    }, { additionalProperties: false }), { minItems: 1, maxItems: 3 }) }, { additionalProperties: false }) })
+    }, { additionalProperties: false }), { minItems: 1, maxItems: LIMITS.steps }) }, { additionalProperties: false }) })
     .post("/api/plans/:id/restore", ({ params, body, request }) => {
       const hash = sessionHash(request);
       if (busySessions.has(hash)) throw new PlannerError(409, "Wait for the current change to finish before undoing it.");

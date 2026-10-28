@@ -20,12 +20,12 @@ import { WorkspaceSidebar } from "../workspace/workspace-sidebar";
 import { WorkspaceSettings } from "../workspace/workspace-settings";
 import { VerificationWorkspace } from "../verification/verification-workspace";
 
-type Action = { type: "create"; template: "blank" | "packproof" } | { type: "send"; message: string } | { type: "approve" } | { type: "copy" } | { type: "edit"; steps: EditableCheck[] } | { type: "restore"; versionId: string };
+type Action = { type: "create"; template: "blank" | "packproof" } | { type: "send"; message: string; media?: File } | { type: "approve" } | { type: "copy" } | { type: "edit"; steps: EditableCheck[] } | { type: "restore"; versionId: string };
 
 const actionFeedback = {
   create: { loading: "Creating draft…", success: "Draft created", error: "Couldn’t create draft" },
   send: { loading: "Working on your plan…", success: "Reply received", error: "Couldn’t send message" },
-  approve: { loading: "Approving plan…", success: "Plan approved", error: "Couldn’t approve plan" },
+  approve: { loading: "Preparing your checks…", success: "Ready for your video", error: "Couldn’t prepare checks" },
   copy: { loading: "Copying your checks…", success: "Copy ready to change", error: "Couldn’t copy plan" },
   edit: { loading: "Saving your checks…", success: "Checks saved", error: "Couldn’t save checks" },
   restore: { loading: "Undoing the change…", success: "Previous checks restored", error: "Couldn’t undo the change" },
@@ -127,7 +127,9 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
       const controller = new AbortController();
       requestController.current = controller;
       try {
-        const { data, error: failure } = await endpoint.messages.post({ message: action.message, revision: target.revision }, { query: { stream: "true" }, fetch: { signal: controller.signal } });
+        const { data, error: failure } = action.media
+          ? await endpoint.reference.post({ media: action.media, message: action.message, revision: String(target.revision), consent: "true" }, { query: { stream: "true" }, fetch: { signal: controller.signal } })
+          : await endpoint.messages.post({ message: action.message, revision: target.revision }, { query: { stream: "true" }, fetch: { signal: controller.signal } });
         if (failure) throw apiError(failure.value, "Your message could not be sent. Please try again.");
         if (!data || !(Symbol.asyncIterator in data)) throw new Error("The chat stream could not be opened. Please try again.");
         return await readPlannerStream(data, setPartialReply);
@@ -142,7 +144,7 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
           ? await endpoint.restore.post({ revision: target.revision, versionId: action.versionId })
         : action.type === "copy"
           ? await endpoint.copy.post({ revision: target.revision })
-        : await endpoint.approve.post({ revision: target.revision, contractHash: target.contractHash ?? "" });
+        : await endpoint.approve.post({ revision: target.revision, contractHash: target.contractHash ?? "", videoConsent: true });
     if (response.error) throw apiError(response.error.value, "Your change could not be saved. Please try again.");
     return savedPlanSchema.parse(response.data);
   }
@@ -159,6 +161,7 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
       } else setUndo(null);
       remember(value);
       if (value.status !== "approved") { setEditingApproved(false); setView("plan"); }
+      if (action.type === "approve") openUpload();
       if (action.type === "send") {
         setPartialReply("");
         rememberMessage(saved?.id ?? activeId, "");
@@ -234,7 +237,7 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
   const approved = saved?.status === "approved";
   const hasPlan = Boolean(saved?.plan || starter);
   const videoView = Boolean(saved) && (view === "video" || (approved && (view === "upload" || (view === "auto" && (previousRuns.isError || Boolean(previousRuns.data?.length))))));
-  const step = videoView ? 2 : hasPlan ? 1 : 0;
+  const step = videoView ? 1 : 0;
 
   useEffect(() => {
     if (approved && view === "auto" && (previousRuns.isError || previousRuns.data?.length)) setView("video");
@@ -246,8 +249,8 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
   }, []);
 
   const pageHeading = <div className="min-w-0">
-    <h1 ref={heading} tabIndex={-1} className="text-2xl font-semibold tracking-tight outline-none sm:text-3xl">{openingVideos ? "Opening your plan" : videoView ? "Videos & evidence" : editingApproved ? "Edit your checks" : approved ? "Your plan is ready" : hasPlan ? "Review your checks" : "What should the video show?"}</h1>
-    <p className="mt-2 text-base leading-7 text-muted-foreground">{openingVideos ? "Loading your videos and saved checks." : videoView ? "Use the same approved checks for each new video." : editingApproved ? "Your plan stays approved until you save a change to its checks." : approved ? "Ask a question, revise your plan, or use it for a video. Changed checks need approval again." : hasPlan ? "Talk through your plan here. Review and approve the checks when you’re ready." : "Tell me what you have in mind, or ask a question. We can work out the plan together."}</p>
+    <h1 ref={heading} tabIndex={-1} className={`font-semibold tracking-tight outline-none ${videoView ? "text-2xl" : "text-2xl sm:text-3xl"}`}>{openingVideos ? "Opening your plan" : videoView ? "Videos & evidence" : editingApproved ? "Edit your checks" : approved ? "Your plan is ready" : hasPlan ? "Review your checks" : "Create your proof plan"}</h1>
+    <p className={videoView ? "sr-only" : "mt-2 text-base leading-7 text-muted-foreground"}>{openingVideos ? "Loading your videos and saved checks." : videoView ? "Inspect each check alongside its video evidence." : editingApproved ? "Save your changes, then use the updated checks for a video." : approved ? "Ask a question, revise your plan, or check a video." : hasPlan ? "Adjust the checks here, then choose Check a video when you’re ready." : "Describe your process or add a reference. Review and approve the suggested checks before verifying a video."}</p>
   </div>;
 
   return (
@@ -265,22 +268,22 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
           <span className="min-w-0 flex-1 truncate text-sm font-medium">{saved?.plan?.title ?? (starter ? "Box packing example" : "New plan")}</span>
           <span className="shrink-0 text-xs text-muted-foreground" role="status">{sending ? "Replying…" : pending ? "Saving…" : saved ? "Saved" : ""}</span>
         </header>
-        <div className="px-4 pt-6 pb-8 sm:px-8 sm:pt-7">
+        <div className={videoView ? "px-4 pt-4 pb-6 sm:px-6" : "px-4 pt-6 pb-8 sm:px-8 sm:pt-7"}>
           <div className={`workspace-enter mx-auto ${videoView ? "max-w-[1500px]" : "max-w-6xl"}`}>
-            <ol className="workflow-steps mb-6" aria-label="Verification progress">
-              {["Create plan", "Review checks", "Verify video"].map((label, index) => (
-                <li key={label} aria-current={step === index ? "step" : undefined} className={`${step === index ? "is-current" : step > index ? "is-complete" : ""} ${approved && index === 1 ? "is-approved" : ""}`}>
-                  {(approved || (videoView && index === 1)) && index > 0 && index !== step ? <button aria-label={label} disabled={pending} onClick={() => setView(index === 2 ? "video" : "plan")} className="flex items-center gap-2 rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"><span className="step-number">{step > index || index === 1 ? <Check className="size-3.5" aria-hidden="true" /> : index + 1}</span>{label}</button> : <span className="flex items-center gap-2"><span className="step-number">{step > index || (approved && index === 1) ? <Check className="size-3.5" aria-hidden="true" /> : index + 1}</span>{label}</span>}
+            <ol hidden={Boolean(videoView)} className={videoView ? "hidden" : `workflow-steps mb-6 ${!hasPlan ? "workflow-steps-start" : ""}`} aria-label="Verification progress">
+              {["Create plan", "Verify video"].map((label, index) => (
+                <li key={label} aria-current={step === index ? "step" : undefined} className={step === index ? "is-current" : step > index ? "is-complete" : ""}>
+                  {videoView && index === 0 ? <button aria-label={label} disabled={pending} onClick={() => setView("plan")} className="flex items-center gap-2 rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"><span className="step-number"><Check className="size-3.5" aria-hidden="true" /></span>{label}</button> : <span className="flex items-center gap-2"><span className="step-number">{index + 1}</span>{label}</span>}
                 </li>
               ))}
             </ol>
-            {!videoView && <div className="mb-6 flex flex-wrap items-start justify-between gap-4">{pageHeading}{Boolean(previousRuns.data?.length) && <Button variant="outline" onClick={() => { setEditingApproved(false); setView("video"); }}>Videos & evidence ({previousRuns.data!.length})</Button>}</div>}
+            {!videoView && <div className={`mb-6 flex flex-wrap items-start justify-between gap-4 ${!hasPlan ? "planner-intro" : ""}`}>{pageHeading}{Boolean(previousRuns.data?.length) && <Button variant="outline" onClick={() => { setEditingApproved(false); setView("video"); }}>Videos & evidence ({previousRuns.data!.length})</Button>}</div>}
             {undo && saved?.id === undo.planId && saved.revision === undo.revision && <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-primary/5 p-4"><p role="status" className="text-base">{undo.message}</p><Button variant="outline" disabled={pending} onClick={() => act({ type: "restore", versionId: undo.versionId })}><RotateCcw />Undo change</Button></div>}
             {displayedError && (videoView || loading) && <p role="alert" className="mb-4 rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">{displayedError}</p>}
             {!loading && saved && (approved || videoView || Boolean(previousRuns.data?.length)) && <div hidden={!videoView}><VerificationWorkspace key={saved.id} saved={saved} heading={videoView ? pageHeading : null} visible={Boolean(videoView)} startNewUpload={view === "upload"} onReviewPlan={() => setView("plan")} /></div>}
-            {loading ? <Skeleton className="h-96 rounded-2xl" aria-label={openingVideos ? "Loading plan videos" : "Loading saved plan"} /> : videoView ? null : <div className={hasPlan ? "grid items-start gap-5 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]" : "mx-auto max-w-2xl"}>
-              <PlannerChat saved={saved} starter={starter} pending={pending} sending={sending} partialReply={partialReply} pendingMessage={(sending || partialReply) && mutation.variables?.type === "send" ? mutation.variables.message : null} configured={configured} error={displayedError} input={input} onInputChange={(message) => { setInput(message); rememberMessage(activeId, message); }} onSend={async (message) => { await mutation.mutateAsync({ type: "send", message }); }} onStarter={() => act({ type: "create", template: "packproof" })} onReload={() => { void reloadDraft().catch(() => {}); }} />
-              {hasPlan && <PlanPreview key={activeId ?? "preview"} saved={saved} starter={starter ? packproofTemplate : null} pending={pending || current.isError} onApprove={() => act({ type: "approve" })} editingApproved={editingApproved} onFinishEditing={() => setEditingApproved(false)} onRevise={openEditor} onCopy={() => act({ type: "copy" })} onEdit={editCheck} onRemove={removeCheck} onReload={reloadDraft} changedIds={undo?.planId === saved?.id ? undo?.changedIds ?? [] : []} onUseStarter={() => act({ type: "create", template: "packproof" })} onVerify={openUpload} />}
+            {loading ? <Skeleton className="h-96 rounded-2xl" aria-label={openingVideos ? "Loading plan videos" : "Loading saved plan"} /> : videoView ? null : <div className={hasPlan ? "grid items-start gap-5 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]" : "mx-auto max-w-[720px]"}>
+              <PlannerChat saved={saved} starter={starter} pending={pending} sending={sending} partialReply={partialReply} referenceSending={sending && mutation.variables?.type === "send" && Boolean(mutation.variables.media)} pendingMessage={(sending || partialReply) && mutation.variables?.type === "send" ? mutation.variables.message : null} configured={configured} error={displayedError} input={input} onInputChange={(message) => { setInput(message); rememberMessage(activeId, message); }} onSend={async (message, media) => { await mutation.mutateAsync({ type: "send", message, media }); }} onStarter={() => act({ type: "create", template: "packproof" })} onReload={() => { void reloadDraft().catch(() => {}); }} />
+              {hasPlan && <PlanPreview key={activeId ?? "preview"} saved={saved} starter={starter ? packproofTemplate : null} pending={pending || current.isError} editingApproved={editingApproved} onFinishEditing={() => setEditingApproved(false)} onRevise={openEditor} onCopy={() => act({ type: "copy" })} onEdit={editCheck} onRemove={removeCheck} onReload={reloadDraft} changedIds={undo?.planId === saved?.id ? undo?.changedIds ?? [] : []} onUseStarter={() => act({ type: "create", template: "packproof" })} onVerify={() => approved && saved?.videoConsentAt ? openUpload() : act({ type: "approve" })} />}
             </div>}
             {current.isError && <Button variant="outline" className="mt-3 h-9 gap-2" onClick={() => select(null)}><RotateCcw className="size-3.5" />Back to a new plan</Button>}
             <footer className="mt-8 pb-2 text-center text-xs text-muted-foreground">Powered by Meta Muse Spark & SAM 3.1</footer>

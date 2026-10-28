@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { ArrowDownToLine, Eye, LoaderCircle, ScanLine } from "lucide-react";
+import { ArrowDownToLine, LoaderCircle, ScanLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { apiError } from "@/lib/queries";
 import { withFeedback } from "@/lib/feedback";
 import { ANALYSIS_FPS, TRACK_COLORS as colors, type RunDetails } from "../../../shared/verification";
 import { isActiveRun } from "../../../shared/receipt";
+import { FrameInspector } from "./frame-inspector";
 import { ModelDiagnostics } from "./model-diagnostics";
 import { formatTime, VerificationChecks } from "./verification-checks";
 
@@ -35,11 +36,19 @@ export function EvidencePlayer({ run }: { run: RunDetails }) {
   const download = useMutation({ mutationFn: () => withFeedback(downloadVideo(run.id), {
     loading: "Preparing video with SAM boxes…", success: "Video download started", error: "Couldn’t download video",
   }), retry: false });
+  const hasMedia = Boolean(run.media);
+  useEffect(() => {
+    if (run.state === "completed" && hasMedia) {
+      void video.current?.play().catch(() => { /* Native controls remain available when autoplay is blocked. */ });
+    }
+  }, [run.state, hasMedia]);
+
+  const availableFindings = run.state === "completed" ? run.receipt?.findings ?? [] : isActiveRun(run.state) ? run.partialFindings : [];
   const frame = Math.min((run.media?.frameCount ?? 1) - 1, Math.max(0, Math.floor(time * ANALYSIS_FPS + 0.0001)));
   // Match the displayed sample so rounded time bounds still include their last frame.
   const frameTimeMs = Math.round(frame * 1000 / ANALYSIS_FPS);
-  const currentSteps = run.state === "completed" && run.media && hasPosition
-    ? run.approvedPlan.steps.filter((step) => run.receipt?.findings.some((finding) => finding.stepId === step.id
+  const currentSteps = run.media && hasPosition
+    ? run.approvedPlan.steps.filter((step) => availableFindings.some((finding) => finding.stepId === step.id
       && finding.startMs !== null && finding.endMs !== null && frameTimeMs >= finding.startMs && frameTimeMs <= finding.endMs))
     : [];
   useEffect(() => {
@@ -47,7 +56,8 @@ export function EvidencePlayer({ run }: { run: RunDetails }) {
     if (!element?.requestVideoFrameCallback) return;
     let id: number;
     const tick: VideoFrameRequestCallback = (_now, metadata) => {
-      setTime(metadata.mediaTime);
+      // A queued callback can describe the old frame after a paused seek.
+      if (!element.paused && !element.seeking) setTime(metadata.mediaTime);
       id = element.requestVideoFrameCallback(tick);
     };
     id = element.requestVideoFrameCallback(tick);
@@ -95,16 +105,16 @@ export function EvidencePlayer({ run }: { run: RunDetails }) {
     applyPosition();
   }
 
-  return <section className="@container overflow-hidden rounded-2xl border bg-card" aria-label="Video evidence and findings">
-    <div className="grid min-w-0 @3xl:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)]">
-      <div className="min-w-0 border-b @3xl:order-last @3xl:border-b-0 @3xl:border-l">
+  return <section className="@container overflow-hidden rounded-xl border bg-card" aria-label="Video evidence and findings">
+    <div className="grid min-w-0 @3xl:grid-cols-[minmax(0,1fr)_20rem] @5xl:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="order-last min-w-0 border-t @3xl:border-t-0 @3xl:border-l">
         <VerificationChecks run={run} selectedId={selected} currentIds={currentSteps.map((step) => step.id)} playing={playing} onInspect={seek} />
       </div>
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-5"><h3 ref={playerHeading} tabIndex={-1} className="flex items-center gap-2 text-lg font-semibold outline-none"><Eye className="size-5 text-primary" aria-hidden="true" />Video evidence</h3>{run.media && run.state === "completed" && <Button variant="ghost" className="px-2 text-sm" onClick={() => download.mutate()} disabled={download.isPending} aria-busy={download.isPending} aria-label="Download video" title="Download MP4 with tracked object boxes">{download.isPending ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : <ArrowDownToLine className="size-4" aria-hidden="true" />}Download video</Button>}</div>
+      <div className="min-w-0 self-start @3xl:sticky @3xl:top-0">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-5"><h3 ref={playerHeading} tabIndex={-1} className="flex items-center gap-2 text-[15px] font-semibold tracking-tight outline-none">Video evidence</h3>{run.media && run.state === "completed" && <Button variant="ghost" className="h-8 gap-2 px-2 text-[12px] text-muted-foreground" onClick={() => download.mutate()} disabled={download.isPending} aria-busy={download.isPending} aria-label="Download video" title="Download MP4 with tracked object boxes">{download.isPending ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : <ArrowDownToLine className="size-4" aria-hidden="true" />}Download video</Button>}</div>
         {run.media ? <>
-          <div className="bg-muted/30 p-3 sm:p-4"><div className="relative mx-auto overflow-hidden rounded-xl bg-black" style={{ aspectRatio: `${run.media.width}/${run.media.height}`, width: `min(100%, ${352 * run.media.width / run.media.height}px)` }}>
-            <video ref={video} controls playsInline preload="metadata" src={`/api/runs/${run.id}/video`} className="size-full" aria-label="Analysis video for this approved proof plan" onLoadedMetadata={applyPosition} onTimeUpdate={(event) => setTime(event.currentTarget.currentTime)}
+          <div className="flex min-h-48 items-center justify-center bg-[#171918] p-2 sm:p-4"><div className="relative mx-auto overflow-hidden bg-black" style={{ aspectRatio: `${run.media.width}/${run.media.height}`, width: `min(100%, ${360 * run.media.width / run.media.height}px, ${40 * run.media.width / run.media.height}dvh)` }}>
+            <video ref={video} controls autoPlay={run.state === "completed"} muted loop={run.state === "completed"} playsInline preload="metadata" src={`/api/runs/${run.id}/video`} className="size-full" aria-label="Analysis video for this approved proof plan" onLoadedMetadata={applyPosition} onTimeUpdate={(event) => setTime(event.currentTarget.currentTime)}
               onPlaying={() => { setPlaying(true); setHasPosition(true); }} onPause={() => setPlaying(false)} onWaiting={() => setPlaying(false)}
               onSeeking={(event) => { setPlaying(false); setHasPosition(true); setTime(event.currentTarget.currentTime); }}
               onSeeked={(event) => { setPlaying(!event.currentTarget.paused && !event.currentTarget.ended); setTime(event.currentTarget.currentTime); }}
@@ -119,29 +129,39 @@ export function EvidencePlayer({ run }: { run: RunDetails }) {
           return <g key={`${track.concept}-${box.objectId}-${box.frameIndex}`}><rect x={box.left * width} y={box.top * height} width={(box.right - box.left) * width} height={(box.bottom - box.top) * height} fill="none" stroke={colors[index % colors.length]} strokeWidth="2" vectorEffect="non-scaling-stroke" /><rect x={x} y={y} width={labelWidth} height="16" rx="2" fill={colors[index % colors.length]} /><text x={x + 4} y={y + 12} fill="white" fontSize="11">{label}</text></g>;
         }))}</svg>}
           </div></div>
-          <div className="space-y-2 px-4 py-3 sm:px-5">
-            <p className="break-words text-sm leading-6 text-muted-foreground" aria-live="polite">{currentSteps.length
+          <EvidenceTimeline run={run} time={time} selectedId={selected} onInspect={seek} />
+          <div className="space-y-1 border-t px-4 py-3 sm:px-5">
+            <p className="break-words text-[12px] leading-5 text-muted-foreground" aria-live="polite">{currentSteps.length
               ? `${playing ? "Playing now" : "Current moment"}: ${currentSteps.map((step) => `Check ${run.approvedPlan.steps.indexOf(step) + 1} · ${step.label}`).join("; ")}`
-              : hasPosition ? "No check has a timed evidence window at this moment." : "Play the video to follow your checks, or choose Watch evidence."}</p>
-            <div className="flex flex-wrap items-center justify-between gap-2"><label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm"><input type="checkbox" checked={overlays} onChange={(event) => setOverlays(event.target.checked)} className="size-5 accent-primary" />Show tracked objects</label><span className="text-xs text-muted-foreground">Analysis copy · audio removed</span></div>
+              : hasPosition ? "No check has a timed evidence window at this moment." : "Select a check or an evidence window to review the footage."}</p>
+            <div className="flex flex-wrap items-center justify-between gap-2"><label className="flex min-h-11 cursor-pointer items-center gap-2 text-[12px]"><input type="checkbox" checked={overlays} onChange={(event) => setOverlays(event.target.checked)} className="size-4 accent-primary" />Show tracked objects</label><span className="text-[11px] text-muted-foreground">Analysis copy · audio removed</span></div>
             {playbackError && <p role="alert" className="text-sm leading-6 text-destructive">{playbackError}</p>}
           </div>
-          <details className="border-t px-4 py-2 sm:px-5">
-            <summary className="w-fit cursor-pointer rounded-md py-2 text-sm font-medium">Frame and tracking tools</summary>
-            <div className="mt-2 space-y-3 pb-2">
-              <p className="text-sm text-muted-foreground">Frame {frame} · {formatTime(time * 1000)} · {ANALYSIS_FPS} sampled frames per second</p>
-              <input type="range" min="0" max={run.media.frameCount - 1} step="1" value={frame} onChange={(event) => inspectFrame(Number(event.target.value))} aria-label="Inspect video frame" aria-valuetext={`Frame ${frame}, ${formatTime(frame * 1000 / ANALYSIS_FPS)}`} className="h-11 w-full min-w-0 accent-primary" />
-              <div className="flex flex-wrap gap-2"><Button variant="outline" className="px-3 text-sm" disabled={frame === 0} onClick={() => inspectFrame(frame - 1)}>Previous frame</Button><Button variant="outline" className="px-3 text-sm" disabled={frame === run.media.frameCount - 1} onClick={() => inspectFrame(frame + 1)}>Next frame</Button></div>
-              {run.tracks.length > 0 && <ul className="space-y-2">{run.tracks.map((track, index) => <li key={track.concept} className="flex items-center gap-2 break-words text-sm text-muted-foreground"><span className="size-2.5 shrink-0 rounded-sm" style={{ backgroundColor: colors[index % colors.length] }} />{track.concept}{track.outcome === "failed" ? " · tracking unavailable" : track.boxes.length === 0 ? " · no usable track" : ""}</li>)}</ul>}
-              <details><summary className="w-fit cursor-pointer rounded-md py-2 text-sm text-muted-foreground">Detections at frame {frame}</summary><ul className="mt-2 space-y-2 text-sm text-muted-foreground">{run.tracks.map((track) => {
-                const boxes = track.boxes.filter((box) => box.frameIndex === frame);
-                return <li key={track.concept} className="break-words">{track.concept}: {boxes.length ? boxes.map((box) => `#${box.objectId} · confidence ${box.confidence === undefined ? "not retained" : `${(box.confidence * 100).toFixed(1)}%`}`).join(" / ") : "no usable detection"}</li>;
-              })}</ul></details>
-            </div>
-          </details>
+          <FrameInspector frame={frame} frameCount={run.media.frameCount} tracks={run.tracks} onInspect={inspectFrame} />
         </> : <div className="flex min-h-48 items-center justify-center gap-3 bg-muted/20 p-5 text-base leading-7 text-muted-foreground"><ScanLine className="size-5 shrink-0" aria-hidden="true" />{run.state === "failed" ? "No video evidence is available for this run." : "The video preview will appear when it is ready. Your checks are still pending."}</div>}
       </div>
     </div>
     {!isActiveRun(run.state) && <ModelDiagnostics run={run} onInspect={inspectFrame} />}
   </section>;
+}
+
+function EvidenceTimeline({ run, time, selectedId, onInspect }: { run: RunDetails; time: number; selectedId: string | null; onInspect: (id: string, startMs: number) => void }) {
+  const duration = run.media ? run.media.frameCount / ANALYSIS_FPS * 1000 : run.durationMs ?? 0;
+  const findings = run.state === "completed" ? run.receipt?.findings ?? [] : isActiveRun(run.state) ? run.partialFindings : [];
+  const windows = findings.filter(finding => finding.startMs !== null && finding.endMs !== null);
+  if (!duration || !windows.length) return null;
+  return <div className="px-4 py-4 sm:px-5" aria-label="Evidence timeline">
+    <div className="mb-3 flex items-center justify-between gap-2 text-[11px] text-muted-foreground"><span className="font-medium">Evidence windows</span><span className="tabular-nums">{formatTime(time * 1000)} / {formatTime(duration)}</span></div>
+    <div className="relative space-y-1.5">
+      {windows.map(finding => {
+        const index = run.approvedPlan.steps.findIndex(step => step.id === finding.stepId);
+        const start = Math.max(0, Math.min(duration, finding.startMs!));
+        const end = Math.max(start, Math.min(duration, finding.endMs!));
+        const selected = selectedId === finding.stepId;
+        return <div key={finding.stepId} className="flex items-center gap-3"><span className="w-4 shrink-0 text-[10px] tabular-nums text-muted-foreground">{String(index + 1).padStart(2, "0")}</span><div className="relative h-7 flex-1 rounded bg-muted/60"><button type="button" aria-label={`Watch evidence for check ${index + 1} on timeline`} aria-pressed={selected} title={run.approvedPlan.steps[index]?.label} className={`absolute inset-y-0 min-h-0 min-w-6 rounded border transition-colors ${selected ? "border-primary bg-primary/20" : finding.status === "observed" ? "border-emerald-700/20 bg-emerald-600/15 hover:bg-emerald-600/25" : finding.status === "uncertain" ? "border-amber-700/25 bg-amber-500/20 hover:bg-amber-500/30" : "border-slate-400/30 bg-slate-400/20 hover:bg-slate-400/30"}`} style={{ left: `min(calc(100% - 24px), ${start / duration * 100}%)`, width: `${Math.max(0.5, (end - start) / duration * 100)}%` }} onClick={() => onInspect(finding.stepId, start)} /></div></div>;
+      })}
+      <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-7 right-0"><span className="absolute inset-y-0 w-px bg-foreground/60" style={{ left: `${Math.min(100, time * 1000 / duration * 100)}%` }} /></span>
+    </div>
+    <div className="mt-2 ml-7 flex justify-between text-[10px] tabular-nums text-muted-foreground"><span>0:00</span><span>{formatTime(duration / 2)}</span><span>{formatTime(duration)}</span></div>
+  </div>;
 }

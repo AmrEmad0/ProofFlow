@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { approvedPlanSchema } from "../../shared/proof-plan";
-import { runDetailsSchema, runSummarySchema, type RunSummary } from "../../shared/verification";
+import { runDetailsSchema, runSummarySchema, verificationActivitySchema, type VerificationActivity, type RunSummary } from "../../shared/verification";
 import { hashContract } from "../engine/contract";
 import { plannerStore, PlannerError } from "../planner/store";
 
@@ -9,7 +9,7 @@ export type RunRow = {
   normalized_path: string | null; remote_file_id: string | null; video_sha256: string | null;
   duration_ms: number | null; created_at: string; completed_at: string | null; expires_at: string | null;
   error_message: string | null; media_json: string | null; receipt_json: string | null;
-  timings_json: string; warnings_json: string;
+  timings_json: string; warnings_json: string; activity_json: string; partial_findings_json: string;
 };
 
 export function verificationStore(db: Database) {
@@ -44,9 +44,17 @@ export function verificationStore(db: Database) {
   function details(id: string, sessionHash: string) {
     const run = row(id, sessionHash);
     return runDetailsSchema.parse({ ...summary(run), approvedPlan: approved(run.plan_version_id, sessionHash),
+      partialFindings: JSON.parse(run.partial_findings_json),
       receipt: run.receipt_json ? JSON.parse(run.receipt_json) : null,
       media: run.media_json ? JSON.parse(run.media_json) : null,
-      tracks: [], warnings: JSON.parse(run.warnings_json), timings: JSON.parse(run.timings_json) });
+      tracks: [], activity: JSON.parse(run.activity_json), warnings: JSON.parse(run.warnings_json), timings: JSON.parse(run.timings_json) });
+  }
+
+  function addActivity(id: string, event: Omit<VerificationActivity, "at">) {
+    const activity = verificationActivitySchema.parse({ ...event, at: new Date().toISOString() });
+    db.query(`UPDATE runs SET activity_json = json_insert(activity_json, '$[#]', json(?))
+      WHERE id = ? AND state NOT IN ('completed', 'failed') AND json_array_length(activity_json) < 64`)
+      .run(JSON.stringify(activity), id);
   }
 
   function list(versionId: string, sessionHash: string) {
@@ -79,5 +87,5 @@ export function verificationStore(db: Database) {
     return summary(row(id, sessionHash));
   }
 
-  return { approved, row, summary, details, list, listForPlan, create };
+  return { approved, row, summary, details, list, listForPlan, create, addActivity };
 }

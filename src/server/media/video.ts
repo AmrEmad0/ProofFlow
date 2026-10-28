@@ -25,7 +25,7 @@ export async function probeVideo(path: string, config: Pick<Config, "FFPROBE_PAT
   const video = probe.streams.find((stream) => stream.codec_type === "video");
   if (!video?.width || !video.height) throw new Error("No readable video stream found.");
   const durationMs = Math.round(probe.format.duration * 1000);
-  if (probe.format.duration * 1000 > LIMITS.durationMs) throw new Error("Video must be at most 20 seconds.");
+  if (probe.format.duration * 1000 > LIMITS.durationMs) throw new Error(`Video must be at most ${LIMITS.durationMs / 1000} seconds.`);
   const frames = Number(video.nb_frames);
   return { durationMs, width: video.width, height: video.height, frameRate: video.avg_frame_rate ?? null,
     frameCount: Number.isInteger(frames) && frames > 0 ? frames : null };

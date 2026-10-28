@@ -6,12 +6,13 @@ import { healthRoutes } from "./routes/health";
 import { templateRoutes } from "./routes/templates";
 import { planRoutes } from "./routes/plans";
 import { PlannerError } from "./planner/store";
+import type { ReferenceAnalysis } from "./planner/reference";
 import type { PlanConversation } from "./planner/chat";
 import { runRoutes } from "./routes/runs";
 import type { VerificationWorker } from "./verification/worker";
 import { workspaceOrigins } from "./http/session";
 
-export function createApp(db: Database, config: Config, conversation?: PlanConversation, worker?: VerificationWorker) {
+export function createApp(db: Database, config: Config, conversation?: PlanConversation, worker?: VerificationWorker, analyzeReference?: ReferenceAnalysis) {
   return new Elysia({ normalize: false, serve: { maxRequestBodySize: 26 * 1024 * 1024 } })
     .use(config.NODE_ENV === "development"
       ? cors({ origin: workspaceOrigins(config), methods: ["GET", "POST", "PATCH", "DELETE"], credentials: false })
@@ -26,7 +27,7 @@ export function createApp(db: Database, config: Config, conversation?: PlanConve
     })
     .use(healthRoutes(db, config, () => Boolean(worker?.ready && config.modelConfigured)))
     .use(templateRoutes)
-    .use(planRoutes(db, config, conversation, worker))
+    .use(planRoutes(db, config, conversation, worker, analyzeReference))
     .use(runRoutes(db, config, worker));
 }
 

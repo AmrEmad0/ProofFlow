@@ -1,14 +1,16 @@
 import type { Database } from "bun:sqlite";
 import { readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { ANALYSIS_FPS, conceptTrackSchema, type ConceptTrack } from "../../shared/verification";
+import { ANALYSIS_FPS, conceptTrackSchema, type ConceptTrack, type VerificationActivity } from "../../shared/verification";
 import type { TrackingDiagnostic } from "../../shared/diagnostics";
-import { trackedConcepts, type ApprovedPlan } from "../../shared/proof-plan";
+import { LIMITS, trackedConcepts, type ApprovedPlan } from "../../shared/proof-plan";
 import { receiptSchema, type RunState } from "../../shared/receipt";
 import type { Config } from "../config";
 import { createMetaClient, MODELS } from "../meta/client";
 import { uploadVideo, deleteVideo } from "../meta/files";
-import { observeVideo, observationSchema, VIDEO_PROMPT_VERSION } from "../meta/observe";
+import { observeVideo, observationSchema, VIDEO_PROMPT_VERSION, type ObservationContext, type ModelUsage } from "../meta/observe";
+import { followUpQuestions, mergeFollowUp } from "../engine/follow-up";
+import { createFollowUpFrames } from "../media/follow-up";
 import { segmentVideo } from "../meta/sam";
 import { normalizeVideo } from "../media/video";
 import { createVideoThumbnail } from "../media/thumbnail";
@@ -16,10 +18,11 @@ import { VERIFICATION_RULE_VERSION, evaluateEvidence } from "../engine/verify";
 import { verificationStore, type RunRow } from "./store";
 import { runDirectory } from "./storage";
 
-type Segmentation = Pick<Awaited<ReturnType<typeof segmentVideo>>, "boxes" | "rawOutput" | "diagnostics" | "outcome">;
+type Segmentation = { usage?: ModelUsage } & Pick<Awaited<ReturnType<typeof segmentVideo>>, "boxes" | "rawOutput" | "diagnostics" | "outcome">;
 export type VerificationAdapters = {
   upload: (path: string) => Promise<{ id: string }>;
   observe: (fileId: string, plan: ApprovedPlan, durationMs: number) => ReturnType<typeof observeVideo>;
+  followUp?: (fileId: string, plan: ApprovedPlan, durationMs: number, context: ObservationContext) => ReturnType<typeof observeVideo>;
   segment: (fileId: string, concept: string) => Promise<Segmentation>;
   delete: (fileId: string) => Promise<void>;
 };
@@ -34,9 +37,11 @@ export function createVerificationWorker(db: Database, config: Config, adapters?
   let work: Promise<void> | null = null;
   let ticker: ReturnType<typeof setInterval> | null = null;
   let heartbeat: ReturnType<typeof setInterval> | null = null;
+  let recordUsage: ((usage: ModelUsage) => void) | undefined;
   const models: VerificationAdapters = adapters ?? {
     upload: (path) => uploadVideo(createMetaClient(config), path),
-    observe: (file, plan, duration) => observeVideo(createMetaClient(config), file, plan, duration),
+    observe: (file, plan, duration) => observeVideo(createMetaClient(config), file, plan, duration, undefined, recordUsage),
+    followUp: (file, plan, duration, context) => observeVideo(createMetaClient(config), file, plan, duration, context, recordUsage),
     segment: (file, concept) => segmentVideo(createMetaClient(config), file, concept),
     delete: (file) => deleteVideo(createMetaClient(config), file),
   };
@@ -73,10 +78,27 @@ export function createVerificationWorker(db: Database, config: Config, adapters?
   }
 
   async function cleanup() {
+    const references = db.query<{ id: string }, [number]>("SELECT id FROM planner_remote_files WHERE cleanup_after <= ?").all(Date.now());
+    for (const reference of references) {
+      try {
+        await models.delete(reference.id);
+        db.query("DELETE FROM planner_remote_files WHERE id = ?").run(reference.id);
+      } catch (error) {
+        if (error && typeof error === "object" && "status" in error && error.status === 404) db.query("DELETE FROM planner_remote_files WHERE id = ?").run(reference.id);
+        else console.warn("Reference media cleanup deferred");
+      }
+    }
     const pending = db.query<RunRow, []>("SELECT * FROM runs WHERE state IN ('completed', 'failed') AND remote_file_id IS NOT NULL").all();
     for (const run of pending) await remoteCleanup(run);
     const expired = db.query<RunRow, []>("SELECT * FROM runs WHERE expires_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now') AND state IN ('completed', 'failed')").all();
     for (const run of expired) await removeRun(run);
+    const referenceRoot = join(config.STORAGE_PATH, "planner-temporary");
+    const temporaryReferences = await readdir(referenceRoot, { withFileTypes: true }).catch(() => []);
+    for (const entry of temporaryReferences) {
+      if (!entry.isDirectory() || !entry.name.startsWith("reference-")) continue;
+      const directory = join(referenceRoot, entry.name);
+      if (Date.now() - (await stat(directory)).mtimeMs > config.MEDIA_RETENTION_HOURS * 3_600_000) await rm(directory, { recursive: true, force: true });
+    }
     const entries = await readdir(join(config.STORAGE_PATH, "runs"), { withFileTypes: true }).catch((error: unknown) => {
       if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return [];
       throw error;
@@ -92,7 +114,24 @@ export function createVerificationWorker(db: Database, config: Config, adapters?
   async function processRun(run: RunRow) {
     const timings: Record<string, number> = {};
     const warnings: string[] = [];
+    const requests: { model: string; phase: string; latencyMs: number; status: string; usage?: ModelUsage }[] = [];
+    let museCalls = 0;
+    let samCalls = 0;
+    async function request<T>(model: "muse" | "sam", phase: string, operation: () => Promise<T>): Promise<T> {
+      if (model === "muse" ? museCalls >= 2 : samCalls >= 4) throw new Error("Per-video model request budget exhausted.");
+      if (model === "muse") museCalls++; else samCalls++;
+      const entry: typeof requests[number] = { model: MODELS[model], phase, latencyMs: 0, status: "failed" };
+      requests.push(entry);
+      if (model === "muse") recordUsage = usage => { entry.usage = usage; };
+      const started = performance.now();
+      try { const result = await measure(phase, operation); entry.status = "completed"; return result; }
+      finally { entry.latencyMs = Math.round(performance.now() - started); if (model === "muse") recordUsage = undefined; }
+    }
     let phase: RunState = "preprocessing";
+    function activity(message: string, kind: VerificationActivity["kind"] = "progress", stepId?: string) {
+      if (!hasLease()) throw new Error("Verification worker lease lost.");
+      store.addActivity(run.id, { message, kind, ...(stepId ? { stepId } : {}) });
+    }
     const totalStarted = performance.now();
     const directory = runDirectory(config, run.id);
     function state(next: RunState) {
@@ -107,29 +146,43 @@ export function createVerificationWorker(db: Database, config: Config, adapters?
       try { return await operation(); } finally { timings[name] = Math.round(performance.now() - started); }
     }
     try {
+      activity("Preparing your video for analysis.");
       const plan = store.approved(run.plan_version_id);
       const normalizedPath = join(directory, "analysis.mp4");
       const normalized = await measure("preprocessing", () => normalizeVideo(run.video_path, normalizedPath, config));
       if (!normalized.frameCount || normalized.frameCount < 2 || normalized.frameRate !== "6/1") throw new Error("Invalid normalized frame timing.");
       const media = { width: normalized.width, height: normalized.height, frameCount: normalized.frameCount,
-        fps: ANALYSIS_FPS, sha256: new Bun.CryptoHasher("sha256").update(await Bun.file(normalizedPath).arrayBuffer()).digest("hex") };
+        fps: ANALYSIS_FPS as typeof ANALYSIS_FPS, sha256: new Bun.CryptoHasher("sha256").update(await Bun.file(normalizedPath).arrayBuffer()).digest("hex") };
       db.query("UPDATE runs SET normalized_path = ?, duration_ms = ?, video_sha256 = ?, media_json = ? WHERE id = ?")
         .run(normalizedPath, normalized.durationMs, media.sha256, JSON.stringify(media), run.id);
       await createVideoThumbnail(normalizedPath, join(directory, "thumbnail.jpg"), config).catch(() => {
         console.warn("Video thumbnail unavailable", { runId: run.id });
       });
+      activity("Video prepared. Sending it for analysis.");
       state("uploading");
       const uploaded = await measure("upload", () => models.upload(normalizedPath));
       db.query("UPDATE runs SET remote_file_id = ? WHERE id = ?").run(uploaded.id, run.id);
       state("analyzing");
+      activity("Video sent. Looking for the actions in your plan.");
       const tracks: ConceptTrack[] = [];
       const concepts = trackedConcepts(plan);
       async function trackConcept(concept: string, index: number) {
+        activity(`Tracking “${concept}” through the video.`);
         let track: ConceptTrack;
         let raw: unknown = null;
         const diagnostic: TrackingDiagnostic = { concept, receivedBoxes: 0, retainedBoxes: 0, lowConfidenceBoxes: 0, confidenceThreshold: 0.5, issue: "model_request" };
         try {
-          const result = await measure(`sam_${index + 1}`, () => models.segment(uploaded.id, concept));
+          const descriptions = observation.candidates.flatMap(candidate => [candidate.subject, candidate.target])
+            .filter(object => object?.concept.trim().toLowerCase() === concept).map(object => object!.description);
+          // Conflicting descriptions must not split a concept into separate object tracks.
+          const description = new Set(descriptions).size === 1 ? descriptions[0] : undefined;
+          // SAM must retain the approved noun; workflow captions can produce no detections.
+          const prompt = description?.trim().toLowerCase().startsWith(concept) ? description : concept;
+          const result = await request("sam", `sam_${index + 1}`, () => models.segment(uploaded.id, prompt));
+          if (result.usage) {
+            const entry = requests.find(entry => entry.phase === `sam_${index + 1}`);
+            if (entry) entry.usage = result.usage;
+          }
           raw = result;
           diagnostic.receivedBoxes = result.boxes.length;
           diagnostic.lowConfidenceBoxes = result.boxes.filter((box) => box.confidence !== undefined && box.confidence < diagnostic.confidenceThreshold).length;
@@ -154,22 +207,55 @@ export function createVerificationWorker(db: Database, config: Config, adapters?
         db.query("INSERT INTO track_artifacts (run_id, concept, artifact_path, model_version, outcome) VALUES (?, ?, ?, ?, ?)")
           .run(run.id, concept, path, MODELS.sam, track.outcome);
         tracks.push(track);
+        if (!hasLease()) throw new Error("Verification worker lease lost.");
+        const readySteps = new Set(plan.steps.filter(step => [step.subjectConcept, step.targetConcept].filter(Boolean)
+          .every(concept => tracks.some(item => item.concept === concept!.trim().toLowerCase()))).map(step => step.id));
+        const partial = evaluateEvidence(plan, observation, tracks, media.frameCount).findings.filter(finding => readySteps.has(finding.stepId));
+        db.query("UPDATE runs SET partial_findings_json = ? WHERE id = ? AND state NOT IN ('completed', 'failed')")
+          .run(JSON.stringify(partial), run.id);
+        activity(track.outcome === "failed" ? `Tracking for “${concept}” could not be used. Dependent checks may remain uncertain.`
+          : track.boxes.length ? `Tracking ready for “${concept}”. Checking it against the visual evidence.`
+          : `No usable track returned for “${concept}”. This alone does not mean an action was missed.`,
+          track.outcome === "failed" || !track.boxes.length ? "warning" : "progress");
       }
-      // Wait for both branches even when Muse fails, so no SAM request outlives remote-file cleanup.
-      const results = await Promise.allSettled([
-        measure("muse", () => models.observe(uploaded.id, plan, normalized.durationMs)),
-        (async () => { for (let index = 0; index < concepts.length; index += 2) {
-          const batch = await Promise.allSettled([trackConcept(concepts[index]!, index), ...(concepts[index + 1] ? [trackConcept(concepts[index + 1]!, index + 1)] : [])]);
-          if (batch.some((result) => result.status === "rejected")) throw new Error("Track artifacts could not be saved.");
-        } })(),
-      ]);
-      const observed = results[0];
-      if (observed.status === "rejected" || results[1].status === "rejected") throw new Error("Video evidence analysis failed.");
-      const observation = observationSchema.parse(observed.value);
-      await Bun.write(join(directory, "muse.json"), JSON.stringify(observation), { mode: 0o600 });
+      let observation = observationSchema.parse(await request("muse", "muse", () => models.observe(uploaded.id, plan, normalized.durationMs)));
+      activity("Visual analysis returned. These proposals still need evidence checks.");
+      for (const step of plan.steps) {
+        const proposed = observation.candidates.some(candidate => candidate.stepId === step.id);
+        activity(proposed ? `Visual proposal received for “${step.label}”. Checking object tracks before a verdict.`
+          : `No visual proposal returned for “${step.label}”. The outcome is still unresolved.`, "progress", step.id);
+      }
+      await Bun.write(join(directory, "muse-initial.json"), JSON.stringify(observation), { mode: 0o600 });
+      for (let index = 0; index < concepts.length; index += 2) {
+        const batch = await Promise.allSettled([trackConcept(concepts[index]!, index), ...(concepts[index + 1] ? [trackConcept(concepts[index + 1]!, index + 1)] : [])]);
+        if (batch.some(result => result.status === "rejected")) throw new Error("Track artifacts could not be saved.");
+      }
       state("verifying");
+      activity("Object tracking finished. Evaluating the evidence for each check.");
       const started = performance.now();
-      const { findings, diagnostics } = evaluateEvidence(plan, observation, tracks, media.frameCount);
+      let evaluated = evaluateEvidence(plan, observation, tracks, media.frameCount);
+      const questions = followUpQuestions(plan, observation, tracks, evaluated.diagnostics);
+      if (questions.length && models.followUp) {
+        try {
+          activity("Some evidence needs a closer look. Preparing a follow-up check.");
+          const frames = await createFollowUpFrames(normalizedPath, directory, media, tracks, observation, questions, config);
+          if (frames.length) {
+            activity("Reviewing selected video frames to resolve unclear evidence.");
+            const second = observationSchema.parse(await request("muse", "muse_follow_up", () => models.followUp!(uploaded.id, plan, normalized.durationMs, { initial: observation, questions, frames })));
+            await Bun.write(join(directory, "muse-follow-up.json"), JSON.stringify(second), { mode: 0o600 });
+            const merged = mergeFollowUp(observation, second, new Set(questions.map(question => question.stepId)));
+            const reevaluated = evaluateEvidence(plan, merged, tracks, media.frameCount);
+            observation = merged;
+            evaluated = reevaluated;
+            activity("Follow-up analysis returned. Rechecking the grounded evidence.");
+          }
+        } catch {
+          activity("The follow-up was unavailable. Unresolved findings retain their uncertainty.", "warning");
+          warnings.push("The grounded follow-up was unavailable. Unresolved findings retain their initial uncertainty.");
+        }
+      }
+      await Bun.write(join(directory, "muse.json"), JSON.stringify(observation), { mode: 0o600 });
+      const { findings, diagnostics } = evaluated;
       await Bun.write(join(directory, "verification.json"), JSON.stringify(diagnostics), { mode: 0o600 });
       timings.verification = Math.round(performance.now() - started);
       const receipt = receiptSchema.parse({ runId: run.id, approvedVersionId: plan.approvedVersionId, contractHash: plan.contractHash, findings,
@@ -177,6 +263,7 @@ export function createVerificationWorker(db: Database, config: Config, adapters?
           verificationRuleVersion: VERIFICATION_RULE_VERSION, createdAt: new Date().toISOString() } });
       timings.total = Math.round(performance.now() - totalStarted);
       if (!hasLease()) throw new Error("Verification worker lease lost.");
+      activity("Evidence checks finished. Preparing your findings and video links.");
       db.transaction(() => {
         for (const finding of findings) db.query("INSERT INTO findings (run_id, step_id, status, start_ms, end_ms, explanation, evidence_json) VALUES (?, ?, ?, ?, ?, ?, ?)")
           .run(run.id, finding.stepId, finding.status, finding.startMs, finding.endMs, finding.explanation, JSON.stringify(finding.evidence));
@@ -186,10 +273,13 @@ export function createVerificationWorker(db: Database, config: Config, adapters?
     } catch {
       timings.total = Math.round(performance.now() - totalStarted);
       if (hasLease()) db.query("UPDATE runs SET state = 'failed', error_message = ?, completed_at = ?, timings_json = ?, warnings_json = ? WHERE id = ? AND state != 'completed'")
-        .run(phase === "preprocessing" ? "The recording could not be read or normalized. Use a readable MP4, MOV, or WebM up to 20 seconds and 25 MB."
+        .run(phase === "preprocessing" ? `The recording could not be read or normalized. Use a readable MP4, MOV, or WebM up to ${LIMITS.durationMs / 1000} seconds and ${LIMITS.uploadBytes / 1024 / 1024} MB.`
           : `Video ${phase} failed. No verdict was produced. Check Meta model access and try a new run.`, new Date().toISOString(), JSON.stringify(timings), JSON.stringify(warnings), run.id);
       console.warn("Video verification failed", { runId: run.id, phase });
     } finally {
+      await Bun.write(join(directory, "model-requests.json"), JSON.stringify({ museCalls, samCalls, transportRetries: 0, requests }), { mode: 0o600 }).catch(() => {
+        console.warn("Model request diagnostics unavailable", { runId: run.id });
+      });
       const latest = db.query<RunRow, [string]>("SELECT * FROM runs WHERE id = ?").get(run.id);
       if (latest) await remoteCleanup(latest);
       console.info("Video verification finished", { runId: run.id, timings });
