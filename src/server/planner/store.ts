@@ -67,8 +67,7 @@ export function plannerStore(db: Database) {
     db.transaction(() => {
       const current = read(id, sessionHash);
       if (current.revision !== revision) throw new PlannerError(409, "This template changed. Reload it before sending again.");
-      if (current.status === "approved") throw new PlannerError(409, "This version is approved. Create a new draft to make changes.");
-      if (reply.plan) addVersion(id, (current.version ?? 0) + 1, reply.plan);
+      if (reply.plan && hashContract(reply.plan) !== current.contractHash) addVersion(id, (current.version ?? 0) + 1, reply.plan);
       const insert = db.query("INSERT INTO planner_messages (plan_id, role, content) VALUES (?, ?, ?)");
       insert.run(id, "user", message);
       insert.run(id, "assistant", reply.reply);
@@ -103,14 +102,15 @@ export function plannerStore(db: Database) {
     return read(id, sessionHash);
   }
 
-  function changeDraft(id: string, sessionHash: string, revision: number, change: (current: SavedPlan) => ProofPlan) {
+  function changeDraft(id: string, sessionHash: string, revision: number, change: (current: SavedPlan) => ProofPlan, allowApproved = false) {
     db.transaction(() => {
       const current = read(id, sessionHash);
       if (current.revision !== revision) throw new PlannerError(409, "This plan changed. Reload the saved draft before trying again. Your edit is still here.");
-      if (current.status === "approved") throw new PlannerError(409, "Choose Make changes to open a new draft first.");
+      if (current.status === "approved" && !allowApproved) throw new PlannerError(409, "Choose Make changes to edit the checks first.");
       if (!current.plan) throw new PlannerError(400, "Create some checks first.");
       const parsed = proofPlanSchema.safeParse(change(current));
       if (!parsed.success) throw new PlannerError(400, "Use 1–3 checks with up to 4 different objects. Each check needs an object and any required destination or before and after states.");
+      if (hashContract(parsed.data) === current.contractHash) return;
       addVersion(id, (current.version ?? 0) + 1, parsed.data);
       db.query("UPDATE planner_owners SET revision = revision + 1 WHERE plan_id = ?").run(id);
     })();
@@ -132,8 +132,9 @@ export function plannerStore(db: Database) {
         const unchanged = ["subjectConcept", "targetConcept", "beforeState", "afterState"].every((key) => original[key as keyof typeof edit] === edit[key as keyof typeof edit]);
         return unchanged ? original : describeEditedCheck(original, edit);
       });
+      if (updated.length === originals.length && updated.every((step, index) => step === originals[index])) return current.plan!;
       return { ...current.plan!, goal: updated.map((step) => step.label).join(". "), steps: updated };
-    });
+    }, true);
   }
 
   function restore(id: string, sessionHash: string, revision: number, versionId: string) {

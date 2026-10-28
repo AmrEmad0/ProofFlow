@@ -20,7 +20,7 @@ export function PlanProperties({ saved, open, onOpenChange, pending, onRevise }:
         <div><h3 className="mb-2 text-xs font-medium text-muted-foreground">Task</h3><p className="text-sm leading-6">{plan.goal}</p></div>
         <div><h3 className="mb-2 text-xs font-medium text-muted-foreground">Items in the video</h3><div className="flex flex-wrap gap-2">{trackedConcepts(plan).map((concept) => <span key={concept} className="rounded-md border bg-muted/30 px-2 py-1 text-xs">{concept}</span>)}</div></div>
       </>}
-      {saved?.status === "approved" ? <><p className="text-sm leading-6 text-muted-foreground">Changes open a new draft. Earlier videos keep their approved checks.</p><Button onClick={() => { onOpenChange(false); onRevise(); }} disabled={pending} variant="outline" className="mt-2">Make changes</Button></> : <p className="text-sm text-muted-foreground">Choose Change beside a check to edit it, or ask the assistant for help.</p>}
+      {saved?.status === "approved" ? <><p className="text-sm leading-6 text-muted-foreground">Opening the editor keeps this plan approved. Saving changed checks creates a new draft. Earlier videos keep their approved checks.</p><Button onClick={() => { onOpenChange(false); onRevise(); }} disabled={pending} variant="outline" className="mt-2">Make changes</Button></> : <p className="text-sm text-muted-foreground">Choose Change beside a check to edit it, or ask the assistant for help.</p>}
     </DialogContent>
   </Dialog>;
 }

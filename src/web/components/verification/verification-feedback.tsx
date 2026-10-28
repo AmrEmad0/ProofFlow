@@ -45,7 +45,7 @@ export function VerificationFeedbackProvider({ children }: { children: ReactNode
         if (!notified.current.has(id)) {
           notified.current.add(id);
           addToast({ id: toastId, type: run.state === "completed" ? "success" : "error", title: run.state === "completed" ? "Findings ready" : "Video verification failed", description: run.state === "completed" ? run.approvedPlan.title : run.error ?? "No verdict was produced. Please try another recording.", timeout: 6000 });
-          void queryClient.invalidateQueries({ queryKey: ["runs", run.approvedVersionId] });
+          void queryClient.invalidateQueries({ queryKey: ["runs"] });
         }
         settled.add(id);
       } else if (result.error && "status" in result.error && (result.error.status === 404 || result.error.status === 403)) {

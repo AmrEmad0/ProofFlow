@@ -85,8 +85,8 @@ function TrackCoverage({ label, track, first, last, onInspect }: { label: string
 }
 
 function Containment({ check }: { check: StepCheck }) {
-  return <div className="space-y-3"><h5 className="text-xs font-medium">Subject containment in each continuous target</h5><p className="text-[11px] leading-5 text-muted-foreground">Entry needs an outside sample (≤5%), then ≥95% containment in the final three samples. Muse must also clearly describe the action and both states. The target pairing must be unique.</p>
-    {check.regionCandidates.map((region) => <div key={region.objectId} className="rounded-lg border p-3">
+  return <div className="space-y-3"><h5 className="text-xs font-medium">Subject containment in each continuous target</h5><p className="text-[11px] leading-5 text-muted-foreground">Entry needs an outside sample (≤5%), then ≥95% containment in three consecutive samples within one uninterrupted track segment. Muse must also clearly describe the action and both states. The object pairing must be unique and retain identities established by earlier steps.</p>
+    {check.regionCandidates.map((region, index) => <div key={`${region.objectId}-${index}`} className="rounded-lg border p-3">
       <p className="text-[11px]">Target #{region.objectId} · {region.qualifies ? "geometry supports entry" : "geometry does not support entry"}{region.outsideFrame !== null ? ` · outside at frame ${region.outsideFrame}` : " · no outside sample"}</p>
       <svg className="mt-2 h-20 w-full overflow-visible" viewBox="0 0 320 80" preserveAspectRatio="none" role="img" aria-label={`Containment across the sampled window for target ${region.objectId}`}>
         <line x1="0" x2="320" y1="8.5" y2="8.5" className="stroke-border" strokeDasharray="4 3" /><line x1="0" x2="320" y1="71.5" y2="71.5" className="stroke-border" strokeDasharray="4 3" />

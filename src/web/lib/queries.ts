@@ -81,16 +81,16 @@ export function savedPlanQuery(id: string | null) {
   });
 }
 
-export function planRunsQuery(versionId: string | null) {
+export function planRunsQuery(planId: string | null) {
   return queryOptions({
-    queryKey: ["runs", versionId],
+    queryKey: ["runs", planId],
     queryFn: async () => {
-      if (!versionId) throw new Error("Choose an approved plan to view its videos.");
-      const result = await api.api.runs.get({ query: { approvedVersionId: versionId } });
+      if (!planId) throw new Error("Choose a plan to view its videos.");
+      const result = await api.api.runs.get({ query: { planId } });
       if (result.error) throw apiError(result.error.value, "Saved video runs could not be loaded.");
       return z.array(runSummarySchema).parse(result.data);
     },
-    enabled: Boolean(versionId),
+    enabled: Boolean(planId),
     retry: false,
     refetchInterval: (query) => query.state.data?.some((run) => isActiveRun(run.state)) ? 2000 : false,
   });

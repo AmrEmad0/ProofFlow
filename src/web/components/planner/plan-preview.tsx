@@ -31,6 +31,8 @@ type Props = {
   pending: boolean;
   onApprove: () => void;
   onRevise: () => void;
+  editingApproved: boolean;
+  onFinishEditing: () => void;
   onUseStarter: () => void;
   onVerify: () => void;
   onCopy: () => void;
@@ -40,7 +42,7 @@ type Props = {
   changedIds: string[];
 };
 
-export function PlanPreview({ saved, starter, pending, onApprove, onRevise, onUseStarter, onVerify, onCopy, onEdit, onRemove, onReload, changedIds }: Props) {
+export function PlanPreview({ saved, starter, pending, onApprove, onRevise, editingApproved, onFinishEditing, onUseStarter, onVerify, onCopy, onEdit, onRemove, onReload, changedIds }: Props) {
   const detailsId = useId();
   const [reviewedRevision, setReviewedRevision] = useState<number | null>(null);
   const reviewed = reviewedRevision !== null && reviewedRevision === saved?.revision;
@@ -81,7 +83,7 @@ export function PlanPreview({ saved, starter, pending, onApprove, onRevise, onUs
               </div>
               <div className="col-span-2 mt-1 flex flex-wrap items-center gap-1">
                 <Button variant="ghost" className="h-11 px-2 text-sm" aria-label={`Filming details for check ${index + 1}`} aria-expanded={expandedChecks.includes(step.id)} aria-controls={`${detailsId}-${index}`} onClick={() => setExpandedChecks((current) => current.includes(step.id) ? current.filter((id) => id !== step.id) : [...current, step.id])}>Filming details<ChevronDown className={`size-4 transition-transform ${expandedChecks.includes(step.id) ? "rotate-180" : ""}`} /></Button>
-                {saved?.plan && !approved && <>
+                {saved?.plan && (!approved || editingApproved) && <>
                   <Button variant="ghost" className="h-11 px-2 text-sm" disabled={pending} aria-label={`Change check ${index + 1}`} onClick={() => setEditing(step)}><PencilLine className="size-4" />Change</Button>
                   <Button variant="ghost" className="h-11 px-2 text-sm text-muted-foreground" disabled={pending || plan.steps.length === 1} aria-label={`Remove check ${index + 1}`} aria-describedby={plan.steps.length === 1 ? "keep-one-check" : undefined} onClick={() => onRemove(step.id)}><Trash2 className="size-4" />Remove</Button>
                 </>}
@@ -90,7 +92,7 @@ export function PlanPreview({ saved, starter, pending, onApprove, onRevise, onUs
             </div>
           </li>
         ))}</ol>
-        {!approved && saved?.plan && plan.steps.length === 1 && <p id="keep-one-check" className="mt-3 text-sm text-muted-foreground">Keep at least one check. You can change it instead.</p>}
+        {(!approved || editingApproved) && saved?.plan && plan.steps.length === 1 && <p id="keep-one-check" className="mt-3 text-sm text-muted-foreground">Keep at least one check. You can change it instead.</p>}
         <p className="mt-3 text-sm leading-6 text-muted-foreground">Only visible actions can be checked. Hidden or unclear actions may be uncertain.</p>
         <details className="group mt-1">
           <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 rounded-md py-2 text-sm font-medium">What the video can tell us<ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden="true" /></summary>
@@ -105,8 +107,8 @@ export function PlanPreview({ saved, starter, pending, onApprove, onRevise, onUs
       </div>
       <div className="border-t bg-muted/20 px-4 py-3 sm:px-5">
         {approved ? <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="w-full text-base leading-7 text-muted-foreground">Use these approved checks for another video. To change them, open a new draft; earlier videos keep their original checks.</p>
-          <Button onClick={onRevise} disabled={pending} variant="outline"><PencilLine className="size-4" />Make changes</Button>
+          <p className="w-full text-base leading-7 text-muted-foreground">Your plan stays approved until you save changed checks. Earlier videos keep their original checks.</p>
+          {editingApproved ? <Button onClick={onFinishEditing} disabled={pending} variant="outline">Done editing</Button> : <Button onClick={onRevise} disabled={pending} variant="outline"><PencilLine className="size-4" />Make changes</Button>}
           <Button onClick={downloadPlan} variant="ghost"><ArrowDownToLine className="size-4" />Download plan</Button>
         </div> : !saved?.plan ? <Button onClick={onUseStarter} disabled={pending} className="h-11 w-full gap-2">Use this plan<ArrowRight className="size-4" /></Button> : <div className="space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2"><label className="flex min-h-12 cursor-pointer items-center gap-3 text-base"><input type="checkbox" checked={reviewed} onChange={(event) => setReviewedRevision(event.target.checked ? saved!.revision : null)} disabled={pending} className="size-5 shrink-0 accent-primary" />I’ve reviewed these checks.</label><Button onClick={onApprove} disabled={!reviewed || pending} aria-describedby="approval-help"><Check className="size-4" />Approve these checks</Button></div>

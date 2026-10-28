@@ -4,7 +4,7 @@ import { ANALYSIS_FPS, type ConceptTrack, type TrackBox } from "../../shared/ver
 import type { Observation } from "../../shared/observation";
 import { verificationDiagnosticsSchema, type StepCheck, type TrackWindow } from "../../shared/diagnostics";
 
-export const VERIFICATION_RULE_VERSION = "2026-10-27.2";
+export const VERIFICATION_RULE_VERSION = "2026-10-28.1";
 type Candidate = Observation["candidates"][number];
 type Anchor = { objectId: string; firstFrame: number };
 const canonical = (concept: string) => concept.trim().toLowerCase();
@@ -48,15 +48,89 @@ function refs(boxes: TrackBox[], concept: string) {
   return [boxes[0]!, boxes.at(-1)!].map((box) => ({ concept, objectId: box.objectId, frameIndex: box.frameIndex }));
 }
 
-function evaluate(step: ProofStep, candidate: Candidate | undefined, tracks: ConceptTrack[], frameCount: number, anchors: Anchor[]): StepCheck {
+function evaluateEntry(step: ProofStep, candidate: Candidate, check: StepCheck, subjectTrack: ConceptTrack | undefined,
+  regionTrack: ConceptTrack | undefined, subjectAnchor: Anchor | undefined, targetAnchor: Anchor | undefined): StepCheck {
+  const first = check.firstFrame!;
+  const last = check.lastFrame!;
+  const base = check.finding;
+  const events: { subject: TrackBox[]; region: TrackBox[]; diagnostic: StepCheck["regionCandidates"][number] }[] = [];
+  const targetIds = targetAnchor ? [targetAnchor.objectId] : [...new Set(regionTrack?.boxes.map(box => box.objectId))];
+  if (subjectTrack?.outcome === "completed" && regionTrack?.outcome === "completed") {
+    for (const targetId of targetIds) {
+      let subject: TrackBox[] = [];
+      let region: TrackBox[] = [];
+      function saveSegment() {
+        if (subject.length < 2) return;
+        const containment = subject.map((box, index) => ({ frameIndex: box.frameIndex, ratio: overlap(box, region[index]!) }));
+        let outsideIndex = -1;
+        let insideCount = 0;
+        let endIndex = -1;
+        for (let index = 0; index < containment.length; index++) {
+          const ratio = containment[index]!.ratio;
+          if (ratio <= 0.05) outsideIndex = index;
+          insideCount = ratio >= 0.95 && outsideIndex >= 0 ? insideCount + 1 : 0;
+          if (insideCount >= 3) { endIndex = index; break; }
+        }
+        const diagnostic: StepCheck["regionCandidates"][number] = {
+          objectId: targetId, subjectObjectId: subject[0]!.objectId,
+          outsideFrame: outsideIndex < 0 ? null : subject[outsideIndex]!.frameIndex,
+          endFrame: endIndex < 0 ? null : subject[endIndex]!.frameIndex,
+          qualifies: endIndex >= 0, containment,
+        };
+        check.regionCandidates.push(diagnostic);
+        if (endIndex < 0) return;
+        const eventSubject = subject.slice(outsideIndex, endIndex + 1);
+        const eventRegion = region.slice(outsideIndex, endIndex + 1);
+        const end = eventSubject.at(-1)!.frameIndex;
+        if (subjectAnchor && !continuousTrack(subjectTrack, Math.min(subjectAnchor.firstFrame, eventSubject[0]!.frameIndex), end, subjectAnchor.objectId)) return;
+        if (targetAnchor && !continuousTrack(regionTrack, Math.min(targetAnchor.firstFrame, eventRegion[0]!.frameIndex), end, targetAnchor.objectId)) return;
+        events.push({ subject: eventSubject, region: eventRegion, diagnostic });
+      }
+      // Only use actual consecutive samples. A gap or identity change ends a segment;
+      // no interpolation may supply the missing part of an action.
+      for (let frame = first; frame <= last; frame++) {
+        const subjects = subjectTrack.boxes.filter(box => box.frameIndex === frame && (!subjectAnchor || box.objectId === subjectAnchor.objectId));
+        const regions = regionTrack.boxes.filter(box => box.frameIndex === frame && box.objectId === targetId);
+        if (subjects.length !== 1 || regions.length !== 1) {
+          saveSegment(); subject = []; region = []; continue;
+        }
+        if (subject.length && subject[0]!.objectId !== subjects[0]!.objectId) {
+          saveSegment(); subject = []; region = [];
+        }
+        subject.push(subjects[0]!); region.push(regions[0]!);
+      }
+      saveSegment();
+    }
+  }
+  const pairs = new Set(events.map(event => JSON.stringify([event.subject[0]!.objectId, event.region[0]!.objectId])));
+  if (candidate.actionVisible && candidate.beforeMatches && candidate.afterMatches && pairs.size === 1) {
+    const event = events.sort((a, b) => a.subject.at(-1)!.frameIndex - b.subject.at(-1)!.frameIndex)[0]!;
+    check.subject!.selectedObjectId = event.subject[0]!.objectId;
+    check.target!.selectedObjectId = event.region[0]!.objectId;
+    return { ...check, decision: "entry_geometry", finding: { ...base, status: "observed",
+      startMs: Math.round(event.subject[0]!.frameIndex * 1000 / ANALYSIS_FPS),
+      endMs: Math.round(event.subject.at(-1)!.frameIndex * 1000 / ANALYSIS_FPS),
+      evidence: [...refs(event.subject, step.subjectConcept), ...refs(event.region, step.targetConcept!)],
+      explanation: "Muse's visible entry proposal is grounded by one unique subject/target pairing, continuously tracked from outside to three consecutive inside samples. Inspect the clip; 2D geometry does not certify hidden contents." } };
+  }
+  if (pairs.size > 1) return { ...check, decision: "entry_geometry", finding: { ...base,
+    explanation: "More than one subject/target pairing supports entry. The intended objects remain ambiguous; review the video." } };
+  return { ...check, decision: "entry_geometry", finding: { ...base,
+    explanation: "No unique, continuously tracked outside-to-inside transition supports the proposal. Missing detections, overlap, or disappearance cannot establish entry." } };
+}
+
+function evaluate(step: ProofStep, candidate: Candidate | undefined, tracks: ConceptTrack[], frameCount: number, anchors: Anchor[], targetAnchors: Anchor[]): StepCheck {
   const base: Finding = { stepId: step.id, status: "uncertain", startMs: candidate?.startMs ?? null, endMs: candidate?.endMs ?? null,
     explanation: "Muse did not locate a usable event window. This does not establish that the action never happened.", evidence: [] };
   const check: StepCheck = { stepId: step.id, firstFrame: null, lastFrame: null, subject: null, target: null,
     regionCandidates: [], decision: "no_window", finding: base };
   function finish(decision: StepCheck["decision"], finding: Finding): StepCheck { return { ...check, decision, finding }; }
   if (!candidate || candidate.startMs === null || candidate.endMs === null) return check;
-  const first = Math.max(0, Math.ceil(candidate.startMs * ANALYSIS_FPS / 1000));
-  const last = Math.min(frameCount - 1, Math.floor(candidate.endMs * ANALYSIS_FPS / 1000));
+  // Muse's millisecond windows are approximate; map to the nearest sample so
+  // 1167ms does not accidentally exclude frame 7 (1166.67ms).
+  const first = Math.max(0, Math.round(candidate.startMs * ANALYSIS_FPS / 1000));
+  const last = Math.min(frameCount - 1, Math.round(candidate.endMs * ANALYSIS_FPS / 1000));
+  if (first >= last || candidate.startMs > candidate.endMs) return check;
   check.firstFrame = first; check.lastFrame = last;
   const subjectTrack = tracks.find((track) => canonical(track.concept) === canonical(step.subjectConcept));
   const regionTrack = tracks.find((track) => canonical(track.concept) === canonical(step.targetConcept ?? ""));
@@ -66,15 +140,41 @@ function evaluate(step: ProofStep, candidate: Candidate | undefined, tracks: Con
   if (candidate.visibility !== "clear" || candidate.ambiguities.length > 0) {
     return finish("ambiguous_proposal", { ...base, explanation: "The proposed evidence is occluded or ambiguous. Review the recording; a missed or hidden action cannot be ruled out." });
   }
+  if (new Set(anchors.map(item => item.objectId)).size > 1 || new Set(targetAnchors.map(item => item.objectId)).size > 1) {
+    return finish("subject_track", { ...base, explanation: "Earlier evidence established conflicting object identities. Human review is needed before linking this step." });
+  }
   // Reuse an identity established by an earlier observed step, with uninterrupted
   // geometry between the steps. Never choose a box just because it is largest.
   const anchor = new Set(anchors.map((item) => item.objectId)).size === 1 ? anchors[0] : undefined;
-  const linked = anchor ? continuousTrack(subjectTrack, Math.min(first, anchor.firstFrame), last, anchor.objectId) : null;
-  const subject = anchor ? linked?.filter((box) => box.frameIndex >= first) ?? null : continuousTrack(subjectTrack, first, last);
+  const targetAnchor = targetAnchors[0];
+  if (step.checkType === "object_enters_region") {
+    const entry = evaluateEntry(step, candidate, check, subjectTrack, regionTrack, anchor, targetAnchor);
+    if (entry.finding.status === "observed" || entry.regionCandidates.some(region => region.qualifies)) return entry;
+    const allSubjects = continuousTrack(subjectTrack, 0, frameCount - 1, anchor?.objectId);
+    const allRegions = continuousTrack(regionTrack, 0, frameCount - 1, targetAnchor?.objectId);
+    if (!candidate.actionVisible && candidate.nonOccurrenceVisible && candidate.searchComplete && allSubjects && allRegions
+      && allSubjects.every((box, index) => overlap(box, allRegions[index]!) <= 0.05)) {
+      check.subject!.selectedObjectId = allSubjects[0]!.objectId;
+      check.target!.selectedObjectId = allRegions[0]!.objectId;
+      return finish("entry_geometry", { ...base, status: "not_observed", startMs: 0, endMs: Math.round((frameCount - 1) * 1000 / ANALYSIS_FPS),
+        evidence: [...refs(allSubjects, step.subjectConcept), ...refs(allRegions, step.targetConcept!)],
+        explanation: "Entry was not observed in the sampled clip: the continuously tracked subject stays outside the continuously tracked region. This does not rule out actions between sampled frames or outside the recording." });
+    }
+    return entry;
+  }
+  const subjectFirst = step.checkType === "object_present_at_end" ? Math.max(0, frameCount - 3) : first;
+  const subjectLast = step.checkType === "object_present_at_end" ? frameCount - 1 : last;
+  if (step.checkType === "object_present_at_end") {
+    check.firstFrame = subjectFirst; check.lastFrame = subjectLast;
+    check.subject = describeTrack(step.subjectConcept, subjectTrack, subjectFirst, subjectLast);
+    if (last < subjectFirst) return finish("final_presence", { ...base, explanation: "The visual proposal does not cover the end of the recording. Final presence remains uncertain." });
+  }
+  const linked = anchor ? continuousTrack(subjectTrack, Math.min(subjectFirst, anchor.firstFrame), subjectLast, anchor.objectId) : null;
+  const subject = anchor ? linked?.filter((box) => box.frameIndex >= subjectFirst) ?? null : continuousTrack(subjectTrack, subjectFirst, subjectLast);
   if (!subject) return finish("subject_track", { ...base, explanation: "A single continuous subject track could not be grounded across the event. Missing tracks are not evidence that the action never happened." });
   check.subject.selectedObjectId = subject[0]!.objectId;
-  base.startMs = Math.round(first * 1000 / ANALYSIS_FPS);
-  base.endMs = Math.round(last * 1000 / ANALYSIS_FPS);
+  base.startMs = Math.round(subjectFirst * 1000 / ANALYSIS_FPS);
+  base.endMs = Math.round(subjectLast * 1000 / ANALYSIS_FPS);
   base.evidence = refs(subject, step.subjectConcept);
   const supported = candidate.actionVisible && candidate.beforeMatches && candidate.afterMatches;
 
@@ -94,42 +194,13 @@ function evaluate(step: ProofStep, candidate: Candidate | undefined, tracks: Con
     if (!candidate.actionVisible && candidate.beforeMatches && !candidate.afterMatches && candidate.nonOccurrenceVisible && candidate.searchComplete
       && continuousTrack(subjectTrack, 0, frameCount - 1)) {
       return finish("state_change", { ...base, status: "not_observed", startMs: 0, endMs: Math.round((frameCount - 1) * 1000 / ANALYSIS_FPS),
+        evidence: refs(continuousTrack(subjectTrack, 0, frameCount - 1)!, step.subjectConcept),
         explanation: "The requested state change was not observed in the sampled clip. The subject remains continuously grounded and Muse reports the before-state persists; this does not certify events outside the recording." });
     }
     return finish("state_change", { ...base, explanation: "The tracked object is visible, but the required before/after change is not sufficiently supported." });
   }
 
-  const regions = check.target!.objects.map((object) => continuousTrack(regionTrack, first, last, object.objectId)).filter((boxes): boxes is TrackBox[] => boxes !== null);
-  check.regionCandidates = regions.map((region) => {
-    const containment = subject.map((box, index) => ({ frameIndex: box.frameIndex, ratio: overlap(box, region[index]!) }));
-    // Muse windows are approximate. Find an actual sampled outside state within
-    // the window, then require three final inside frames; never bridge a gap.
-    const outside = containment.slice(0, -3).find((sample) => sample.ratio <= 0.05);
-    return { objectId: region[0]!.objectId, outsideFrame: outside?.frameIndex ?? null, containment,
-      qualifies: Boolean(outside && containment.length >= 4 && containment.slice(-3).every((sample) => sample.ratio >= 0.95)) };
-  });
-  if (regions.length === 0) return finish("target_track", { ...base, explanation: "The target region could not be tracked continuously. Overlap or disappearance cannot establish entry." });
-  const matches = check.regionCandidates.filter((region) => region.qualifies);
-  if (supported && matches.length === 1) {
-    const match = matches[0]!;
-    const region = regions.find((boxes) => boxes[0]!.objectId === match.objectId)!;
-    const entrySubject = subject.filter((box) => box.frameIndex >= match.outsideFrame!);
-    const entryRegion = region.filter((box) => box.frameIndex >= match.outsideFrame!);
-    check.target!.selectedObjectId = match.objectId;
-    return finish("entry_geometry", { ...base, status: "observed", startMs: Math.round(match.outsideFrame! * 1000 / ANALYSIS_FPS),
-      evidence: [...refs(entrySubject, step.subjectConcept), ...refs(entryRegion, step.targetConcept!)],
-      explanation: "Muse's visible entry proposal is grounded by one unique continuous subject/target pairing, moving from outside to inside for three final sampled frames. Inspect the clip; 2D geometry does not certify hidden contents." });
-  }
-  if (matches.length > 1) return finish("entry_geometry", { ...base, explanation: "More than one tracked target supports the proposed entry. The intended region remains ambiguous; review the object IDs and video." });
-  const allSubjects = continuousTrack(subjectTrack, 0, frameCount - 1);
-  const allRegions = continuousTrack(regionTrack, 0, frameCount - 1);
-  if (!candidate.actionVisible && candidate.nonOccurrenceVisible && candidate.searchComplete && allSubjects && allRegions
-    && allSubjects.every((box, index) => overlap(box, allRegions[index]!) <= 0.05)) {
-    check.target!.selectedObjectId = allRegions[0]!.objectId;
-    return finish("entry_geometry", { ...base, status: "not_observed", startMs: 0, endMs: Math.round((frameCount - 1) * 1000 / ANALYSIS_FPS),
-      explanation: "Entry was not observed in this sampled clip: the continuously tracked subject stays outside the continuously tracked region. This does not rule out actions between sampled frames or outside the recording." });
-  }
-  return finish("entry_geometry", { ...base, explanation: "The geometry does not show a sustained, continuously visible outside-to-inside transition. Simple overlap or disappearance is insufficient." });
+  return check;
 }
 
 export function evaluateEvidence(plan: ApprovedPlan, observation: Observation, tracks: ConceptTrack[], frameCount: number) {
@@ -137,7 +208,8 @@ export function evaluateEvidence(plan: ApprovedPlan, observation: Observation, t
   const checks: StepCheck[] = [];
   let latestEnd = -1;
   for (const step of plan.steps) {
-    const check = evaluate(step, observation.candidates.find((candidate) => candidate.stepId === step.id), tracks, frameCount, grounded.get(canonical(step.subjectConcept)) ?? []);
+    const check = evaluate(step, observation.candidates.find((candidate) => candidate.stepId === step.id), tracks, frameCount,
+      grounded.get(canonical(step.subjectConcept)) ?? [], grounded.get(canonical(step.targetConcept ?? "")) ?? []);
     const finding = check.finding;
     if (finding.status === "observed" && finding.startMs !== null) {
       if (finding.startMs < latestEnd) {

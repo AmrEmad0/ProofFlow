@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import type { EditableCheck } from "../../../shared/planner";
-import { describeEditedCheck } from "../../../shared/planner";
+import { describeEditedCheck, editableCheckSchema } from "../../../shared/planner";
 import type { ProofStep } from "../../../shared/proof-plan";
 
 export function CheckEditor({ step, pending, onClose, onSave, onReload }: {
@@ -16,6 +16,9 @@ export function CheckEditor({ step, pending, onClose, onSave, onReload }: {
   const [reloading, setReloading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const busy = pending || reloading;
+  const original = editableCheckSchema.parse({ id: step.id, subjectConcept: step.subjectConcept, targetConcept: step.targetConcept, beforeState: step.beforeState, afterState: step.afterState });
+  const normalized = editableCheckSchema.safeParse(edit);
+  const changed = normalized.success && JSON.stringify(normalized.data) !== JSON.stringify(original);
   const preview = describeEditedCheck(step, edit);
   const fields: { key: Exclude<keyof EditableCheck, "id">; label: string; hint: string; limit: number }[] = [
     { key: "subjectConcept", label: "Which item?", hint: "Use a short description, like red mug or cardboard box.", limit: 120 },
@@ -31,7 +34,9 @@ export function CheckEditor({ step, pending, onClose, onSave, onReload }: {
       <DialogTitle className="pr-10 text-xl font-semibold">Change this check</DialogTitle>
       <DialogDescription className="text-base">Change the items or what the camera should show. Save when it looks right.</DialogDescription>
       <form className="space-y-5" onSubmit={async (event) => {
-        event.preventDefault(); setError(null); setNotice(null);
+        event.preventDefault();
+        if (!changed || busy) return;
+        setError(null); setNotice(null);
         try { await onSave(edit); onClose(); }
         catch (failure) { setError(failure instanceof Error ? failure.message : "Couldn’t save your change. Your edit is still here."); }
       }}>
@@ -54,7 +59,7 @@ export function CheckEditor({ step, pending, onClose, onSave, onReload }: {
         {notice && <p role="status" className="text-sm leading-6 text-muted-foreground">{notice}</p>}
         <div className="flex flex-wrap justify-end gap-3">
           <Button type="button" variant="outline" disabled={busy} onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={busy || fields.some(({ key }) => !edit[key]?.trim())}>{pending ? "Saving…" : "Save change"}</Button>
+          <Button type="submit" disabled={busy || !changed || fields.some(({ key }) => !edit[key]?.trim())}>{pending ? "Saving…" : "Save change"}</Button>
         </div>
       </form>
     </DialogContent>

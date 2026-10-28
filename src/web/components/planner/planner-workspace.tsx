@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,6 +8,7 @@ import { toast } from "@/components/ui/toast";
 import { withFeedback } from "@/lib/feedback";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { api } from "@/lib/eden";
+import { readPlannerStream } from "@/lib/planner-stream";
 import { apiError, plannerStatusQuery, planRunsQuery, plansQuery, savedPlanQuery } from "@/lib/queries";
 import { deletePlanResultSchema, savedPlanSchema, type EditableCheck, type SavedPlan } from "../../../shared/planner";
 import { packproofTemplate } from "../../../shared/packproof";
@@ -18,21 +20,16 @@ import { WorkspaceSidebar } from "../workspace/workspace-sidebar";
 import { WorkspaceSettings } from "../workspace/workspace-settings";
 import { VerificationWorkspace } from "../verification/verification-workspace";
 
-type Action = { type: "create"; template: "blank" | "packproof" } | { type: "send"; message: string } | { type: "approve" } | { type: "revise" } | { type: "copy" } | { type: "edit"; steps: EditableCheck[] } | { type: "restore"; versionId: string };
+type Action = { type: "create"; template: "blank" | "packproof" } | { type: "send"; message: string } | { type: "approve" } | { type: "copy" } | { type: "edit"; steps: EditableCheck[] } | { type: "restore"; versionId: string };
 
 const actionFeedback = {
   create: { loading: "Creating draft…", success: "Draft created", error: "Couldn’t create draft" },
   send: { loading: "Working on your plan…", success: "Reply received", error: "Couldn’t send message" },
   approve: { loading: "Approving plan…", success: "Plan approved", error: "Couldn’t approve plan" },
-  revise: { loading: "Creating draft…", success: "New draft created", error: "Couldn’t create draft" },
   copy: { loading: "Copying your checks…", success: "Copy ready to change", error: "Couldn’t copy plan" },
   edit: { loading: "Saving your checks…", success: "Checks saved", error: "Couldn’t save checks" },
   restore: { loading: "Undoing the change…", success: "Previous checks restored", error: "Couldn’t undo the change" },
 };
-
-function lastTemplate(): string | null {
-  try { return localStorage.getItem("proofflow.activeTemplate"); } catch { return null; }
-}
 
 function rememberedMessage(id: string | null): string {
   try { return sessionStorage.getItem(`proofflow.message.${id ?? "new"}`) ?? ""; } catch { return ""; }
@@ -50,13 +47,18 @@ function editableChecks(saved: SavedPlan): EditableCheck[] {
   return saved.plan!.steps.map(({ id, subjectConcept, targetConcept, beforeState, afterState }) => ({ id, subjectConcept, targetConcept, beforeState, afterState }));
 }
 
-export function PlannerWorkspace({ initialStarter = false }: { initialStarter?: boolean }) {
+export function PlannerWorkspace({ initialStarter = false, planId = null }: { initialStarter?: boolean; planId?: string | null }) {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [activeId, setActiveId] = useState<string | null>(() => initialStarter ? null : lastTemplate());
+  const [activeId, setActiveId] = useState<string | null>(planId);
   const [error, setError] = useState<string | null>(null);
-  const [input, setInput] = useState(() => rememberedMessage(initialStarter ? null : lastTemplate()));
+  const [partialReply, setPartialReply] = useState("");
+  const requestController = useRef<AbortController | null>(null);
+  useEffect(() => () => requestController.current?.abort(), []);
+  const [input, setInput] = useState(() => rememberedMessage(planId));
   const [undo, setUndo] = useState<{ planId: string; versionId: string; revision: number; changedIds: string[]; message: string } | null>(null);
   const [view, setView] = useState<"auto" | "plan" | "video" | "upload">("auto");
+  const [editingApproved, setEditingApproved] = useState(false);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
@@ -66,18 +68,34 @@ export function PlannerWorkspace({ initialStarter = false }: { initialStarter?: 
   const current = useQuery(savedPlanQuery(activeId));
   const saved = current.data ?? null;
   const approvedVersionId = saved?.status === "approved" ? saved.versionId : null;
-  const previousRuns = useQuery({ ...planRunsQuery(approvedVersionId), enabled: Boolean(approvedVersionId) && view === "auto" });
+  const previousRuns = useQuery({ ...planRunsQuery(saved?.id ?? null) });
   const configured = health.data?.configured ?? false;
 
   function select(id: string | null, keepInput = false) {
     setActiveId(id);
     setError(null);
-    if (!keepInput) { setInput(rememberedMessage(id)); setView("auto"); setPropertiesOpen(false); setUndo(null); }
-    try {
-      if (id) localStorage.setItem("proofflow.activeTemplate", id);
-      else localStorage.removeItem("proofflow.activeTemplate");
-    } catch { /* Saved templates remain available through the workspace list. */ }
+    if (!keepInput) {
+      setPartialReply(""); setEditingApproved(false); setInput(rememberedMessage(id)); setView("auto"); setPropertiesOpen(false); setUndo(null);
+      heading.current?.focus({ preventScroll: true });
+      window.scrollTo({ top: 0 });
+    }
+    if (id) void navigate({ to: "/plans/$planId", params: { planId: id } });
+    else void navigate({ to: "/new" });
   }
+
+  useEffect(() => {
+    if (planId === activeId) return;
+    setActiveId(planId);
+    setEditingApproved(false);
+    setError(null);
+    setPartialReply("");
+    setInput(rememberedMessage(planId));
+    setView("auto");
+    setPropertiesOpen(false);
+    setUndo(null);
+    heading.current?.focus({ preventScroll: true });
+    window.scrollTo({ top: 0 });
+  }, [planId]);
 
   function remember(value: SavedPlan) {
     queryClient.setQueryData(savedPlanQuery(value.id).queryKey, value);
@@ -90,7 +108,8 @@ export function PlannerWorkspace({ initialStarter = false }: { initialStarter?: 
     if (failure) throw apiError(failure.value, "Your template could not be created.");
     const value = savedPlanSchema.parse(data);
     if (preserveMessage) rememberMessage(value.id, input);
-    remember(value);
+    queryClient.setQueryData(savedPlanQuery(value.id).queryKey, value);
+    void queryClient.invalidateQueries({ queryKey: plansQuery.queryKey, exact: true });
     return value;
   }
 
@@ -98,14 +117,26 @@ export function PlannerWorkspace({ initialStarter = false }: { initialStarter?: 
     setError(null);
     if (action.type === "create") return create(action.template);
     let target = saved;
-    if (!target && action.type === "send" && !activeId) target = await create(initialStarter ? "packproof" : "blank", true);
+    if (!target && action.type === "send" && !activeId) {
+      target = await create(initialStarter ? "packproof" : "blank", true);
+    }
     if (!target) throw new Error("Load or create a template to continue.");
     const endpoint = api.api.plans({ id: target.id });
-    const response = action.type === "send"
-      ? await endpoint.messages.post({ message: action.message, revision: target.revision })
-      : action.type === "revise"
-        ? await endpoint.revise.post({ revision: target.revision })
-        : action.type === "edit"
+    if (action.type === "send") {
+      setPartialReply("");
+      const controller = new AbortController();
+      requestController.current = controller;
+      try {
+        const { data, error: failure } = await endpoint.messages.post({ message: action.message, revision: target.revision }, { query: { stream: "true" }, fetch: { signal: controller.signal } });
+        if (failure) throw apiError(failure.value, "Your message could not be sent. Please try again.");
+        if (!data || !(Symbol.asyncIterator in data)) throw new Error("The chat stream could not be opened. Please try again.");
+        return await readPlannerStream(data, setPartialReply);
+      } finally {
+        controller.abort();
+        if (requestController.current === controller) requestController.current = null;
+      }
+    }
+    const response = action.type === "edit"
           ? await endpoint.checks.post({ revision: target.revision, steps: action.steps })
         : action.type === "restore"
           ? await endpoint.restore.post({ revision: target.revision, versionId: action.versionId })
@@ -117,11 +148,8 @@ export function PlannerWorkspace({ initialStarter = false }: { initialStarter?: 
   }
 
   const mutation = useMutation({
-    mutationFn: (action: Action) => withFeedback(save(action), {
+    mutationFn: (action: Action) => action.type === "send" ? save(action) : withFeedback(save(action), {
       ...actionFeedback[action.type],
-      success: (value) => action.type === "send" && value.plan && value.version !== saved?.version
-        ? saved?.plan ? "Plan updated" : "Plan created"
-        : actionFeedback[action.type].success,
     }),
     onSuccess: (value, action) => {
       if ((action.type === "send" || action.type === "edit") && saved?.versionId && value.versionId !== saved.versionId) {
@@ -130,7 +158,9 @@ export function PlannerWorkspace({ initialStarter = false }: { initialStarter?: 
         setUndo({ planId: value.id, versionId: saved.versionId, revision: value.revision, changedIds, message: removed ? "Check removed. You can undo this change." : "Checks updated. Review the changes below." });
       } else setUndo(null);
       remember(value);
+      if (value.status !== "approved") { setEditingApproved(false); setView("plan"); }
       if (action.type === "send") {
+        setPartialReply("");
         rememberMessage(saved?.id ?? activeId, "");
         rememberMessage(value.id, "");
       }
@@ -188,15 +218,22 @@ export function PlannerWorkspace({ initialStarter = false }: { initialStarter?: 
   async function reloadDraft() {
     await withFeedback(current.refetch({ throwOnError: true }), { loading: "Reloading draft…", success: "Draft reloaded", error: "Couldn’t reload draft" });
     setError(null);
+    setPartialReply("");
+  }
+
+  function openEditor() {
+    setView("plan");
+    setEditingApproved(true);
   }
 
   function openUpload() {
+    setEditingApproved(false);
     setView("upload");
   }
 
   const approved = saved?.status === "approved";
   const hasPlan = Boolean(saved?.plan || starter);
-  const videoView = approved && (view === "video" || view === "upload" || (view === "auto" && (previousRuns.isError || Boolean(previousRuns.data?.length))));
+  const videoView = Boolean(saved) && (view === "video" || (approved && (view === "upload" || (view === "auto" && (previousRuns.isError || Boolean(previousRuns.data?.length))))));
   const step = videoView ? 2 : hasPlan ? 1 : 0;
 
   useEffect(() => {
@@ -206,7 +243,12 @@ export function PlannerWorkspace({ initialStarter = false }: { initialStarter?: 
   useEffect(() => {
     heading.current?.focus({ preventScroll: true });
     window.scrollTo({ top: 0 });
-  }, [activeId, approved, hasPlan, view, videoView, openingVideos]);
+  }, []);
+
+  const pageHeading = <div className="min-w-0">
+    <h1 ref={heading} tabIndex={-1} className="text-2xl font-semibold tracking-tight outline-none sm:text-3xl">{openingVideos ? "Opening your plan" : videoView ? "Videos & evidence" : editingApproved ? "Edit your checks" : approved ? "Your plan is ready" : hasPlan ? "Review your checks" : "What should the video show?"}</h1>
+    <p className="mt-2 text-base leading-7 text-muted-foreground">{openingVideos ? "Loading your videos and saved checks." : videoView ? "Use the same approved checks for each new video." : editingApproved ? "Your plan stays approved until you save a change to its checks." : approved ? "Ask a question, revise your plan, or use it for a video. Changed checks need approval again." : hasPlan ? "Talk through your plan here. Review and approve the checks when you’re ready." : "Tell me what you have in mind, or ask a question. We can work out the plan together."}</p>
+  </div>;
 
   return (
     <SidebarProvider style={{ "--sidebar-width-icon": "4rem" } as CSSProperties}>
@@ -215,41 +257,37 @@ export function PlannerWorkspace({ initialStarter = false }: { initialStarter?: 
         void withFeedback(queryClient.fetchQuery(savedPlanQuery(id)), { loading: "Opening plan…", success: "Plan opened", error: "Couldn’t open plan" }).catch(() => {});
       }} onNew={() => {
         select(null);
-        if (initialStarter) act({ type: "create", template: "blank" });
-        else toast.add({ type: "info", title: "Ready for a new plan" });
+        toast.add({ type: "info", title: "Ready for a new plan" });
       }} onExample={() => act({ type: "create", template: "packproof" })} onProperties={() => setPropertiesOpen(true)} onDelete={(plan) => { removePlan.reset(); setDeleteTarget(plan); }} onSettings={() => setSettingsOpen(true)} onRetry={() => { void withFeedback(templates.refetch({ throwOnError: true }), { loading: "Reloading plans…", success: "Plans reloaded", error: "Couldn’t reload plans" }).catch(() => {}); }} />
       <SidebarInset id="main-content" className="min-w-0">
         <header className="flex h-14 shrink-0 items-center gap-3 border-b px-4 sm:px-8">
           <SidebarTrigger aria-label="Toggle plans sidebar" />
           <span className="min-w-0 flex-1 truncate text-sm font-medium">{saved?.plan?.title ?? (starter ? "Box packing example" : "New plan")}</span>
-          <span className="shrink-0 text-xs text-muted-foreground" role="status">{pending ? "Saving…" : saved ? "Saved" : ""}</span>
+          <span className="shrink-0 text-xs text-muted-foreground" role="status">{sending ? "Replying…" : pending ? "Saving…" : saved ? "Saved" : ""}</span>
         </header>
         <div className="px-4 pt-6 pb-8 sm:px-8 sm:pt-7">
           <div className={`workspace-enter mx-auto ${videoView ? "max-w-[1500px]" : "max-w-6xl"}`}>
             <ol className="workflow-steps mb-6" aria-label="Verification progress">
               {["Create plan", "Review checks", "Verify video"].map((label, index) => (
                 <li key={label} aria-current={step === index ? "step" : undefined} className={`${step === index ? "is-current" : step > index ? "is-complete" : ""} ${approved && index === 1 ? "is-approved" : ""}`}>
-                  {approved && index > 0 && index !== step ? <button aria-label={label} disabled={pending} onClick={() => setView(index === 2 ? "video" : "plan")} className="flex items-center gap-2 rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"><span className="step-number">{step > index || index === 1 ? <Check className="size-3.5" aria-hidden="true" /> : index + 1}</span>{label}</button> : <span className="flex items-center gap-2"><span className="step-number">{step > index || (approved && index === 1) ? <Check className="size-3.5" aria-hidden="true" /> : index + 1}</span>{label}</span>}
+                  {(approved || (videoView && index === 1)) && index > 0 && index !== step ? <button aria-label={label} disabled={pending} onClick={() => setView(index === 2 ? "video" : "plan")} className="flex items-center gap-2 rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"><span className="step-number">{step > index || index === 1 ? <Check className="size-3.5" aria-hidden="true" /> : index + 1}</span>{label}</button> : <span className="flex items-center gap-2"><span className="step-number">{step > index || (approved && index === 1) ? <Check className="size-3.5" aria-hidden="true" /> : index + 1}</span>{label}</span>}
                 </li>
               ))}
             </ol>
-            <div className="mb-6">
-              <h1 ref={heading} tabIndex={-1} className="text-2xl font-semibold tracking-tight outline-none sm:text-3xl">{openingVideos ? "Opening your plan" : videoView ? "Videos & evidence" : approved ? "Your plan is ready" : hasPlan ? "Review your checks" : "What should the video show?"}</h1>
-              <p className="mt-2 text-base leading-7 text-muted-foreground">{openingVideos ? "Loading your videos and saved checks." : videoView ? "Use the same approved checks for each new video." : approved ? "Use these checks for a video, or make a copy for a similar task." : hasPlan ? "Tell the assistant what to change, then review and approve your checks." : "Describe the task. We’ll turn it into a short checklist."}</p>
-            </div>
+            {!videoView && <div className="mb-6 flex flex-wrap items-start justify-between gap-4">{pageHeading}{Boolean(previousRuns.data?.length) && <Button variant="outline" onClick={() => { setEditingApproved(false); setView("video"); }}>Videos & evidence ({previousRuns.data!.length})</Button>}</div>}
             {undo && saved?.id === undo.planId && saved.revision === undo.revision && <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-primary/5 p-4"><p role="status" className="text-base">{undo.message}</p><Button variant="outline" disabled={pending} onClick={() => act({ type: "restore", versionId: undo.versionId })}><RotateCcw />Undo change</Button></div>}
-            {displayedError && (approved || loading) && <p role="alert" className="mb-4 rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">{displayedError}</p>}
-            {!loading && approved && <div hidden={!videoView}><VerificationWorkspace key={saved.versionId} saved={saved} visible={Boolean(videoView)} startNewUpload={view === "upload"} onReviewPlan={() => setView("plan")} /></div>}
-            {loading ? <Skeleton className="h-96 rounded-2xl" aria-label={openingVideos ? "Loading plan videos" : "Loading saved plan"} /> : videoView ? null : <div className={approved ? "mx-auto max-w-3xl" : hasPlan ? "grid items-start gap-5 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]" : "mx-auto max-w-2xl"}>
-              {!approved && <PlannerChat saved={saved} starter={starter} pending={pending} sending={sending} pendingMessage={sending && mutation.variables?.type === "send" ? mutation.variables.message : null} configured={configured} error={displayedError} input={input} onInputChange={(message) => { setInput(message); rememberMessage(activeId, message); }} onSend={async (message) => { await mutation.mutateAsync({ type: "send", message }); }} onStarter={() => act({ type: "create", template: "packproof" })} onReload={() => { void reloadDraft().catch(() => {}); }} />}
-              {hasPlan && <PlanPreview key={activeId ?? "preview"} saved={saved} starter={starter ? packproofTemplate : null} pending={pending || current.isError} onApprove={() => act({ type: "approve" })} onRevise={() => act({ type: "revise" })} onCopy={() => act({ type: "copy" })} onEdit={editCheck} onRemove={removeCheck} onReload={reloadDraft} changedIds={undo?.planId === saved?.id ? undo?.changedIds ?? [] : []} onUseStarter={() => act({ type: "create", template: "packproof" })} onVerify={openUpload} />}
+            {displayedError && (videoView || loading) && <p role="alert" className="mb-4 rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">{displayedError}</p>}
+            {!loading && saved && (approved || videoView || Boolean(previousRuns.data?.length)) && <div hidden={!videoView}><VerificationWorkspace key={saved.id} saved={saved} heading={videoView ? pageHeading : null} visible={Boolean(videoView)} startNewUpload={view === "upload"} onReviewPlan={() => setView("plan")} /></div>}
+            {loading ? <Skeleton className="h-96 rounded-2xl" aria-label={openingVideos ? "Loading plan videos" : "Loading saved plan"} /> : videoView ? null : <div className={hasPlan ? "grid items-start gap-5 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]" : "mx-auto max-w-2xl"}>
+              <PlannerChat saved={saved} starter={starter} pending={pending} sending={sending} partialReply={partialReply} pendingMessage={(sending || partialReply) && mutation.variables?.type === "send" ? mutation.variables.message : null} configured={configured} error={displayedError} input={input} onInputChange={(message) => { setInput(message); rememberMessage(activeId, message); }} onSend={async (message) => { await mutation.mutateAsync({ type: "send", message }); }} onStarter={() => act({ type: "create", template: "packproof" })} onReload={() => { void reloadDraft().catch(() => {}); }} />
+              {hasPlan && <PlanPreview key={activeId ?? "preview"} saved={saved} starter={starter ? packproofTemplate : null} pending={pending || current.isError} onApprove={() => act({ type: "approve" })} editingApproved={editingApproved} onFinishEditing={() => setEditingApproved(false)} onRevise={openEditor} onCopy={() => act({ type: "copy" })} onEdit={editCheck} onRemove={removeCheck} onReload={reloadDraft} changedIds={undo?.planId === saved?.id ? undo?.changedIds ?? [] : []} onUseStarter={() => act({ type: "create", template: "packproof" })} onVerify={openUpload} />}
             </div>}
             {current.isError && <Button variant="outline" className="mt-3 h-9 gap-2" onClick={() => select(null)}><RotateCcw className="size-3.5" />Back to a new plan</Button>}
             <footer className="mt-8 pb-2 text-center text-xs text-muted-foreground">Powered by Meta Muse Spark & SAM 3.1</footer>
           </div>
         </div>
       </SidebarInset>
-      <PlanProperties saved={saved} open={propertiesOpen} onOpenChange={setPropertiesOpen} pending={pending} onRevise={() => { setView("plan"); act({ type: "revise" }); }} />
+      <PlanProperties saved={saved} open={propertiesOpen} onOpenChange={setPropertiesOpen} pending={pending} onRevise={openEditor} />
       <WorkspaceSettings open={settingsOpen} onOpenChange={setSettingsOpen} />
       <DeletePlanDialog target={deleteTarget} pending={removePlan.isPending} error={removePlan.error?.message ?? null} onClose={() => setDeleteTarget(null)} onConfirm={() => { if (deleteTarget) removePlan.mutate(deleteTarget.id); }} />
     </SidebarProvider>

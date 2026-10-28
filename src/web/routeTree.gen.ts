@@ -10,43 +10,73 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as PackproofRouteImport } from './routes/packproof'
+import { Route as WorkspaceRouteImport } from './routes/_workspace'
+import { Route as WorkspaceNewRouteImport } from './routes/_workspace.new'
+import { Route as WorkspacePackproofRouteImport } from './routes/_workspace.packproof'
+import { Route as WorkspacePlansPlanIdRouteImport } from './routes/_workspace.plans.$planId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PackproofRoute = PackproofRouteImport.update({
+const WorkspaceRoute = WorkspaceRouteImport.update({
+  id: '/_workspace',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WorkspaceNewRoute = WorkspaceNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => WorkspaceRoute,
+} as any)
+const WorkspacePackproofRoute = WorkspacePackproofRouteImport.update({
   id: '/packproof',
   path: '/packproof',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => WorkspaceRoute,
+} as any)
+const WorkspacePlansPlanIdRoute = WorkspacePlansPlanIdRouteImport.update({
+  id: '/plans/$planId',
+  path: '/plans/$planId',
+  getParentRoute: () => WorkspaceRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/packproof': typeof PackproofRoute
+  '/new': typeof WorkspaceNewRoute
+  '/packproof': typeof WorkspacePackproofRoute
+  '/plans/$planId': typeof WorkspacePlansPlanIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/packproof': typeof PackproofRoute
+  '/new': typeof WorkspaceNewRoute
+  '/packproof': typeof WorkspacePackproofRoute
+  '/plans/$planId': typeof WorkspacePlansPlanIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/packproof': typeof PackproofRoute
+  '/_workspace': typeof WorkspaceRouteWithChildren
+  '/_workspace/new': typeof WorkspaceNewRoute
+  '/_workspace/packproof': typeof WorkspacePackproofRoute
+  '/_workspace/plans/$planId': typeof WorkspacePlansPlanIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/packproof'
+  fullPaths: '/' | '/new' | '/packproof' | '/plans/$planId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/packproof'
-  id: '__root__' | '/' | '/packproof'
+  to: '/' | '/new' | '/packproof' | '/plans/$planId'
+  id:
+    | '__root__'
+    | '/'
+    | '/_workspace'
+    | '/_workspace/new'
+    | '/_workspace/packproof'
+    | '/_workspace/plans/$planId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  PackproofRoute: typeof PackproofRoute
+  WorkspaceRoute: typeof WorkspaceRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -58,19 +88,56 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/packproof': {
-      id: '/packproof'
+    '/_workspace': {
+      id: '/_workspace'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof WorkspaceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_workspace/new': {
+      id: '/_workspace/new'
+      path: '/new'
+      fullPath: '/new'
+      preLoaderRoute: typeof WorkspaceNewRouteImport
+      parentRoute: typeof WorkspaceRoute
+    }
+    '/_workspace/packproof': {
+      id: '/_workspace/packproof'
       path: '/packproof'
       fullPath: '/packproof'
-      preLoaderRoute: typeof PackproofRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof WorkspacePackproofRouteImport
+      parentRoute: typeof WorkspaceRoute
+    }
+    '/_workspace/plans/$planId': {
+      id: '/_workspace/plans/$planId'
+      path: '/plans/$planId'
+      fullPath: '/plans/$planId'
+      preLoaderRoute: typeof WorkspacePlansPlanIdRouteImport
+      parentRoute: typeof WorkspaceRoute
     }
   }
 }
 
+interface WorkspaceRouteChildren {
+  WorkspaceNewRoute: typeof WorkspaceNewRoute
+  WorkspacePackproofRoute: typeof WorkspacePackproofRoute
+  WorkspacePlansPlanIdRoute: typeof WorkspacePlansPlanIdRoute
+}
+
+const WorkspaceRouteChildren: WorkspaceRouteChildren = {
+  WorkspaceNewRoute: WorkspaceNewRoute,
+  WorkspacePackproofRoute: WorkspacePackproofRoute,
+  WorkspacePlansPlanIdRoute: WorkspacePlansPlanIdRoute,
+}
+
+const WorkspaceRouteWithChildren = WorkspaceRoute._addFileChildren(
+  WorkspaceRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  PackproofRoute: PackproofRoute,
+  WorkspaceRoute: WorkspaceRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

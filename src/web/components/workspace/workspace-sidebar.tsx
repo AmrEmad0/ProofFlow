@@ -1,5 +1,6 @@
+import { Link } from "@tanstack/react-router";
 import { useId, useState } from "react";
-import { FileText, LockKeyhole, Package, Plus, ScanLine, Search, Settings2, SlidersHorizontal, Trash2 } from "lucide-react";
+import { BookOpen, FileText, LockKeyhole, Package, Plus, ScanLine, Search, Settings2, SlidersHorizontal, Trash2 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
   SidebarGroupLabel, SidebarHeader, SidebarInput, SidebarMenu, SidebarMenuButton,
@@ -58,6 +59,7 @@ export function WorkspaceSidebar({ plans, activeId, pending, loading, error, can
     </SidebarContent>
     <SidebarFooter className="border-t p-3 group-data-[collapsible=icon]:px-0">
       <SidebarMenu className="gap-2">
+        <SidebarMenuItem><SidebarMenuButton render={<Link to="/" />} onClick={() => setOpenMobile(false)} aria-label="Home & guide" tooltip="Home & guide" className={menuButtonClass}><BookOpen aria-hidden="true" /><span className="group-data-[collapsible=icon]:hidden">Home & guide</span></SidebarMenuButton></SidebarMenuItem>
         <SidebarMenuItem><SidebarMenuButton onClick={() => closeAfter(() => { setSearch(""); onExample(); })} disabled={pending} aria-label="Box packing example" tooltip="Box packing example" className={menuButtonClass}><Package aria-hidden="true" /><span className="group-data-[collapsible=icon]:hidden">Box packing example</span></SidebarMenuButton></SidebarMenuItem>
         <SidebarMenuItem><SidebarMenuButton onClick={() => closeAfter(onSettings)} aria-label="Settings" tooltip="Settings" className={menuButtonClass}><Settings2 aria-hidden="true" /><span className="group-data-[collapsible=icon]:hidden">Settings</span></SidebarMenuButton></SidebarMenuItem>
       </SidebarMenu>

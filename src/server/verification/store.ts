@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import { approvedPlanSchema } from "../../shared/proof-plan";
 import { runDetailsSchema, runSummarySchema, type RunSummary } from "../../shared/verification";
 import { hashContract } from "../engine/contract";
-import { PlannerError } from "../planner/store";
+import { plannerStore, PlannerError } from "../planner/store";
 
 export type RunRow = {
   id: string; plan_version_id: string; state: RunSummary["state"]; video_path: string;
@@ -36,7 +36,8 @@ export function verificationStore(db: Database) {
   }
 
   function summary(run: RunRow): RunSummary {
-    return runSummarySchema.parse({ id: run.id, approvedVersionId: run.plan_version_id, state: run.state,
+    return runSummarySchema.parse({ id: run.id, approvedVersionId: run.plan_version_id,
+      planVersion: db.query<{ version: number }, [string]>("SELECT version FROM plan_versions WHERE id = ?").get(run.plan_version_id)!.version, state: run.state,
       createdAt: run.created_at, completedAt: run.completed_at, expiresAt: run.expires_at, error: run.error_message, durationMs: run.duration_ms });
   }
 
@@ -51,6 +52,13 @@ export function verificationStore(db: Database) {
   function list(versionId: string, sessionHash: string) {
     approved(versionId, sessionHash);
     return db.query<RunRow, [string]>("SELECT * FROM runs WHERE plan_version_id = ? AND expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now') ORDER BY created_at DESC, rowid DESC").all(versionId).map(summary);
+  }
+
+  function listForPlan(planId: string, sessionHash: string) {
+    plannerStore(db).read(planId, sessionHash);
+    return db.query<RunRow, [string]>(`SELECT r.* FROM runs r JOIN plan_versions v ON v.id = r.plan_version_id
+      WHERE v.plan_id = ? AND r.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      ORDER BY r.created_at DESC, r.rowid DESC`).all(planId).map(summary);
   }
 
   function create(id: string, versionId: string, hash: string, sessionHash: string, path: string, retentionHours: number) {
@@ -71,5 +79,5 @@ export function verificationStore(db: Database) {
     return summary(row(id, sessionHash));
   }
 
-  return { approved, row, summary, details, list, create };
+  return { approved, row, summary, details, list, listForPlan, create };
 }

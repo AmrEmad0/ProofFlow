@@ -13,7 +13,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 function Root() {
   return (
     <Toaster timeout={4000} limit={3}><VerificationFeedbackProvider><TooltipProvider><div className="min-h-screen bg-background">
-      <a href="#main-content" className="sr-only z-50 rounded-lg bg-primary p-3 text-primary-foreground focus:not-sr-only focus:absolute focus:left-4 focus:top-4">Skip to workspace</a>
+      <a href="#main-content" className="sr-only z-50 rounded-lg bg-primary p-3 text-primary-foreground focus:not-sr-only focus:absolute focus:left-4 focus:top-4">Skip to main content</a>
       <Outlet />
     </div></TooltipProvider></VerificationFeedbackProvider></Toaster>
   );

@@ -15,15 +15,15 @@ export function recordingName(runs: RunSummary[], id: string) {
   return index < 0 ? "Recording" : `Recording ${runs.length - index}`;
 }
 
-export function VideoLibrary({ runs, selectedId, loading, error, version, uploading, refreshing, onSelect, onNew, onRefresh }: {
+export function VideoLibrary({ runs, selectedId, loading, error, uploading, refreshing, onSelect, onNew, onRefresh }: {
   runs: RunSummary[]; selectedId: string | null; loading: boolean; error: string | null;
-  version: number | null; uploading: boolean; refreshing: boolean;
+  uploading: boolean; refreshing: boolean;
   onSelect: (id: string) => void; onNew: () => void; onRefresh: () => void;
 }) {
   return <aside className="min-w-0 overflow-hidden rounded-2xl border bg-card lg:sticky lg:top-5" aria-label="Plan video library">
     <div className="border-b p-4">
       <div className="mb-1 flex items-center justify-between gap-2"><h2 className="flex items-center gap-2 text-sm font-semibold"><Film className="size-4 text-primary" aria-hidden="true" />Plan videos<span className="rounded-md bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">{runs.length}</span></h2><Button variant="ghost" size="icon" className="size-7" aria-label="Refresh plan videos" disabled={refreshing} onClick={onRefresh}><RefreshCw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} /></Button></div>
-      <p className="text-xs text-muted-foreground">Recordings for approved plan v{version}</p>
+      <p className="text-xs text-muted-foreground">Recordings across approved versions</p>
       <Button variant={selectedId === null ? "default" : "outline"} className="mt-4 w-full gap-2 rounded-lg px-2 text-sm" onClick={onNew} disabled={uploading} aria-pressed={selectedId === null}><Plus className="size-3.5" />{runs.length ? "Check another video" : "Add a video"}</Button>
     </div>
     {loading && <p role="status" className="p-4 text-xs text-muted-foreground">Loading videos…</p>}
@@ -34,7 +34,7 @@ export function VideoLibrary({ runs, selectedId, loading, error, version, upload
       const active = selectedId === run.id;
       return <button type="button" key={run.id} onClick={() => onSelect(run.id)} aria-current={active ? "page" : undefined} aria-label={`Open ${name}, ${videoStatusLabels[run.state]}`} className={`flex w-60 shrink-0 items-start gap-3 rounded-xl border p-2.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-primary lg:w-full ${active ? "border-primary/35 bg-primary/5" : "border-transparent hover:border-border hover:bg-muted/40"}`}>
         <VideoThumbnail run={run} />
-        <span className="min-w-0 flex-1"><span className="block truncate text-xs font-medium">{name}</span><span className={`mt-1.5 inline-flex max-w-full items-center gap-1 rounded px-1.5 py-0.5 text-xs ${run.state === "failed" ? "bg-red-50 text-red-800" : run.state === "completed" ? "bg-sky-50 text-sky-800" : "bg-amber-50 text-amber-900"}`}>{isActiveRun(run.state) && <LoaderCircle className="size-2.5 shrink-0 animate-spin" aria-hidden="true" />}<span className="truncate">{videoStatusLabels[run.state]}</span></span><span className="mt-1.5 block text-xs text-muted-foreground">{new Date(run.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span></span>
+        <span className="min-w-0 flex-1"><span className="block truncate text-xs font-medium">{name} · v{run.planVersion}</span><span className={`mt-1.5 inline-flex max-w-full items-center gap-1 rounded px-1.5 py-0.5 text-xs ${run.state === "failed" ? "bg-red-50 text-red-800" : run.state === "completed" ? "bg-sky-50 text-sky-800" : "bg-amber-50 text-amber-900"}`}>{isActiveRun(run.state) && <LoaderCircle className="size-2.5 shrink-0 animate-spin" aria-hidden="true" />}<span className="truncate">{videoStatusLabels[run.state]}</span></span><span className="mt-1.5 block text-xs text-muted-foreground">{new Date(run.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span></span>
       </button>;
     })}</nav>}
     {runs.some((run) => isActiveRun(run.state)) && <p className="border-t px-4 py-3 text-xs leading-4 text-muted-foreground">Status updates automatically. You can review another video while processing continues.</p>}

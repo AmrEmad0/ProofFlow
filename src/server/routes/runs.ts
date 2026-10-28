@@ -42,8 +42,8 @@ export function runRoutes(db: Database, config: Config, worker?: VerificationWor
       if (request.method !== "GET" && request.method !== "HEAD") requireWorkspaceOrigin(request, config);
     })
     .get("/api/verification/status", () => ({ available: Boolean(worker?.ready && config.modelConfigured), retentionHours: config.MEDIA_RETENTION_HOURS }))
-    .get("/api/runs", ({ query, request }) => store.list(query.approvedVersionId, sessionHash(request)), {
-      query: t.Object({ approvedVersionId: t.String({ format: "uuid" }) }),
+    .get("/api/runs", ({ query, request }) => "planId" in query ? store.listForPlan(query.planId, sessionHash(request)) : store.list(query.approvedVersionId, sessionHash(request)), {
+      query: t.Union([t.Object({ planId: t.String({ format: "uuid" }) }), t.Object({ approvedVersionId: t.String({ format: "uuid" }) })]),
     })
     .post("/api/runs", async ({ body, request, set }) => {
       const hash = sessionHash(request);

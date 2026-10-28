@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { ArrowDownToLine, LoaderCircle, Trash2 } from "lucide-react";
@@ -17,30 +17,30 @@ import { recordingName, VideoLibrary } from "./video-library";
 import { VideoUpload } from "./video-upload";
 import { VerificationStatus } from "./verification-status";
 
-const selectionKey = (versionId: string) => `proofflow.videoSelection.${versionId}`;
+const selectionKey = (planId: string) => `proofflow.videoSelection.${planId}`;
 
-function rememberedVideo(versionId: string): string | null {
+function rememberedVideo(planId: string): string | null {
   try {
-    const value = sessionStorage.getItem(selectionKey(versionId));
+    const value = sessionStorage.getItem(selectionKey(planId));
     return value === "upload" || z.uuid().safeParse(value).success ? value : null;
   } catch { return null; }
 }
 
-export function VerificationWorkspace({ saved, visible, startNewUpload, onReviewPlan }: { saved: SavedPlan; visible: boolean; startNewUpload: boolean; onReviewPlan: () => void }) {
+export function VerificationWorkspace({ saved, heading, visible, startNewUpload, onReviewPlan }: { saved: SavedPlan; heading: ReactNode; visible: boolean; startNewUpload: boolean; onReviewPlan: () => void }) {
   const queryClient = useQueryClient();
   const watchRun = useVerificationFeedback();
   const container = useRef<HTMLDivElement>(null);
   const versionId = saved.versionId!;
   const [file, setFile] = useState<File | null>(null);
   const [consent, setConsent] = useState(false);
-  const [selection, setSelection] = useState<string | null>(() => rememberedVideo(versionId));
+  const [selection, setSelection] = useState<string | null>(() => rememberedVideo(saved.id));
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [preview, setPreview] = useState<{ file: File; url: string } | null>(null);
   const localUrl = preview && preview.file === file ? preview.url : null;
-  const listKey = ["runs", versionId];
+  const listKey = planRunsQuery(saved.id).queryKey;
   const readiness = useQuery(verificationStatusQuery);
-  const runs = useQuery(planRunsQuery(versionId));
+  const runs = useQuery(planRunsQuery(saved.id));
   const recordings = runs.data ?? [];
   const runId = selection === "upload" ? null : selection ?? recordings[0]?.id ?? null;
   const details = useQuery(runDetailsQuery(runId));
@@ -62,10 +62,10 @@ export function VerificationWorkspace({ saved, visible, startNewUpload, onReview
   }, [file]);
   useEffect(() => {
     try {
-      if (selection) sessionStorage.setItem(selectionKey(versionId), selection);
-      else sessionStorage.removeItem(selectionKey(versionId));
+      if (selection) sessionStorage.setItem(selectionKey(saved.id), selection);
+      else sessionStorage.removeItem(selectionKey(saved.id));
     } catch { /* Video navigation remains available without browser storage. */ }
-  }, [selection, versionId]);
+  }, [selection, saved.id]);
   useEffect(() => {
     if (runs.data && selection && selection !== "upload" && !runs.data.some((item) => item.id === selection)) {
       setSelection(null); setConfirmDelete(false);
@@ -98,6 +98,7 @@ export function VerificationWorkspace({ saved, visible, startNewUpload, onReview
   }
 
   async function uploadVideo() {
+    if (saved.status !== "approved") throw new Error("Review and approve your current checks before uploading a video.");
     if (!file || !consent || !saved.contractHash) throw new Error("Choose a video and give permission to send it to Meta first.");
     const result = await api.api.runs.post({ video: file, consent: "true", approvedVersionId: versionId, contractHash: saved.contractHash });
     if (result.error) throw apiError(result.error.value, "The recording could not be uploaded.");
@@ -135,20 +136,25 @@ export function VerificationWorkspace({ saved, visible, startNewUpload, onReview
 
   const displayedError = error ?? (details.isError ? details.error.message : readiness.isError ? readiness.error.message : null);
   const showLibrary = runs.isPending || runs.isError || recordings.length > 0;
-  return <div ref={container} className={`grid min-w-0 items-start gap-5 ${showLibrary ? "lg:grid-cols-[16rem_minmax(0,1fr)]" : "mx-auto max-w-5xl"}`}>
-    {showLibrary && <VideoLibrary runs={recordings} selectedId={runId} loading={runs.isPending} error={runs.error?.message ?? null} version={saved.version} uploading={upload.isPending} refreshing={runs.isRefetching} onSelect={selectVideo} onNew={() => selectVideo(null)} onRefresh={refreshRuns} />}
-    <div className="min-w-0 space-y-5">
-      {displayedError && <div role="alert" className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm leading-6 text-destructive">{displayedError}{!error && <button className="ml-2 underline" onClick={refreshRuns}>Reload videos</button>}</div>}
-      {runId ? run ? <>
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold tracking-tight">{recordingName(recordings, run.id)}</h2><p className="mt-1 text-xs text-muted-foreground">{new Date(run.createdAt).toLocaleString()}{run.durationMs ? ` · ${(run.durationMs / 1000).toFixed(1)} seconds` : ""} · Plan v{saved.version}</p></div></div>
-        <VerificationStatus run={run} onNewVideo={() => selectVideo(null)} />
-        {run.warnings.map((warning) => <p key={warning} className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900">{warning}</p>)}
-        <EvidencePlayer key={run.id} run={run} />
-        {!isActiveRun(run.state) && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4"><span className="text-sm text-muted-foreground">Expires {new Date(run.expiresAt).toLocaleString()}</span><div className="flex flex-wrap gap-2">{run.receipt && <Button variant="outline" className="h-8 gap-2 rounded-lg px-3" onClick={exportReceipt}><ArrowDownToLine />Export evidence</Button>}{confirmDelete ? <><Button variant="destructive" className="h-8 px-3" disabled={remove.isPending} onClick={() => remove.mutate(run.id)}>Delete video & evidence</Button><Button variant="ghost" disabled={remove.isPending} onClick={() => setConfirmDelete(false)}>Cancel</Button></> : <Button variant="ghost" className="h-8 gap-2 px-3" onClick={() => setConfirmDelete(true)}><Trash2 />Delete</Button>}</div></div>}
-      </> : details.isPending ? <div role="status" className="flex min-h-64 items-center justify-center gap-2 rounded-2xl border bg-card p-6 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Loading video…</div> : <div className="rounded-2xl border bg-card p-6 text-sm text-muted-foreground">This video could not be opened. Select another recording or add a new video.</div> : runs.isPending && selection === null ? <p role="status" className="p-6 text-sm text-muted-foreground">Loading your video library…</p> : <>
-        <RecordingChecklist saved={saved} onReviewPlan={onReviewPlan} />
-        <VideoUpload file={file} localUrl={localUrl} consent={consent} uploading={upload.isPending} processing={processing} available={readiness.data?.available ?? false} retentionHours={readiness.data?.retentionHours ?? 24} version={saved.version} onChoose={choose} onClear={() => { setFile(null); setConsent(false); setError(null); }} onConsent={setConsent} onInvalid={selectionError} onUpload={() => upload.mutate()} />
-      </>}
+  return <div ref={container} className="min-w-0">
+    <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+      {heading}
+      {runId && run && <div className="min-w-0 sm:text-right"><h2 className="text-lg font-semibold tracking-tight">{recordingName(recordings, run.id)}</h2><p className="mt-1 text-xs leading-5 text-muted-foreground">{new Date(run.createdAt).toLocaleString()}{run.durationMs ? ` · ${(run.durationMs / 1000).toFixed(1)} seconds` : ""} · Plan v{run.planVersion}</p></div>}
+    </div>
+    <div className={`grid min-w-0 items-start gap-5 ${showLibrary ? "lg:grid-cols-[16rem_minmax(0,1fr)]" : "mx-auto max-w-5xl"}`}>
+      {showLibrary && <VideoLibrary runs={recordings} selectedId={runId} loading={runs.isPending} error={runs.error?.message ?? null} uploading={upload.isPending} refreshing={runs.isRefetching} onSelect={selectVideo} onNew={() => saved.status === "approved" ? selectVideo(null) : onReviewPlan()} onRefresh={refreshRuns} />}
+      <div className="min-w-0 space-y-5">
+        {displayedError && <div role="alert" className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm leading-6 text-destructive">{displayedError}{!error && <button className="ml-2 underline" onClick={refreshRuns}>Reload videos</button>}</div>}
+        {runId ? run ? <>
+          <VerificationStatus run={run} onNewVideo={() => selectVideo(null)} />
+          {run.warnings.map((warning) => <p key={warning} className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900">{warning}</p>)}
+          <EvidencePlayer key={run.id} run={run} />
+          {!isActiveRun(run.state) && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4"><span className="text-sm text-muted-foreground">Expires {new Date(run.expiresAt).toLocaleString()}</span><div className="flex flex-wrap gap-2">{run.receipt && <Button variant="outline" className="h-8 gap-2 rounded-lg px-3" onClick={exportReceipt}><ArrowDownToLine />Export evidence</Button>}{confirmDelete ? <><Button variant="destructive" className="h-8 px-3" disabled={remove.isPending} onClick={() => remove.mutate(run.id)}>Delete video & evidence</Button><Button variant="ghost" disabled={remove.isPending} onClick={() => setConfirmDelete(false)}>Cancel</Button></> : <Button variant="ghost" className="h-8 gap-2 px-3" onClick={() => setConfirmDelete(true)}><Trash2 />Delete</Button>}</div></div>}
+        </> : details.isPending ? <div role="status" className="flex min-h-64 items-center justify-center gap-2 rounded-2xl border bg-card p-6 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Loading video…</div> : <div className="rounded-2xl border bg-card p-6 text-sm text-muted-foreground">This video could not be opened. Select another recording or add a new video.</div> : runs.isPending && selection === null ? <p role="status" className="p-6 text-sm text-muted-foreground">Loading your video library…</p> : saved.status !== "approved" ? <section className="rounded-2xl border bg-card p-5"><h2 className="text-lg font-semibold">Review your updated checks</h2><p className="mt-2 text-sm text-muted-foreground">Your earlier recordings are still available. Approve your updated checks before checking a new video.</p><Button variant="outline" className="mt-4" onClick={onReviewPlan}>Review checks</Button></section> : <>
+          <RecordingChecklist saved={saved} onReviewPlan={onReviewPlan} />
+          <VideoUpload file={file} localUrl={localUrl} consent={consent} uploading={upload.isPending} processing={processing} available={readiness.data?.available ?? false} retentionHours={readiness.data?.retentionHours ?? 24} version={saved.version} onChoose={choose} onClear={() => { setFile(null); setConsent(false); setError(null); }} onConsent={setConsent} onInvalid={selectionError} onUpload={() => upload.mutate()} />
+        </>}
+      </div>
     </div>
   </div>;
 }

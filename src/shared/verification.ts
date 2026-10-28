@@ -15,7 +15,7 @@ export const conceptTrackSchema = z.strictObject({
   concept: z.string().min(1), outcome: z.enum(["completed", "failed"]), boxes: z.array(trackBoxSchema),
 });
 export const runSummarySchema = z.strictObject({
-  id: z.uuid(), approvedVersionId: z.uuid(), state: runStateSchema,
+  id: z.uuid(), approvedVersionId: z.uuid(), planVersion: z.number().int().positive(), state: runStateSchema,
   createdAt: z.string(), completedAt: z.string().nullable(), expiresAt: z.string(),
   error: z.string().nullable(), durationMs: z.number().int().positive().nullable(),
 });

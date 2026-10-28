@@ -125,7 +125,7 @@
   .eyebrow { @apply text-[9px] font-semibold tracking-[0.12em] text-muted-foreground; }
   .chat-panel, .plan-panel { @apply flex flex-col overflow-hidden rounded-2xl border bg-card shadow-[0_2px_8px_-4px_oklch(0.2_0.01_65/0.12)]; }
   .chat-panel { @apply self-start xl:sticky xl:top-5; }
-  .chat-history { max-height: 16rem; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+  .chat-history { max-height: min(32rem, 55dvh); scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
   .plan-tag { @apply inline-flex items-center gap-1.5 rounded-md border bg-background px-2 py-1; }
   .proof-step { @apply px-3 py-3; }
   .workflow-steps { @apply flex items-center; }

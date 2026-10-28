@@ -58,4 +58,12 @@ export type PlannerMessage = z.infer<typeof plannerMessageSchema>;
 export type PlannerReply = z.infer<typeof plannerReplySchema>;
 export type SavedPlan = z.infer<typeof savedPlanSchema>;
 
+export const plannerStreamEventSchema = z.discriminatedUnion("type", [
+  z.strictObject({ type: z.literal("start") }),
+  z.strictObject({ type: z.literal("reply"), text: z.string().max(4000) }),
+  z.strictObject({ type: z.literal("done"), saved: savedPlanSchema }),
+  z.strictObject({ type: z.literal("error"), message: z.string() }),
+]);
+export type PlannerStreamEvent = z.infer<typeof plannerStreamEventSchema>;
+
 export const deletePlanResultSchema = z.strictObject({ deleted: z.literal(true) });
