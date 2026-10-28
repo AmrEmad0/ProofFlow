@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runMediaCommand } from "../src/server/media/process";
 import { normalizeVideo, probeVideo } from "../src/server/media/video";
+import { LIMITS } from "../src/shared/proof-plan";
 
 let dir: string;
 const config = { FFMPEG_PATH: "ffmpeg", FFPROBE_PATH: "ffprobe" };
@@ -25,8 +26,8 @@ describe("native media adapters", () => {
 
   test("rejects readable videos longer than the application limit", async () => {
     const input = join(dir, "overlong.mp4");
-    await runMediaCommand(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=32x32:r=1:d=21", "-c:v", "libx264", input]);
-    await expect(probeVideo(input, config)).rejects.toThrow("20 seconds");
+    await runMediaCommand(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", `color=c=black:s=32x32:r=1:d=${LIMITS.durationMs / 1000 + 1}`, "-c:v", "libx264", input]);
+    await expect(probeVideo(input, config)).rejects.toThrow(`${LIMITS.durationMs / 1000} seconds`);
   });
 
   test("rejects text with a video extension and empty files", async () => {

@@ -98,7 +98,7 @@ export function runRoutes(db: Database, config: Config, worker?: VerificationWor
       if (query.download && run.state !== "completed") throw new PlannerError(409, "Wait for verification to finish before downloading the final video.");
       if (!run.normalized_path || !await Bun.file(run.normalized_path).exists()) throw new PlannerError(404, "The analysis video is not available yet.");
       let path = run.normalized_path;
-      if (query.download) {
+      if (query.download && query.variant !== "analysis") {
         path = join(runDirectory(config, params.id), "annotated-v1.mp4");
         if (!await Bun.file(path).exists()) {
           let pending = videoExports.get(run.id);
@@ -120,9 +120,9 @@ export function runRoutes(db: Database, config: Config, worker?: VerificationWor
         store.row(params.id, hash);
       }
       const response = videoResponse(Bun.file(path), request.headers.get("range"));
-      if (query.download && response.ok) response.headers.set("content-disposition", `attachment; filename="proofflow-${run.id}-tracked.mp4"`);
+      if (query.download && response.ok) response.headers.set("content-disposition", `attachment; filename="proofflow-${run.id}-${query.variant === "analysis" ? "analysis" : "tracked"}.mp4"`);
       return response;
-    }, { params: idParams, query: t.Object({ download: t.Optional(t.Literal("true")) }) })
+    }, { params: idParams, query: t.Object({ download: t.Optional(t.Literal("true")), variant: t.Optional(t.Union([t.Literal("analysis"), t.Literal("tracked")])) }) })
     .get("/api/runs/:id/thumbnail", async ({ params, request }) => {
       const run = store.row(params.id, sessionHash(request));
       const path = join(runDirectory(config, params.id), "thumbnail.jpg");

@@ -11,14 +11,14 @@ import { FrameInspector } from "./frame-inspector";
 import { ModelDiagnostics } from "./model-diagnostics";
 import { formatTime, VerificationChecks } from "./verification-checks";
 
-async function downloadVideo(id: string) {
-  const response = await fetch(`/api/runs/${id}/video?download=true`);
+async function downloadVideo(id: string, variant: "tracked" | "analysis") {
+  const response = await fetch(`/api/runs/${id}/video?download=true&variant=${variant}`);
   if (!response.ok) throw apiError(await response.json().catch(() => null), "The video could not be downloaded. Please try again.");
   if (!response.headers.get("content-type")?.startsWith("video/mp4")) throw new Error("The server did not return an MP4 video.");
   const url = URL.createObjectURL(await response.blob());
   const link = document.createElement("a");
   try {
-    link.href = url; link.download = `proofflow-${id}-tracked.mp4`; link.hidden = true;
+    link.href = url; link.download = `proofflow-${id}-${variant}.mp4`; link.hidden = true;
     document.body.append(link); link.click();
   } finally { link.remove(); URL.revokeObjectURL(url); }
 }
@@ -33,8 +33,8 @@ export function EvidencePlayer({ run, autoPlay = true }: { run: RunDetails; auto
   const [hasPosition, setHasPosition] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
-  const download = useMutation({ mutationFn: () => withFeedback(downloadVideo(run.id), {
-    loading: "Preparing video with SAM boxes…", success: "Video download started", error: "Couldn’t download video",
+  const download = useMutation({ mutationFn: (variant: "tracked" | "analysis") => withFeedback(downloadVideo(run.id, variant), {
+    loading: variant === "analysis" ? "Preparing analysis video…" : "Preparing video with SAM boxes…", success: "Video download started", error: "Couldn’t download video",
   }), retry: false });
   const hasMedia = Boolean(run.media);
   useEffect(() => {
@@ -112,7 +112,10 @@ export function EvidencePlayer({ run, autoPlay = true }: { run: RunDetails; auto
         <VerificationChecks run={run} selectedId={selected} currentIds={currentSteps.map((step) => step.id)} playing={playing} onInspect={seek} />
       </div>
       <div className="min-w-0 self-start @3xl:sticky @3xl:top-0">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-5"><h3 ref={playerHeading} tabIndex={-1} className="flex items-center gap-2 text-[15px] font-semibold tracking-tight outline-none">Video evidence</h3>{run.media && run.state === "completed" && <Button variant="ghost" className="h-8 gap-2 px-2 text-[12px] text-muted-foreground" onClick={() => download.mutate()} disabled={download.isPending} aria-busy={download.isPending} aria-label="Download video" title="Download MP4 with tracked object boxes">{download.isPending ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : <ArrowDownToLine className="size-4" aria-hidden="true" />}Download video</Button>}</div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-5"><h3 ref={playerHeading} tabIndex={-1} className="flex items-center gap-2 text-[15px] font-semibold tracking-tight outline-none">Video evidence</h3>{run.media && run.state === "completed" && <div className="flex flex-wrap gap-1">
+          <Button variant="ghost" className="h-8 gap-2 px-2 text-[12px] text-muted-foreground" onClick={() => download.mutate("analysis")} disabled={download.isPending} aria-busy={download.isPending && download.variables === "analysis"} title="Download the analysis MP4 matching the exported evidence hash">{download.isPending && download.variables === "analysis" ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : <ArrowDownToLine className="size-4" aria-hidden="true" />}Download analysis</Button>
+          <Button variant="ghost" className="h-8 gap-2 px-2 text-[12px] text-muted-foreground" onClick={() => download.mutate("tracked")} disabled={download.isPending} aria-busy={download.isPending && download.variables === "tracked"} aria-label="Download video" title="Download MP4 with tracked object boxes">{download.isPending && download.variables === "tracked" ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : <ArrowDownToLine className="size-4" aria-hidden="true" />}Download video</Button>
+        </div>}</div>
         {run.media ? <>
           <div className="flex min-h-48 items-center justify-center bg-[#171918] p-2 sm:p-4"><div className="relative mx-auto overflow-hidden bg-black" style={{ aspectRatio: `${run.media.width}/${run.media.height}`, width: `min(100%, ${360 * run.media.width / run.media.height}px, ${40 * run.media.width / run.media.height}dvh)` }}>
             <video ref={video} controls autoPlay={autoPlay && run.state === "completed"} muted loop={run.recordingKind !== "demo" && run.state === "completed"} playsInline preload="metadata" src={`/api/runs/${run.id}/video`} className="size-full" aria-label="Analysis video for this approved proof plan" onLoadedMetadata={applyPosition} onTimeUpdate={(event) => setTime(event.currentTarget.currentTime)}

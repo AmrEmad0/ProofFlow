@@ -4,10 +4,11 @@ import { ANALYSIS_FPS, type ConceptTrack, type TrackBox } from "../../shared/ver
 import { structuredConflicts, type Observation } from "../../shared/observation";
 import { verificationDiagnosticsSchema, type StepCheck, type TrackWindow } from "../../shared/diagnostics";
 
-export const VERIFICATION_RULE_VERSION = "2026-10-28.5";
+export const VERIFICATION_RULE_VERSION = "2026-10-28.6";
 type Candidate = Observation["candidates"][number];
 type Anchor = { objectId: string; firstFrame: number };
 const canonical = (concept: string) => concept.trim().toLowerCase();
+const fullyFramed = (box: TrackBox) => box.left > 0 && box.top > 0 && box.right < 1 && box.bottom < 1;
 
 function continuousTrack(track: ConceptTrack | undefined, first: number, last: number, objectId?: string): TrackBox[] | null {
   if (!track || track.outcome !== "completed" || last - first < 1) return null;
@@ -25,7 +26,7 @@ function visibleStateInstances(track: ConceptTrack | undefined, first: number, l
     const boxes = continuousTrack(track, first, last, id);
     // A frame-edge fragment cannot establish an object's visible before/after
     // states. Keep all fully framed continuous alternatives, regardless of size.
-    return boxes && [boxes[0]!, boxes.at(-1)!].every(box => box.left > 0 && box.top > 0 && box.right < 1 && box.bottom < 1);
+    return boxes && [boxes[0]!, boxes.at(-1)!].every(fullyFramed);
   });
 }
 
@@ -73,27 +74,33 @@ function evaluateEntry(step: ProofStep, candidate: Candidate, check: StepCheck, 
         const containment = subject.map((box, index) => ({ frameIndex: box.frameIndex, ratio: overlap(box, region[index]!) }));
         let outsideIndex = -1;
         let insideCount = 0;
-        let endIndex = -1;
+        const transitions: { outsideIndex: number; endIndex: number }[] = [];
         for (let index = 0; index < containment.length; index++) {
           const ratio = containment[index]!.ratio;
           if (ratio <= 0.05) outsideIndex = index;
           insideCount = ratio >= 0.95 && outsideIndex >= 0 ? insideCount + 1 : 0;
-          if (insideCount >= 3) { endIndex = index; break; }
+          if (insideCount >= 3) {
+            transitions.push({ outsideIndex, endIndex: index });
+            outsideIndex = -1; insideCount = 0;
+          }
         }
-        const diagnostic: StepCheck["regionCandidates"][number] = {
-          objectId: targetId, subjectObjectId: subject[0]!.objectId,
-          outsideFrame: outsideIndex < 0 ? null : subject[outsideIndex]!.frameIndex,
-          endFrame: endIndex < 0 ? null : subject[endIndex]!.frameIndex,
-          qualifies: endIndex >= 0, containment,
-        };
-        check.regionCandidates.push(diagnostic);
-        if (endIndex < 0) return;
-        const eventSubject = subject.slice(outsideIndex, endIndex + 1);
-        const eventRegion = region.slice(outsideIndex, endIndex + 1);
-        const end = eventSubject.at(-1)!.frameIndex;
-        if (subjectAnchor && !continuousTrack(subjectTrack, Math.min(subjectAnchor.firstFrame, eventSubject[0]!.frameIndex), end, subjectAnchor.objectId)) return;
-        if (targetAnchor && !continuousTrack(regionTrack, Math.min(targetAnchor.firstFrame, eventRegion[0]!.frameIndex), end, targetAnchor.objectId)) return;
-        events.push({ subject: eventSubject, region: eventRegion, diagnostic });
+        if (!transitions.length) transitions.push({ outsideIndex, endIndex: -1 });
+        for (const { outsideIndex, endIndex } of transitions) {
+          const diagnostic: StepCheck["regionCandidates"][number] = {
+            objectId: targetId, subjectObjectId: subject[0]!.objectId,
+            outsideFrame: outsideIndex < 0 ? null : subject[outsideIndex]!.frameIndex,
+            endFrame: endIndex < 0 ? null : subject[endIndex]!.frameIndex,
+            qualifies: endIndex >= 0, containment,
+          };
+          check.regionCandidates.push(diagnostic);
+          if (endIndex < 0) continue;
+          const eventSubject = subject.slice(outsideIndex, endIndex + 1);
+          const eventRegion = region.slice(outsideIndex, endIndex + 1);
+          const end = eventSubject.at(-1)!.frameIndex;
+          if (subjectAnchor && !continuousTrack(subjectTrack, Math.min(subjectAnchor.firstFrame, eventSubject[0]!.frameIndex), end, subjectAnchor.objectId)) continue;
+          if (targetAnchor && !continuousTrack(regionTrack, Math.min(targetAnchor.firstFrame, eventRegion[0]!.frameIndex), end, targetAnchor.objectId)) continue;
+          events.push({ subject: eventSubject, region: eventRegion, diagnostic });
+        }
       }
       // Only use actual consecutive samples. A gap or identity change ends a segment;
       // no interpolation may supply the missing part of an action.
@@ -112,8 +119,13 @@ function evaluateEntry(step: ProofStep, candidate: Candidate, check: StepCheck, 
     }
   }
   const pairs = new Set(events.map(event => JSON.stringify([event.subject[0]!.objectId, event.region[0]!.objectId])));
-  if (candidate.actionVisible && candidate.beforeMatches && candidate.afterMatches && pairs.size === 1) {
-    const event = events.sort((a, b) => a.subject.at(-1)!.frameIndex - b.subject.at(-1)!.frameIndex)[0]!;
+  // The explicit action must share a sampled frame with the tracked transition;
+  // a broad search window cannot attach it to an unrelated earlier entry.
+  const actionFrame = candidate.action ? Math.round(candidate.action.timestampMs * ANALYSIS_FPS / 1000) : null;
+  const aligned = candidate.subject ? events.filter(event => actionFrame !== null
+    && actionFrame >= event.subject[0]!.frameIndex && actionFrame <= event.subject.at(-1)!.frameIndex) : events;
+  if (candidate.actionVisible && candidate.beforeMatches && candidate.afterMatches && pairs.size === 1 && aligned.length) {
+    const event = aligned.sort((a, b) => a.subject.at(-1)!.frameIndex - b.subject.at(-1)!.frameIndex)[0]!;
     check.subject!.selectedObjectId = event.subject[0]!.objectId;
     check.target!.selectedObjectId = event.region[0]!.objectId;
     return { ...check, decision: "entry_geometry", finding: { ...base, status: "observed",
@@ -124,6 +136,8 @@ function evaluateEntry(step: ProofStep, candidate: Candidate, check: StepCheck, 
   }
   if (pairs.size > 1) return { ...check, decision: "entry_geometry", finding: { ...base,
     explanation: "More than one subject/target pairing supports entry. The intended objects remain ambiguous; review the video." } };
+  if (events.length && !aligned.length) return { ...check, decision: "entry_geometry", finding: { ...base,
+    explanation: "The proposed action timestamp is not grounded within a continuously tracked outside-to-inside transition. Review the video to resolve the timing." } };
   return { ...check, decision: "entry_geometry", finding: { ...base,
     explanation: "No unique, continuously tracked outside-to-inside transition supports the proposal. Missing detections, overlap, or disappearance cannot establish entry." } };
 }
@@ -253,6 +267,9 @@ function evaluate(step: ProofStep, candidate: Candidate | undefined, tracks: Con
   }
 
   if (step.checkType === "visible_state_change") {
+    if (supported && ![subject[0]!, subject.at(-1)!].every(fullyFramed)) {
+      return finish("subject_track", { ...base, explanation: "Only a frame-edge subject fragment supports the proposed before/after states. A visible state change remains uncertain." });
+    }
     const stateEvidence = !explicit || Boolean(candidate.before?.visible && candidate.before.matchesRequirement
       && candidate.after?.visible && candidate.after.matchesRequirement && candidate.action?.visible && candidate.action.matchesRequirement
       && candidate.before.timestampMs < candidate.after.timestampMs
@@ -286,7 +303,9 @@ export function evaluateEvidence(plan: ApprovedPlan, observation: Observation, t
     // explicit before/after moments, never the padded inspection context.
     const eventStart = finding.startMs;
     const eventEnd = finding.endMs;
-    if (finding.status === "observed" && eventStart !== null) {
+    // Final presence is an end-of-clip assertion, not a sequential action. It
+    // neither advances action order nor establishes an identity for past actions.
+    if (finding.status === "observed" && eventStart !== null && step.checkType !== "object_present_at_end") {
       if (eventStart < latestEnd) {
         finding.status = "uncertain"; check.decision = "step_order";
         finding.explanation = "The proposed event conflicts with the approved step order. Review the recording to resolve the sequence.";

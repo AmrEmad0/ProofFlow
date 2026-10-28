@@ -8,8 +8,10 @@ describe("SQLite migrations and constraints", () => {
   test("migrations are repeatable and foreign keys are enforced", () => {
     const db = openDatabase(":memory:");
     try {
+      const applied = db.query("SELECT * FROM schema_migrations ORDER BY version").all();
+      expect(applied.length).toBeGreaterThan(0);
       migrate(db);
-      expect(db.query("SELECT * FROM schema_migrations").all()).toHaveLength(4);
+      expect(db.query("SELECT * FROM schema_migrations ORDER BY version").all()).toEqual(applied);
       expect(db.query("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
       expect(() => db.query("INSERT INTO runs (id, plan_version_id, state, video_path) VALUES (?, ?, ?, ?)")
         .run("run", "missing", "queued", "/private/clip.mp4")).toThrow();

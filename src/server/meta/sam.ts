@@ -22,7 +22,7 @@ export async function segmentVideo(client: OpenAI, fileId: string, concept: stri
   let usage: ModelUsage | undefined;
   async function* events() {
     for await (const event of stream) {
-      if (event.type === "response.completed" && event.response.usage) {
+      if (event.type === "response.completed" && event.response?.usage) {
         usage = { inputTokens: event.response.usage.input_tokens, outputTokens: event.response.usage.output_tokens, totalTokens: event.response.usage.total_tokens, reasoningTokens: event.response.usage.output_tokens_details?.reasoning_tokens };
       }
       yield event;
