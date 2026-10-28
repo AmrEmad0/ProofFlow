@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { defaultTriggerSettings, taskSessionSchema, triggerConfigurationSchema, triggerEventSchema, triggerSettingsSchema, type TriggerSource } from "../../shared/triggers";
+import { DEMO_FEED_STOPPED, DEMO_FEED_ID, defaultTriggerSettings, taskSessionSchema, triggerConfigurationSchema, triggerEventSchema, triggerSettingsSchema, type TriggerSource } from "../../shared/triggers";
 import { PlannerError, plannerStore } from "../planner/store";
 
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -23,15 +23,16 @@ export function triggerStore(db: Database) {
   function session(id: string, planId: string) {
     const row = db.query<SessionRow, [string, string]>("SELECT * FROM task_sessions WHERE id = ? AND plan_id = ?").get(id, planId);
     if (!row) throw new PlannerError(404, "This task session could not be found.");
-    const capture = db.query<{ state: string; error_message: string | null }, [string]>("SELECT state, error_message FROM trigger_captures WHERE session_id = ?").get(id);
-    return taskSessionSchema.parse({ captureState: capture?.state ?? null, captureError: capture?.error_message ?? null, id: row.id, planId: row.plan_id, approvedVersionId: row.plan_version_id,
+    const capture = db.query<{ state: string; error_message: string | null; demo_filename: string | null }, [string]>("SELECT state, error_message, demo_filename FROM trigger_captures WHERE session_id = ?").get(id);
+    return taskSessionSchema.parse({ demoFilename: capture?.demo_filename ?? null, captureState: capture?.state ?? null, captureError: capture?.error_message ?? null, id: row.id, planId: row.plan_id, approvedVersionId: row.plan_version_id,
       contractHash: row.contract_hash, configurationRevision: row.configuration_revision, settings: JSON.parse(row.settings_json),
       reference: row.reference, source: row.source, state: row.state, startedAt: row.started_at, endedAt: row.ended_at, runId: row.run_id });
   }
   function overview(planId: string, owner: string) {
     plans.read(planId, owner);
     const rows = db.query<{ id: string }, [string]>("SELECT id FROM task_sessions WHERE plan_id = ? ORDER BY started_at DESC, rowid DESC LIMIT 30").all(planId);
-    return { configuration: configuration(planId), sessions: rows.map(row => session(row.id, planId)) };
+    const feed = db.query<{ running: number; position: number; error_message: string | null }, [string]>("SELECT * FROM demo_feeds WHERE plan_id = ?").get(planId);
+    return { feed: feed ? { running: Boolean(feed.running), position: feed.position, error: feed.error_message } : null, configuration: configuration(planId), sessions: rows.map(row => session(row.id, planId)) };
   }
   function save(planId: string, owner: string, revision: number, input: unknown) {
     const parsed = triggerSettingsSchema.safeParse(input);
@@ -39,6 +40,7 @@ export function triggerStore(db: Database) {
     if (Boolean(parsed.data.recording) !== (parsed.data.finish === "clip")) throw new PlannerError(400, "Recorded sources finish when their clip ends.");
     db.transaction(() => {
       plans.read(planId, owner);
+      if (db.query("SELECT 1 FROM demo_feeds WHERE plan_id = ? AND running = 1").get(planId)) throw new PlannerError(409, "Stop the demo feed before editing its settings.");
       if (configuration(planId).revision !== revision) throw new PlannerError(409, "Trigger settings changed. Reload before saving.");
       if (db.query("SELECT 1 FROM task_sessions WHERE plan_id = ? AND state = 'active'").get(planId)) {
         throw new PlannerError(409, "Finish or cancel the current task before changing its triggers.");
@@ -122,6 +124,13 @@ export function triggerStore(db: Database) {
         if (plan.status !== "approved" || !plan.versionId || !plan.contractHash) throw new PlannerError(409, "Review and approve the plan before starting a task.");
         if (db.query("SELECT 1 FROM task_sessions WHERE plan_id = ? AND state = 'active'").get(planId)) throw new PlannerError(409, "A task is already active. Finish or cancel it before starting another.");
         if (config.settings.recording && !plan.videoConsentAt) throw new PlannerError(409, "Approve video sharing before starting a recorded task.");
+        if (config.settings.recording) {
+          const pending = db.query<{ n: number }, []>("SELECT count(*) AS n FROM trigger_captures WHERE state IN ('queued','capturing','captured')").get()!.n;
+          if (pending >= 60) throw new PlannerError(429, "The recording queue is full. Wait for verification to catch up.");
+          const local = db.query<{ n: number }, [string]>(`SELECT count(*) AS n FROM trigger_captures c JOIN task_sessions s ON s.id = c.session_id
+            WHERE s.plan_id = ? AND c.state IN ('queued','capturing','captured')`).get(planId)!.n;
+          if (local >= 20) throw new PlannerError(429, "This plan has 20 recordings waiting. Wait for verification to catch up.");
+        }
         const recent = db.query<{ count: number }, [string]>("SELECT count(*) AS count FROM task_sessions WHERE plan_id = ? AND started_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 day')").get(planId)!.count;
         if (recent >= 200) throw new PlannerError(429, "This plan has reached its daily limit of 200 task sessions.");
         id = crypto.randomUUID();
@@ -140,6 +149,35 @@ export function triggerStore(db: Database) {
       return session(id, planId);
     })();
   }
+  function setFeed(planId: string, owner: string, running: boolean) {
+    db.transaction(() => {
+      const plan = plans.read(planId, owner);
+      const config = configuration(planId);
+      if (running) {
+        if (plan.status !== "approved" || !plan.videoConsentAt) throw new PlannerError(409, "Approve the plan and video sharing before starting the feed.");
+        if (config.settings.recording?.kind !== "demo" || config.settings.recording.id !== DEMO_FEED_ID) throw new PlannerError(409, "Select the demo folder feed as your video source first.");
+      }
+      if (!running) {
+        const now = new Date().toISOString();
+        db.query(`UPDATE runs SET state = 'failed', error_message = ?, completed_at = ? WHERE state = 'queued'
+          AND id IN (SELECT s.run_id FROM task_sessions s JOIN trigger_captures c ON c.session_id = s.id WHERE s.plan_id = ? AND c.auto_feed = 1)`)
+          .run(DEMO_FEED_STOPPED, now, planId);
+        db.query(`UPDATE task_sessions SET state = 'cancelled', ended_at = ? WHERE plan_id = ? AND id IN (
+          SELECT session_id FROM trigger_captures WHERE auto_feed = 1 AND state IN ('queued','capturing','captured')
+        )`).run(now, planId);
+        db.query(`UPDATE trigger_captures SET state = 'failed', error_message = ?, lease_until = NULL
+          WHERE auto_feed = 1 AND state IN ('queued','capturing','captured') AND session_id IN (SELECT id FROM task_sessions WHERE plan_id = ?)`)
+          .run(DEMO_FEED_STOPPED, planId);
+      }
+      const current = db.query<{ running: number; version_id: string | null; configuration_revision: number | null }, [string]>("SELECT * FROM demo_feeds WHERE plan_id = ?").get(planId);
+      if (running && current?.running && current.version_id === plan.versionId && current.configuration_revision === config.revision) return;
+      db.query(`INSERT INTO demo_feeds (plan_id, running, version_id, configuration_revision) VALUES (?, ?, ?, ?)
+        ON CONFLICT(plan_id) DO UPDATE SET running = excluded.running, version_id = excluded.version_id,
+        configuration_revision = excluded.configuration_revision, error_message = NULL, next_at = 0`)
+        .run(planId, running ? 1 : 0, plan.versionId, config.revision);
+    })();
+    return overview(planId, owner);
+  }
   function attachment(id: string, owner: string, versionId: string) {
     const row = db.query<{ plan_id: string }, [string]>("SELECT plan_id FROM task_sessions WHERE id = ?").get(id);
     if (!row) throw new PlannerError(404, "This task session could not be found.");
@@ -149,5 +187,5 @@ export function triggerStore(db: Database) {
     if (current.state !== "finished" || current.runId) throw new PlannerError(409, "Choose a finished task that does not already have a video.");
     return current;
   }
-  return { configuration, overview, save, rotateKey, revokeKey, apiOwner, regenerateLink, fireLink, dispatch, attachment };
+  return { setFeed, configuration, overview, save, rotateKey, revokeKey, apiOwner, regenerateLink, fireLink, dispatch, attachment };
 }

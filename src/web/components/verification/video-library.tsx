@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Film, LoaderCircle, Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DEMO_FEED_STOPPED } from "../../../shared/triggers";
 import type { RunSummary } from "../../../shared/verification";
 import type { RunState } from "../../../shared/receipt";
 import { isActiveRun } from "../../../shared/receipt";
@@ -13,15 +15,37 @@ export const videoStatusLabels: Record<RunState, string> = {
 export function recordingName(runs: RunSummary[], id: string) {
   const index = runs.findIndex((run) => run.id === id);
   const run = runs[index];
+  if (run?.recordingKind === "demo" && /^DEMO-[a-f0-9]{8}$/.test(run.taskReference ?? "")) return `Demo clip ${runs.length - index}`;
   const name = run?.taskReference ?? (index < 0 ? "Recording" : `Recording ${runs.length - index}`);
   return run?.recordingKind === "demo" ? `Demo replay · ${name}` : name;
 }
 
-export function VideoLibrary({ runs, selectedId, loading, error, uploading, refreshing, onSelect, onNew, onRefresh }: {
+export function VideoLibrary({ runs, selectedId, loading, error, uploading, refreshing, onSelect, onNew, onRefresh, compact = false }: {
   runs: RunSummary[]; selectedId: string | null; loading: boolean; error: string | null;
-  uploading: boolean; refreshing: boolean;
+  uploading: boolean; refreshing: boolean; compact?: boolean;
   onSelect: (id: string) => void; onNew: () => void; onRefresh: () => void;
 }) {
+  if (compact) {
+    const queued = runs.filter(run => run.state === "queued").length;
+    const processing = runs.filter(run => isActiveRun(run.state) && run.state !== "queued").length;
+    const label = (run: RunSummary) => run.error === DEMO_FEED_STOPPED ? "Stopped" : videoStatusLabels[run.state];
+    const options = runs.map(run => ({ value: run.id, label: `${recordingName(runs, run.id)} · ${label(run)}` }));
+    return <aside aria-label="Plan video library" className="min-w-0 rounded-xl border bg-card px-3 py-3">
+      <div className="flex min-w-0 flex-wrap items-center gap-3">
+        <div className="mr-auto min-w-0"><h2 className="text-sm font-medium">Feed recordings <span className="text-muted-foreground">· {runs.length}</span></h2><p role="status" className="mt-0.5 text-xs text-muted-foreground">{processing} processing · {queued} queued</p></div>
+        {runs.length > 0 && <Select items={options} value={selectedId} onValueChange={id => { if (id) onSelect(id); }}>
+          <SelectTrigger aria-label="Recording history" className="h-9 w-full min-w-0 sm:w-72"><SelectValue placeholder="Choose a recording" className="truncate" /></SelectTrigger>
+          <SelectContent alignItemWithTrigger={false} className="max-h-80 max-w-[calc(100vw-2rem)]">
+            {runs.map(run => <SelectItem key={run.id} value={run.id} aria-label={`Open ${recordingName(runs, run.id)}, ${label(run)}`} className="py-2 pr-8"><span className="flex min-w-0 items-center gap-2"><VideoThumbnail run={run} /><span className="min-w-0"><span className="block truncate text-xs font-medium">{recordingName(runs, run.id)}</span><span className="block text-[11px] text-muted-foreground">{new Date(run.createdAt).toLocaleTimeString()} · {label(run)} · v{run.planVersion}</span></span></span></SelectItem>)}
+          </SelectContent>
+        </Select>}
+        <Button variant="ghost" size="icon" aria-label="Refresh plan videos" disabled={refreshing} onClick={onRefresh}><RefreshCw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} /></Button>
+        <Button variant="outline" className="h-9 gap-2 text-xs" disabled={uploading} onClick={onNew}><Plus className="size-3.5" />Check another video</Button>
+      </div>
+      {loading && <p role="status" className="mt-2 text-xs text-muted-foreground">Loading videos…</p>}
+      {error && <p role="alert" className="mt-2 text-xs text-destructive">{error}</p>}
+    </aside>;
+  }
   return <aside className="min-w-0 border-b sm:flex sm:items-center" aria-label="Plan video library">
     <div className="flex shrink-0 items-center justify-between gap-2 px-3 py-2 sm:contents">
       <div className="flex shrink-0 items-center gap-1 sm:pr-3"><h2 className="text-[12px] font-medium text-muted-foreground">Videos <span className="text-muted-foreground">({runs.length})</span></h2><Button variant="ghost" size="icon" className="size-8" aria-label="Refresh plan videos" disabled={refreshing} onClick={onRefresh}><RefreshCw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} /></Button></div>

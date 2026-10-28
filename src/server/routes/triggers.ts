@@ -37,6 +37,7 @@ export function triggerRoutes(db: Database, config: Config) {
         recording: t.Optional(t.Object({ kind: t.Union([t.Literal("demo"), t.Literal("camera")]), id: t.String({ minLength: 1, maxLength: 200 }), seconds: t.Integer({ minimum: 1, maximum: 30 }) }, { additionalProperties: false })),
       }, { additionalProperties: false }) }, { additionalProperties: false }),
     })
+    .post("/api/plans/:id/triggers/feed", ({ params, request, body }) => store.setFeed(params.id, sessionHash(request), body.running), { params, body: t.Object({ running: t.Boolean() }, { additionalProperties: false }) })
     .post("/api/plans/:id/triggers/key", ({ params, request }) => store.rotateKey(params.id, sessionHash(request)), { params })
     .delete("/api/plans/:id/triggers/key", ({ params, request }) => store.revokeKey(params.id, sessionHash(request)), { params })
     .post("/api/plans/:id/triggers/links", ({ params, request, body }) => store.regenerateLink(params.id, sessionHash(request), body.action), {

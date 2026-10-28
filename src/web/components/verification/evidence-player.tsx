@@ -23,7 +23,7 @@ async function downloadVideo(id: string) {
   } finally { link.remove(); URL.revokeObjectURL(url); }
 }
 
-export function EvidencePlayer({ run }: { run: RunDetails }) {
+export function EvidencePlayer({ run, autoPlay = true }: { run: RunDetails; autoPlay?: boolean }) {
   const video = useRef<HTMLVideoElement>(null);
   const playerHeading = useRef<HTMLHeadingElement>(null);
   const pendingPosition = useRef<{ seconds: number; play: boolean } | null>(null);
@@ -38,10 +38,11 @@ export function EvidencePlayer({ run }: { run: RunDetails }) {
   }), retry: false });
   const hasMedia = Boolean(run.media);
   useEffect(() => {
+    if (!autoPlay) { video.current?.pause(); return; }
     if (run.state === "completed" && hasMedia) {
       void video.current?.play().catch(() => { /* Native controls remain available when autoplay is blocked. */ });
     }
-  }, [run.state, hasMedia]);
+  }, [run.state, hasMedia, autoPlay]);
 
   const availableFindings = run.state === "completed" ? run.receipt?.findings ?? [] : isActiveRun(run.state) ? run.partialFindings : [];
   const frame = Math.min((run.media?.frameCount ?? 1) - 1, Math.max(0, Math.floor(time * ANALYSIS_FPS + 0.0001)));
@@ -114,7 +115,7 @@ export function EvidencePlayer({ run }: { run: RunDetails }) {
         <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-5"><h3 ref={playerHeading} tabIndex={-1} className="flex items-center gap-2 text-[15px] font-semibold tracking-tight outline-none">Video evidence</h3>{run.media && run.state === "completed" && <Button variant="ghost" className="h-8 gap-2 px-2 text-[12px] text-muted-foreground" onClick={() => download.mutate()} disabled={download.isPending} aria-busy={download.isPending} aria-label="Download video" title="Download MP4 with tracked object boxes">{download.isPending ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : <ArrowDownToLine className="size-4" aria-hidden="true" />}Download video</Button>}</div>
         {run.media ? <>
           <div className="flex min-h-48 items-center justify-center bg-[#171918] p-2 sm:p-4"><div className="relative mx-auto overflow-hidden bg-black" style={{ aspectRatio: `${run.media.width}/${run.media.height}`, width: `min(100%, ${360 * run.media.width / run.media.height}px, ${40 * run.media.width / run.media.height}dvh)` }}>
-            <video ref={video} controls autoPlay={run.state === "completed"} muted loop={run.state === "completed"} playsInline preload="metadata" src={`/api/runs/${run.id}/video`} className="size-full" aria-label="Analysis video for this approved proof plan" onLoadedMetadata={applyPosition} onTimeUpdate={(event) => setTime(event.currentTarget.currentTime)}
+            <video ref={video} controls autoPlay={autoPlay && run.state === "completed"} muted loop={run.recordingKind !== "demo" && run.state === "completed"} playsInline preload="metadata" src={`/api/runs/${run.id}/video`} className="size-full" aria-label="Analysis video for this approved proof plan" onLoadedMetadata={applyPosition} onTimeUpdate={(event) => setTime(event.currentTarget.currentTime)}
               onPlaying={() => { setPlaying(true); setHasPosition(true); }} onPause={() => setPlaying(false)} onWaiting={() => setPlaying(false)}
               onSeeking={(event) => { setPlaying(false); setHasPosition(true); setTime(event.currentTarget.currentTime); }}
               onSeeked={(event) => { setPlaying(!event.currentTarget.paused && !event.currentTarget.ended); setTime(event.currentTarget.currentTime); }}

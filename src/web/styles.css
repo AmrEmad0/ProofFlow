@@ -161,7 +161,7 @@
   .chat-composer-area { @apply shrink-0; }
   .chat-panel-active .chat-composer-area { @apply border-t bg-muted/15; }
   .chat-composer { box-shadow: 0 2px 8px -4px oklch(0.2 0.01 65 / 0.16); }
-  .planner-intro { @apply mx-auto max-w-[720px] justify-start pt-3 pb-1 text-left; }
+  .planner-intro { @apply max-w-[720px] justify-start pt-3 pb-1 text-left; }
   .planner-intro h1 { @apply text-2xl sm:text-[28px] sm:leading-tight; }
   .planner-intro p { @apply max-w-[600px] text-sm leading-6; }
   .workflow-steps-start { @apply mx-auto max-w-[400px]; }

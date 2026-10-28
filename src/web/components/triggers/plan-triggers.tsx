@@ -7,9 +7,9 @@ import { api } from "@/lib/eden";
 import { apiError, planRunsQuery, planTriggersQuery } from "@/lib/queries";
 import { withFeedback } from "@/lib/feedback";
 import type { SavedPlan } from "../../../shared/planner";
-import { defaultTriggerSettings, recordingSourcesSchema, triggerConfigurationSchema, type TaskSession, type TriggerEvent, type TriggerSettings } from "../../../shared/triggers";
+import { DEMO_FEED_ID, defaultTriggerSettings, recordingSourcesSchema, triggerConfigurationSchema, type TaskSession, type TriggerEvent, type TriggerSettings } from "../../../shared/triggers";
 
-type Action = { type: "settings"; settings: Partial<TriggerSettings> }
+type Action = { type: "feed"; running: boolean } | { type: "settings"; settings: Partial<TriggerSettings> }
   | { type: "event"; source: "manual" | "scanner"; event: TriggerEvent }
   | { type: "regenerate"; action: "start" | "finish" };
 const choices = [
@@ -54,7 +54,11 @@ export function PlanTriggers({ saved, onEnsurePlan, onAttach, setup = false, dis
     mutationFn: async (action: Action) => {
       const target = saved ?? await onEnsurePlan();
       const endpoint = api.api.plans({ id: target.id }).triggers;
-      if (action.type === "settings" || action.type === "regenerate") {
+      if (action.type === "feed") {
+        const response = await endpoint.feed.post({ running: action.running });
+        if (response.error) throw apiError(response.error.value, "The demo feed could not be updated.");
+        await client.invalidateQueries({ queryKey: planRunsQuery(target.id).queryKey });
+      } else if (action.type === "settings" || action.type === "regenerate") {
         await client.cancelQueries({ queryKey: planTriggersQuery(target.id).queryKey });
         const latest = client.getQueryData(planTriggersQuery(target.id).queryKey)?.configuration;
         const response = action.type === "settings"
@@ -81,7 +85,7 @@ export function PlanTriggers({ saved, onEnsurePlan, onAttach, setup = false, dis
     mutation.mutate({ type: "event", source, event: { ...payload, eventId: retryEvent.current.eventId } });
   }
   const busy = disabled || mutation.isPending || Boolean(saved && !query.data);
-  const locked = busy || Boolean(active);
+  const locked = busy || Boolean(active) || Boolean(query.data?.feed?.running);
   const recent = query.data?.sessions.filter(task => task.state !== "active") ?? [];
   return <aside aria-label="Plan triggers" className="min-w-0 rounded-2xl border bg-card/70 p-4 lg:sticky lg:top-6">
     <div className="mb-4 flex items-center gap-2.5"><span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary"><Zap className="size-4" aria-hidden="true" /></span><div><h2 className="text-sm font-semibold">Triggers</h2></div>{mutation.isPending && <LoaderCircle className="ml-auto size-3.5 animate-spin text-muted-foreground" aria-label="Saving trigger" />}</div>
@@ -94,7 +98,7 @@ export function PlanTriggers({ saved, onEnsurePlan, onAttach, setup = false, dis
         {settings.start === value && <Check className="size-3.5 shrink-0 text-primary" aria-hidden="true" />}
       </button>)}
     </div>
-    </> : <div className="space-y-2"><p className="text-sm font-medium">{choices.find(choice => choice.value === settings.start)?.label}</p><p className="text-xs text-muted-foreground">{settings.recording ? `${settings.recording.kind === "demo" ? "Demo replay" : "Camera"} · ${settings.recording.id}` : "Attach video after finishing"}</p><Button variant="outline" size="sm" disabled={locked} onClick={() => setEditing(true)}>Edit trigger settings</Button></div>}
+    </> : <div className="space-y-2"><p className="text-sm font-medium">{choices.find(choice => choice.value === settings.start)?.label}</p><p className="text-xs text-muted-foreground">{settings.recording ? `${settings.recording.kind === "demo" ? "Demo replay" : "Camera"} · ${settings.recording.id === DEMO_FEED_ID ? "Folder feed" : settings.recording.id}` : "Attach video after finishing"}</p><Button variant="outline" size="sm" disabled={locked} onClick={() => setEditing(true)}>Edit trigger settings</Button></div>}
     {settings.start === "api" && <TriggerLink action="start" path={configured?.links.start ?? null} disabled={locked} onRegenerate={() => mutation.mutate({ type: "regenerate", action: "start" })} />}
     {!configuring && settings.start === "scanner" && <p className="mt-3 text-xs leading-5 text-muted-foreground">Enter an order or scan a barcode.</p>}
     {configuring && <>
@@ -121,7 +125,7 @@ export function PlanTriggers({ saved, onEnsurePlan, onAttach, setup = false, dis
           {videoSourceOptions.map(option => <SelectItem key={option.value} value={option.value} className="py-2 pr-8 text-sm">{option.label}</SelectItem>)}
         </SelectContent>
       </Select>
-      {settings.recording && <><label className="block text-xs">Clip length (seconds)<input aria-label="Maximum clip length" type="number" min={1} max={30} className={`${field} mt-2`} disabled={locked} value={settings.recording.seconds} onChange={event => { const seconds = Number(event.target.value); if (Number.isInteger(seconds) && seconds >= 1 && seconds <= 30) mutation.mutate({ type: "settings", settings: { recording: { ...settings.recording!, seconds } } }); }} /></label><p className="text-xs leading-5 text-muted-foreground">{settings.recording.kind === "demo" ? "Replays this demo clip, then verifies it." : "Records a new clip, then verifies it."}</p></>}
+      {settings.recording && <><label className="block text-xs">Clip length (seconds)<input aria-label="Maximum clip length" type="number" min={1} max={30} className={`${field} mt-2`} disabled={locked} value={settings.recording.seconds} onChange={event => { const seconds = Number(event.target.value); if (Number.isInteger(seconds) && seconds >= 1 && seconds <= 30) mutation.mutate({ type: "settings", settings: { recording: { ...settings.recording!, seconds } } }); }} /></label><p className="text-xs leading-5 text-muted-foreground">{settings.recording.kind === "demo" ? settings.recording.id === DEMO_FEED_ID ? "Each trigger takes the next video. Automatic feed repeats at this interval, looping through the folder." : "Replays this demo clip, then verifies it." : "Records a new clip, then verifies it."}</p></>}
       {sources.error && <p role="alert" className="text-xs text-destructive">{sources.error.message}</p>}
     </div>
     {editing && <Button className="mt-3 w-full" size="sm" disabled={busy} onClick={() => setEditing(false)}>Done editing</Button>}
@@ -132,8 +136,14 @@ export function PlanTriggers({ saved, onEnsurePlan, onAttach, setup = false, dis
       <label className="block text-xs font-medium">{settings.start === "scanner" ? "Order reference or barcode" : "Order reference (optional)"}<input className={`${field} mt-2`} value={reference} maxLength={120} required={settings.start === "scanner"} disabled={busy} onChange={event => setReference(event.target.value)} placeholder="ORDER-1042" autoComplete="off" /></label>
       <Button type="submit" disabled={busy} className="h-10 w-full text-sm">{settings.start === "scanner" ? "Start task" : "Start task"}</Button>
     </form>}
+    {saved?.status === "approved" && !configuring && settings.recording?.kind === "demo" && settings.recording.id === DEMO_FEED_ID && <div className="mt-4 space-y-2 border-t pt-4">
+      <Button className="w-full" variant={query.data?.feed?.running ? "outline" : "default"} disabled={busy} onClick={() => mutation.mutate({ type: "feed", running: !query.data?.feed?.running })}>{query.data?.feed?.running ? "Stop demo feed" : "Start demo feed"}</Button>
+      <p role="status" className="text-xs leading-5 text-muted-foreground">{query.data?.feed?.running ? "Feed running. Videos cycle into the verification queue." : "Start automatic feeding, or use the configured trigger for the next video."} Stop cancels waiting demo videos and pauses playback. A verification already in progress may finish.</p>
+      <p className="text-xs text-muted-foreground">Waiting: {query.data?.sessions.filter(task => task.captureState && ["queued", "capturing", "captured"].includes(task.captureState)).length ?? 0} · Videos selected: {query.data?.feed?.position ?? 0}</p>
+      {query.data?.feed?.error && <p role="alert" className="text-xs text-destructive">{query.data.feed.error}</p>}
+    </div>}
     {active && <div className="mt-5 space-y-3 border-t pt-4"><p role="status" className="break-words text-sm font-medium">Active task: {active.reference ?? "In progress"}</p><p className="text-xs leading-5 text-muted-foreground">{active.settings.recording ? `Recording ${active.settings.recording.kind === "demo" ? "demo replay" : "camera clip"} · ${active.captureState === "captured" ? "waiting for verification queue" : active.captureState ?? "queued"}. Verification starts automatically.` : "Task started. Attach its recording after finishing."}</p><div className="flex flex-wrap gap-2">{active.settings.finish === "manual" && <Button size="sm" disabled={busy} onClick={() => send("finish", "manual", active.id)}>Finish task</Button>}<Button size="sm" variant="ghost" disabled={busy} onClick={() => send("cancel", "manual", active.id)}>Cancel task</Button></div></div>}
-    {recent.length > 0 && <details className="mt-4 border-t pt-3"><summary className="cursor-pointer py-1 text-xs font-medium text-muted-foreground">Recent tasks · {recent.length}</summary><div className="mt-2 space-y-3">{recent.slice(0, 5).map(task => <div key={task.id} className="min-w-0"><p className="break-words text-xs font-medium">{task.reference ?? "Task"}</p><p className="mt-1 text-[11px] text-muted-foreground">{task.captureError ?? (task.state === "finished" ? task.runId ? "Video attached" : "Awaiting video" : "Cancelled")}</p>{task.state === "finished" && !task.runId && !task.settings.recording && <Button variant="outline" size="sm" className="mt-2" disabled={busy || !saved?.videoConsentAt} onClick={() => onAttach(task)}>Attach video</Button>}</div>)}</div></details>}
+    {recent.length > 0 && <details className="mt-4 border-t pt-3"><summary className="cursor-pointer py-1 text-xs font-medium text-muted-foreground">Recent tasks · {recent.length}</summary><div className="mt-2 space-y-3">{recent.slice(0, 5).map(task => <div key={task.id} className="min-w-0"><p className="break-words text-xs font-medium">{task.reference ?? "Task"}{task.demoFilename && <span className="mt-1 block font-normal text-muted-foreground">{task.demoFilename}</span>}</p><p className="mt-1 text-[11px] text-muted-foreground">{task.captureError ?? (task.state === "finished" ? task.runId ? "Video attached" : task.captureState === "captured" ? "Waiting for verification" : "Awaiting video" : "Cancelled")}</p>{task.state === "finished" && !task.runId && !task.settings.recording && <Button variant="outline" size="sm" className="mt-2" disabled={busy || !saved?.videoConsentAt} onClick={() => onAttach(task)}>Attach video</Button>}</div>)}</div></details>}
     {(mutation.error || query.error) && <p role="alert" className="mt-3 text-xs leading-5 text-destructive">{mutation.error?.message ?? query.error?.message}<button className="ml-1 underline" onClick={() => { void query.refetch(); }}>Reload</button></p>}
   </aside>;
 }

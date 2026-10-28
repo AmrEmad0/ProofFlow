@@ -3,6 +3,7 @@ import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { useToastManager } from "@/components/ui/toast";
 import { runDetailsQuery } from "@/lib/queries";
+import { DEMO_FEED_STOPPED } from "../../../shared/triggers";
 import { isActiveRun } from "../../../shared/receipt";
 
 const storageKey = "proofflow.pendingVerifications";
@@ -18,7 +19,7 @@ function pendingRuns(): string[] {
 
 export function VerificationFeedbackProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
-  const { add: addToast } = useToastManager();
+  const { add: addToast, close: closeToast } = useToastManager();
   const [ids, setIds] = useState(pendingRuns);
   const watched = useRef(new Set(ids));
   const announced = useRef(new Set<string>());
@@ -44,7 +45,8 @@ export function VerificationFeedbackProvider({ children }: { children: ReactNode
       if (run && !isActiveRun(run.state)) {
         if (!notified.current.has(id)) {
           notified.current.add(id);
-          addToast({ id: toastId, type: run.state === "completed" ? "success" : "error", title: run.state === "completed" ? "Findings ready" : "Video verification failed", description: run.state === "completed" ? run.approvedPlan.title : run.error ?? "No verdict was produced. Please try another recording.", timeout: 6000 });
+          if (run.error === DEMO_FEED_STOPPED) closeToast(toastId);
+          else addToast({ id: toastId, type: run.state === "completed" ? "success" : "error", title: run.state === "completed" ? "Findings ready" : "Video verification failed", description: run.state === "completed" ? run.approvedPlan.title : run.error ?? "No verdict was produced. Please try another recording.", timeout: 6000 });
           void queryClient.invalidateQueries({ queryKey: ["runs"] });
         }
         settled.add(id);
@@ -63,7 +65,7 @@ export function VerificationFeedbackProvider({ children }: { children: ReactNode
       }
     });
     if (settled.size) setIds((current) => current.filter((id) => !settled.has(id)));
-  }, [ids, results, queryClient, addToast]);
+  }, [ids, results, queryClient, addToast, closeToast]);
 
   return <VerificationFeedbackContext.Provider value={watch}>{children}</VerificationFeedbackContext.Provider>;
 }

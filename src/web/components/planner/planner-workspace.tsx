@@ -294,7 +294,9 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
     <SidebarProvider style={{ "--sidebar-width-icon": "4rem" } as CSSProperties}>
       <WorkspaceSidebar plans={templates.data ?? []} activeId={activeId} pending={pending} loading={templates.isPending} error={templates.error?.message ?? null} canInspect={Boolean(saved)} onSelect={(id) => {
         select(id);
-        void withFeedback(queryClient.fetchQuery(savedPlanQuery(id)), { loading: "Opening plan…", success: "Plan opened", error: "Couldn’t open plan" }).catch(() => {});
+        void queryClient.fetchQuery(savedPlanQuery(id)).catch((error: unknown) => {
+          toast.add({ type: "error", title: "Couldn’t open plan", description: error instanceof Error ? error.message : "Please try again.", timeout: 8000 });
+        });
       }} onNew={() => {
         select(null);
         toast.add({ type: "info", title: "Ready for a new plan" });
@@ -314,7 +316,7 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
                 </li>
               ))}
             </ol>
-            {!videoView && <div className={`mb-6 flex flex-wrap items-start justify-between gap-4 ${!hasPlan ? "planner-intro" : ""}`}>{pageHeading}{Boolean(previousRuns.data?.length) && <Button variant="outline" onClick={() => { setEditingApproved(false); setView("video"); }}>Videos & evidence ({previousRuns.data!.length})</Button>}</div>}
+            {!videoView && <div className="mb-6 grid gap-6 lg:grid-cols-[230px_minmax(0,1fr)]"><div className={`min-w-0 flex flex-wrap items-start justify-between gap-4 lg:col-start-2 ${!hasPlan ? "planner-intro" : ""}`}>{pageHeading}{Boolean(previousRuns.data?.length) && <Button variant="outline" onClick={() => { setEditingApproved(false); setView("video"); }}>Videos & evidence ({previousRuns.data!.length})</Button>}</div></div>}
             {undo && saved?.id === undo.planId && saved.revision === undo.revision && <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-primary/5 p-4"><p role="status" className="text-base">{undo.message}</p><Button variant="outline" disabled={pending} onClick={() => act({ type: "restore", versionId: undo.versionId })}><RotateCcw />Undo change</Button></div>}
             {displayedError && (videoView || loading) && <p role="alert" className="mb-4 rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">{displayedError}</p>}
             <div className={loading ? "" : "grid items-start gap-6 lg:grid-cols-[230px_minmax(0,1fr)]"}>

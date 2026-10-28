@@ -1,6 +1,7 @@
 import { readdir, realpath } from "node:fs/promises";
 import { basename, join, sep } from "node:path";
 import { z } from "zod";
+import { DEMO_FEED_ID } from "../../shared/triggers";
 import type { Config } from "../config";
 import { PlannerError } from "../planner/store";
 
@@ -12,7 +13,8 @@ export async function recordingSources(config: Config) {
     if (error.code === "ENOENT") return [];
     throw error;
   });
-  return [...entries.filter(entry => entry.isFile() && /\.(mp4|mov|webm)$/i.test(entry.name)).map(entry => ({ kind: "demo" as const, id: entry.name, label: entry.name })),
+  const demos = entries.filter(entry => entry.isFile() && /\.(mp4|mov|webm)$/i.test(entry.name)).map(entry => ({ kind: "demo" as const, id: entry.name, label: entry.name })).sort((a, b) => a.id.localeCompare(b.id, "en", { numeric: true }));
+  return [...(demos.length ? [{ kind: "demo" as const, id: DEMO_FEED_ID, label: `Folder feed · ${demos.length} videos` }] : []), ...demos,
     ...Object.keys(cameras(config)).map(id => ({ kind: "camera" as const, id, label: id }))];
 }
 export async function recordingInput(config: Config, kind: "demo" | "camera", id: string) {
@@ -20,6 +22,11 @@ export async function recordingInput(config: Config, kind: "demo" | "camera", id
     const url = cameras(config)[id];
     if (!url) throw new PlannerError(400, "This camera is no longer configured.");
     return url;
+  }
+  if (id === DEMO_FEED_ID) {
+    const first = (await recordingSources(config)).find(source => source.kind === "demo" && source.id !== DEMO_FEED_ID);
+    if (!first) throw new PlannerError(400, "Add at least one demo video to the folder first.");
+    return recordingInput(config, "demo", first.id);
   }
   if (basename(id) !== id || !/\.(mp4|mov|webm)$/i.test(id)) throw new PlannerError(400, "Choose a demo video from the configured folder.");
   const root = await realpath(config.DEMO_VIDEO_PATH);

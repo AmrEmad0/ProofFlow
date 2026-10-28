@@ -194,6 +194,25 @@ const migrations = [{
     state TEXT NOT NULL CHECK (state IN ('queued','capturing','captured','done','failed')),
     lease_until INTEGER, error_message TEXT
   );`,
+}, {
+  version: 13,
+  sql: `ALTER TABLE trigger_captures ADD COLUMN demo_filename TEXT;
+    CREATE TABLE demo_feeds (
+      plan_id TEXT PRIMARY KEY REFERENCES plans(id) ON DELETE CASCADE,
+      running INTEGER NOT NULL DEFAULT 0,
+      position INTEGER NOT NULL DEFAULT 0,
+      version_id TEXT,
+      configuration_revision INTEGER,
+      next_at INTEGER NOT NULL DEFAULT 0,
+      error_message TEXT
+    );`,
+}, {
+  version: 14,
+  sql: `ALTER TABLE trigger_captures ADD COLUMN auto_feed INTEGER NOT NULL DEFAULT 0;
+    UPDATE trigger_captures SET auto_feed = 1 WHERE session_id IN (
+      SELECT id FROM task_sessions WHERE reference GLOB 'DEMO-????????'
+      AND json_extract(settings_json, '$.recording.id') = '__demo_feed__'
+    );`,
 }];
 
 export function migrate(db: Database): void {

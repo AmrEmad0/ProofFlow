@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const DEMO_FEED_STOPPED = "Stopped with the demo feed.";
+export const DEMO_FEED_ID = "__demo_feed__";
 export const triggerSourceSchema = z.enum(["manual", "scanner", "api"]);
 export const triggerSettingsSchema = z.strictObject({
   start: triggerSourceSchema,
@@ -26,12 +28,14 @@ export const taskSessionSchema = z.strictObject({
   reference: z.string().nullable(), source: triggerSourceSchema,
   state: z.enum(["active", "finished", "cancelled"]),
   captureState: z.enum(["queued", "capturing", "captured", "done", "failed"]).nullable().optional(),
+  demoFilename: z.string().nullable().optional(),
   captureError: z.string().nullable().optional(),
   startedAt: z.string(), endedAt: z.string().nullable(), runId: z.uuid().nullable(),
 });
 export const triggerOverviewSchema = z.strictObject({
   configuration: triggerConfigurationSchema,
   sessions: z.array(taskSessionSchema),
+  feed: z.strictObject({ running: z.boolean(), position: z.number().int().nonnegative(), error: z.string().nullable() }).nullable().optional(),
 });
 export type TriggerSettings = z.infer<typeof triggerSettingsSchema>;
 export type TriggerEvent = z.infer<typeof triggerEventSchema>;

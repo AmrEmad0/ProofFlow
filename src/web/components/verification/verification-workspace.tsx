@@ -16,6 +16,7 @@ import { EvidencePlayer } from "./evidence-player";
 import { recordingName, VideoLibrary } from "./video-library";
 import { VideoUpload } from "./video-upload";
 import { VerificationStatus } from "./verification-status";
+import { DEMO_FEED_ID } from "../../../shared/triggers";
 import type { TaskSession } from "../../../shared/triggers";
 
 const selectionKey = (planId: string) => `proofflow.videoSelection.${planId}`;
@@ -43,6 +44,8 @@ export function VerificationWorkspace({ saved, heading, visible, startNewUpload,
   const listKey = planRunsQuery(saved.id).queryKey;
   const readiness = useQuery(verificationStatusQuery);
   const runs = useQuery(planRunsQuery(saved.id));
+  const triggers = useQuery(planTriggersQuery(saved.id));
+  const recordingSource = triggers.data?.configuration.settings.recording;
   const recordings = runs.data ?? [];
   const runId = selection === "upload" ? null : selection ?? recordings[0]?.id ?? null;
   const details = useQuery(runDetailsQuery(runId));
@@ -58,6 +61,12 @@ export function VerificationWorkspace({ saved, heading, visible, startNewUpload,
   useEffect(() => {
     if (task) { setSelection("upload"); setConfirmDelete(false); setError(null); }
   }, [task?.id]);
+
+  useEffect(() => {
+    if (!recordingSource || selection !== "upload" || task || file) return;
+    const incoming = recordings.find(item => item.recordingKind === "demo" || item.recordingKind === "camera");
+    if (incoming) { setSelection(incoming.id); setConfirmDelete(false); setError(null); }
+  }, [runs.data, selection, task?.id, file, recordingSource?.kind, recordingSource?.id]);
 
   useEffect(() => {
     if (!file) { setPreview(null); return; }
@@ -154,16 +163,21 @@ export function VerificationWorkspace({ saved, heading, visible, startNewUpload,
       {runId && run && <div className="min-w-0 sm:text-right"><h2 className="text-[14px] font-semibold tracking-tight">{recordingName(recordings, run.id)}</h2><p className="mt-1 text-[12px] leading-5 text-muted-foreground">{new Date(run.createdAt).toLocaleString()}{run.durationMs ? ` · ${(run.durationMs / 1000).toFixed(1)} seconds` : ""} · Plan v{run.planVersion}</p></div>}
     </div>
     <div className="min-w-0 space-y-3">
-      {showLibrary && <VideoLibrary runs={recordings} selectedId={runId} loading={runs.isPending} error={runs.error?.message ?? null} uploading={upload.isPending || processing} refreshing={runs.isRefetching} onSelect={id => { onClearTask?.(); selectVideo(id); }} onNew={() => { onClearTask?.(); if (saved.status === "approved" && consent) chooser.current?.click(); else onReviewPlan(); }} onRefresh={refreshRuns} />}
+      {showLibrary && <VideoLibrary compact={recordingSource?.id === DEMO_FEED_ID || recordings.some(item => item.recordingKind === "demo")} runs={recordings} selectedId={runId} loading={runs.isPending} error={runs.error?.message ?? null} uploading={upload.isPending || processing} refreshing={runs.isRefetching} onSelect={id => { onClearTask?.(); selectVideo(id); }} onNew={() => { onClearTask?.(); if (saved.status === "approved" && consent) chooser.current?.click(); else onReviewPlan(); }} onRefresh={refreshRuns} />}
+      {recordingSource?.id === DEMO_FEED_ID && triggers.data?.feed?.running === false && recordings.some(item => item.recordingKind === "demo" && isActiveRun(item.state) && item.state !== "queued") && <p role="status" className="rounded-lg border bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground">Demo feed stopped. A recording already in verification is finishing; no more feed videos will start.</p>}
       {task && <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-primary/5 p-3 text-sm"><p>Attach a recording for <strong>{task.reference ?? "this task"}</strong>. Verification uses the approved checks saved when it started.</p><Button variant="ghost" size="sm" disabled={upload.isPending} onClick={onClearTask}>Remove task link</Button></div>}
       <div className="min-w-0 space-y-3">
         {displayedError && <div role="alert" className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm leading-6 text-destructive">{displayedError}{!error && <button className="ml-2 underline" onClick={refreshRuns}>Reload videos</button>}</div>}
         {runId ? run ? <>
           <VerificationStatus run={run} />
           {run.warnings.map((warning) => <p key={warning} className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900">{warning}</p>)}
-          <EvidencePlayer key={run.id} run={run} />
+          <EvidencePlayer key={run.id} run={run} autoPlay={run.recordingKind !== "demo" || recordingSource?.id !== DEMO_FEED_ID || Boolean(triggers.data?.feed?.running)} />
           {!isActiveRun(run.state) && <div className="flex flex-wrap items-center justify-between gap-3 px-1 py-2"><span className="text-[12px] text-muted-foreground">Expires {new Date(run.expiresAt).toLocaleString()}</span><div className="flex flex-wrap gap-2">{run.receipt && <Button variant="outline" className="h-8 gap-2 rounded-lg px-3" onClick={exportReceipt}><ArrowDownToLine />Export evidence</Button>}{confirmDelete ? <><Button variant="destructive" className="h-8 px-3" disabled={remove.isPending} onClick={() => remove.mutate(run.id)}>Delete video & evidence</Button><Button variant="ghost" disabled={remove.isPending} onClick={() => setConfirmDelete(false)}>Cancel</Button></> : <Button variant="ghost" className="h-8 gap-2 px-3" onClick={() => setConfirmDelete(true)}><Trash2 />Delete</Button>}</div></div>}
-        </> : details.isPending ? <div role="status" className="flex min-h-64 items-center justify-center gap-2 rounded-2xl border bg-card p-6 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Loading video…</div> : <div className="rounded-2xl border bg-card p-6 text-sm text-muted-foreground">This video could not be opened. Select another recording or add a new video.</div> : runs.isPending && selection === null ? <p role="status" className="p-6 text-sm text-muted-foreground">Loading your video library…</p> : (!task && saved.status !== "approved") || !consent ? <section className="rounded-2xl border bg-card p-5"><h2 className="text-lg font-semibold">Review your updated checks</h2><p className="mt-2 text-sm text-muted-foreground">Your earlier recordings are still available. Review your updated plan, then choose Check a video.</p><Button variant="outline" className="mt-4" onClick={onReviewPlan}>Review checks</Button></section> : <>
+        </> : details.isPending ? <div role="status" className="flex min-h-64 items-center justify-center gap-2 rounded-2xl border bg-card p-6 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Loading video…</div> : <div className="rounded-2xl border bg-card p-6 text-sm text-muted-foreground">This video could not be opened. Select another recording or add a new video.</div> : runs.isPending && selection === null ? <p role="status" className="p-6 text-sm text-muted-foreground">Loading your video library…</p> : recordingSource && !task && !file && saved.status === "approved" && consent ? <section aria-label="Recording source status" className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-2xl border bg-card p-6 text-center">
+          {triggers.data?.feed?.running || triggers.data?.sessions.some(item => item.captureState && ["queued", "capturing", "captured"].includes(item.captureState)) ? <LoaderCircle className="size-6 animate-spin text-primary" aria-hidden="true" /> : null}
+          <h2 className="text-lg font-semibold">{recordingSource.kind === "demo" ? "Waiting for demo video" : "Waiting for camera recording"}</h2>
+          <p role="status" className="max-w-md text-sm leading-6 text-muted-foreground">{triggers.data?.feed?.running ? "The demo feed is running. Its next recording will open here automatically when it enters verification." : "Use the configured trigger to start a recording. Its video and evidence will open here automatically."}</p>
+        </section> : (!task && saved.status !== "approved") || !consent ? <section className="rounded-2xl border bg-card p-5"><h2 className="text-lg font-semibold">Review your updated checks</h2><p className="mt-2 text-sm text-muted-foreground">Your earlier recordings are still available. Review your updated plan, then choose Check a video.</p><Button variant="outline" className="mt-4" onClick={onReviewPlan}>Review checks</Button></section> : <>
           {!task && <details className="rounded-xl border bg-card px-4 py-2"><summary className="cursor-pointer py-1 text-sm font-medium">Plan checks & filming tips</summary><RecordingChecklist saved={saved} onReviewPlan={onReviewPlan} /></details>}
           <VideoUpload file={file} localUrl={localUrl} uploading={upload.isPending} processing={processing} available={readiness.data?.available ?? false} retentionHours={readiness.data?.retentionHours ?? 24} version={task ? null : saved.version} onChoose={choose} onClear={() => { setFile(null); setError(null); }} onInvalid={selectionError} onUpload={() => upload.mutate()} />
         </>}
