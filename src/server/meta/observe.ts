@@ -1,6 +1,6 @@
 import type OpenAI from "openai";
 import { z } from "zod";
-import { approvedPlanSchema, type ApprovedPlan } from "../../shared/proof-plan";
+import { approvedPlanSchema, canonicalConcept, type ApprovedPlan } from "../../shared/proof-plan";
 import { MODELS } from "./client";
 import { currentObservationSchema, type Observation } from "../../shared/observation";
 export { observationSchema, currentObservationSchema, type Observation } from "../../shared/observation";
@@ -29,7 +29,8 @@ export function validateObservation(result: Observation, approved: ApprovedPlan,
       || candidate.target && candidate.target.concept !== step.targetConcept) throw new Error("Muse changed an approved concept.");
     if (result.schemaVersion === 2 && Boolean(candidate.target) !== Boolean(step.targetConcept)) throw new Error("Muse omitted an approved target.");
     for (const ref of candidate.grounding ?? []) {
-      if (![step.subjectConcept, step.targetConcept].includes(ref.concept) || ref.timestampMs >= durationMs) throw new Error("Muse returned an invalid grounding reference.");
+      if (![step.subjectConcept, step.targetConcept].some(concept => concept !== null && canonicalConcept(concept) === canonicalConcept(ref.concept))
+        || ref.timestampMs >= durationMs) throw new Error("Muse returned an invalid grounding reference.");
     }
   }
   return result;
@@ -59,7 +60,7 @@ export async function observeVideo(client: OpenAI, fileId: string, plan: Approve
   if (response.status !== "completed") throw new Error(`Muse video observation did not complete (${response.status}: ${response.incomplete_details?.reason ?? "no completion reason"}).`);
   const observation = validateObservation(currentObservationSchema.parse(JSON.parse(response.output_text)), approved, durationMs);
   for (const candidate of observation.candidates) for (const ref of candidate.grounding ?? []) {
-    if (!context || !context.frames.some(frame => frame.timestampMs === ref.timestampMs && (!frame.objects || frame.objects.some(object => object.concept === ref.concept && object.objectId === ref.objectId)))) throw new Error("Muse referenced an object outside the supplied grounding frames.");
+    if (!context || !context.frames.some(frame => frame.timestampMs === ref.timestampMs && frame.objects?.some(object => canonicalConcept(object.concept) === canonicalConcept(ref.concept) && object.objectId === ref.objectId))) throw new Error("Muse referenced an object outside the supplied grounding frames.");
   }
   return observation;
 }

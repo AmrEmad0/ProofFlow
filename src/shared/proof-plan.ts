@@ -60,8 +60,10 @@ export type ProofStep = z.infer<typeof proofStepSchema>;
 export type ProofPlan = z.infer<typeof proofPlanSchema>;
 export type ApprovedPlan = z.infer<typeof approvedPlanSchema>;
 
+export const canonicalConcept = (concept: string) => concept.trim().toLowerCase();
+
 export function trackedConcepts(plan: { steps: ProofStep[] }): string[] {
   return [...new Set(plan.steps.flatMap((step) => [step.subjectConcept, step.targetConcept])
     .filter((concept): concept is string => concept !== null)
-    .map((concept) => concept.trim().toLowerCase()))];
+    .map(canonicalConcept))];
 }

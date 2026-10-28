@@ -1,13 +1,13 @@
-import type { ApprovedPlan, ProofStep } from "../../shared/proof-plan";
+import { canonicalConcept as canonical, type ApprovedPlan, type ProofStep } from "../../shared/proof-plan";
 import { findingSchema, type Finding } from "../../shared/receipt";
 import { ANALYSIS_FPS, type ConceptTrack, type TrackBox } from "../../shared/verification";
 import { structuredConflicts, type Observation } from "../../shared/observation";
 import { verificationDiagnosticsSchema, type StepCheck, type TrackWindow } from "../../shared/diagnostics";
 
-export const VERIFICATION_RULE_VERSION = "2026-10-28.6";
+export const VERIFICATION_RULE_VERSION = "2026-10-28.7";
 type Candidate = Observation["candidates"][number];
 type Anchor = { objectId: string; firstFrame: number };
-const canonical = (concept: string) => concept.trim().toLowerCase();
+type EvaluatedStep = StepCheck & { actionEndMs?: number };
 const fullyFramed = (box: TrackBox) => box.left > 0 && box.top > 0 && box.right < 1 && box.bottom < 1;
 
 function continuousTrack(track: ConceptTrack | undefined, first: number, last: number, objectId?: string): TrackBox[] | null {
@@ -59,7 +59,7 @@ function refs(boxes: TrackBox[], concept: string) {
 }
 
 function evaluateEntry(step: ProofStep, candidate: Candidate, check: StepCheck, subjectTrack: ConceptTrack | undefined,
-  regionTrack: ConceptTrack | undefined, subjectAnchor: Anchor | undefined, targetAnchor: Anchor | undefined): StepCheck {
+  regionTrack: ConceptTrack | undefined, subjectAnchor: Anchor | undefined, targetAnchor: Anchor | undefined): EvaluatedStep {
   const first = check.firstFrame!;
   const last = check.lastFrame!;
   const base = check.finding;
@@ -128,7 +128,9 @@ function evaluateEntry(step: ProofStep, candidate: Candidate, check: StepCheck, 
     const event = aligned.sort((a, b) => a.subject.at(-1)!.frameIndex - b.subject.at(-1)!.frameIndex)[0]!;
     check.subject!.selectedObjectId = event.subject[0]!.objectId;
     check.target!.selectedObjectId = event.region[0]!.objectId;
-    return { ...check, decision: "entry_geometry", finding: { ...base, status: "observed",
+    // The final two inside samples confirm persistence, not additional motion.
+    return { ...check, actionEndMs: Math.round(Math.max(event.subject.at(-3)!.frameIndex, actionFrame ?? 0) * 1000 / ANALYSIS_FPS),
+      decision: "entry_geometry", finding: { ...base, status: "observed",
       startMs: Math.round(event.subject[0]!.frameIndex * 1000 / ANALYSIS_FPS),
       endMs: Math.round(event.subject.at(-1)!.frameIndex * 1000 / ANALYSIS_FPS),
       evidence: [...refs(event.subject, step.subjectConcept), ...refs(event.region, step.targetConcept!)],
@@ -142,7 +144,7 @@ function evaluateEntry(step: ProofStep, candidate: Candidate, check: StepCheck, 
     explanation: "No unique, continuously tracked outside-to-inside transition supports the proposal. Missing detections, overlap, or disappearance cannot establish entry." } };
 }
 
-function evaluate(step: ProofStep, candidate: Candidate | undefined, tracks: ConceptTrack[], frameCount: number, anchors: Anchor[], targetAnchors: Anchor[]): StepCheck {
+function evaluate(step: ProofStep, candidate: Candidate | undefined, tracks: ConceptTrack[], frameCount: number, anchors: Anchor[], targetAnchors: Anchor[]): EvaluatedStep {
   const base: Finding = { stepId: step.id, status: "uncertain", startMs: candidate?.startMs ?? null, endMs: candidate?.endMs ?? null,
     explanation: "Muse did not locate a usable event window. This does not establish that the action never happened.", evidence: [] };
   const check: StepCheck = { stepId: step.id, firstFrame: null, lastFrame: null, subject: null, target: null,
@@ -254,13 +256,23 @@ function evaluate(step: ProofStep, candidate: Candidate | undefined, tracks: Con
   base.startMs = Math.round(subjectFirst * 1000 / ANALYSIS_FPS);
   base.endMs = Math.round(subjectLast * 1000 / ANALYSIS_FPS);
   base.evidence = refs(subject, step.subjectConcept);
+  let targetEvidence: Finding["evidence"] = [];
+  if (step.targetConcept) {
+    const linkedTarget = targetAnchor ? continuousTrack(regionTrack, Math.min(subjectFirst, targetAnchor.firstFrame), subjectLast, targetAnchor.objectId) : null;
+    const target = targetAnchor ? linkedTarget?.filter(box => box.frameIndex >= subjectFirst) ?? null : continuousTrack(regionTrack, subjectFirst, subjectLast);
+    check.target = describeTrack(step.targetConcept, regionTrack, subjectFirst, subjectLast);
+    if (!target) return finish("target_track", { ...base, explanation: "The approved target lacks a single continuous track across the required evidence. The finding remains uncertain." });
+    check.target.selectedObjectId = target[0]!.objectId;
+    targetEvidence = refs(target, step.targetConcept);
+    base.evidence.push(...targetEvidence);
+  }
   const supported = candidate.actionVisible && candidate.beforeMatches && candidate.afterMatches;
 
   if (step.checkType === "object_present_at_end") {
     const ending = continuousTrack(subjectTrack, Math.max(0, frameCount - 3), frameCount - 1, anchor?.objectId);
     if (candidate.afterMatches && ending && ending[0]!.objectId === subject[0]!.objectId) {
       return finish("final_presence", { ...base, status: "observed", startMs: Math.round(ending[0]!.frameIndex * 1000 / ANALYSIS_FPS),
-        endMs: Math.round((frameCount - 1) * 1000 / ANALYSIS_FPS), evidence: refs(ending, step.subjectConcept),
+        endMs: Math.round((frameCount - 1) * 1000 / ANALYSIS_FPS), evidence: [...refs(ending, step.subjectConcept), ...targetEvidence],
         explanation: "Muse's final-state proposal is grounded by the same visible object across the final sampled frames." });
     }
     return finish("final_presence", { ...base, explanation: "Presence at the end could not be grounded. Disappearance or a missing final track remains uncertain." });
@@ -278,9 +290,11 @@ function evaluate(step: ProofStep, candidate: Candidate | undefined, tracks: Con
     // Negative findings require continuous positive scene coverage, never a missing detection.
     if (!candidate.actionVisible && candidate.beforeMatches && !candidate.afterMatches && candidate.nonOccurrenceVisible && candidate.searchComplete
       && (!explicit || candidate.before?.visible && candidate.before.matchesRequirement && candidate.after?.visible && !candidate.after.matchesRequirement)
-      && continuousTrack(subjectTrack, 0, frameCount - 1)) {
+      && continuousTrack(subjectTrack, 0, frameCount - 1)
+      && (!step.targetConcept || continuousTrack(regionTrack, 0, frameCount - 1, targetAnchor?.objectId))) {
       return finish("state_change", { ...base, status: "not_observed", startMs: 0, endMs: Math.round((frameCount - 1) * 1000 / ANALYSIS_FPS),
-        evidence: refs(continuousTrack(subjectTrack, 0, frameCount - 1)!, step.subjectConcept),
+        evidence: [...refs(continuousTrack(subjectTrack, 0, frameCount - 1)!, step.subjectConcept),
+          ...(step.targetConcept ? refs(continuousTrack(regionTrack, 0, frameCount - 1, targetAnchor?.objectId)!, step.targetConcept) : [])],
         explanation: "The requested state change was not observed in the sampled clip. The subject remains continuously grounded and Muse reports the before-state persists; this does not certify events outside the recording." });
     }
     return finish("state_change", { ...base, explanation: "The tracked object is visible, but the required before/after change is not sufficiently supported." });
@@ -294,15 +308,15 @@ export function evaluateEvidence(plan: ApprovedPlan, observation: Observation, t
   const checks: StepCheck[] = [];
   let latestEnd = -1;
   for (const step of plan.steps) {
-    const check = evaluate(step, observation.candidates.find((candidate) => candidate.stepId === step.id), tracks, frameCount,
+    const { actionEndMs, ...check } = evaluate(step, observation.candidates.find((candidate) => candidate.stepId === step.id), tracks, frameCount,
       grounded.get(canonical(step.subjectConcept)) ?? [], grounded.get(canonical(step.targetConcept ?? "")) ?? []);
     const finding = check.finding;
     const candidate = observation.candidates.find(item => item.stepId === step.id);
     // Order the actual grounded evidence, not Muse's broader search windows.
-    // Entry findings contain the sampled transition; state findings contain the
-    // explicit before/after moments, never the padded inspection context.
+    // Entry dwell samples stay inspectable but do not extend the action's end.
+    // State findings retain their explicit before/after bounds.
     const eventStart = finding.startMs;
-    const eventEnd = finding.endMs;
+    const eventEnd = actionEndMs ?? finding.endMs;
     // Final presence is an end-of-clip assertion, not a sequential action. It
     // neither advances action order nor establishes an identity for past actions.
     if (finding.status === "observed" && eventStart !== null && step.checkType !== "object_present_at_end") {
