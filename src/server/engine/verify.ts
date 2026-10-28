@@ -4,7 +4,7 @@ import { ANALYSIS_FPS, type ConceptTrack, type TrackBox } from "../../shared/ver
 import { structuredConflicts, type Observation } from "../../shared/observation";
 import { verificationDiagnosticsSchema, type StepCheck, type TrackWindow } from "../../shared/diagnostics";
 
-export const VERIFICATION_RULE_VERSION = "2026-10-28.7";
+export const VERIFICATION_RULE_VERSION = "2026-10-28.8";
 type Candidate = Observation["candidates"][number];
 type Anchor = { objectId: string; firstFrame: number };
 type EvaluatedStep = StepCheck & { actionEndMs?: number };
@@ -309,7 +309,7 @@ export function evaluateEvidence(plan: ApprovedPlan, observation: Observation, t
   let latestEnd = -1;
   for (const step of plan.steps) {
     const { actionEndMs, ...check } = evaluate(step, observation.candidates.find((candidate) => candidate.stepId === step.id), tracks, frameCount,
-      grounded.get(canonical(step.subjectConcept)) ?? [], grounded.get(canonical(step.targetConcept ?? "")) ?? []);
+      plan.schemaVersion === 1 ? grounded.get(canonical(step.subjectConcept)) ?? [] : [], plan.schemaVersion === 1 ? grounded.get(canonical(step.targetConcept ?? "")) ?? [] : []);
     const finding = check.finding;
     const candidate = observation.candidates.find(item => item.stepId === step.id);
     // Order the actual grounded evidence, not Muse's broader search windows.
@@ -319,7 +319,7 @@ export function evaluateEvidence(plan: ApprovedPlan, observation: Observation, t
     const eventEnd = actionEndMs ?? finding.endMs;
     // Final presence is an end-of-clip assertion, not a sequential action. It
     // neither advances action order nor establishes an identity for past actions.
-    if (finding.status === "observed" && eventStart !== null && step.checkType !== "object_present_at_end") {
+    if (plan.schemaVersion === 1 && finding.status === "observed" && eventStart !== null && step.checkType !== "object_present_at_end") {
       if (eventStart < latestEnd) {
         finding.status = "uncertain"; check.decision = "step_order";
         finding.explanation = "The proposed event conflicts with the approved step order. Review the recording to resolve the sequence.";
@@ -331,6 +331,43 @@ export function evaluateEvidence(plan: ApprovedPlan, observation: Observation, t
         }
       }
     }
+    if (plan.schemaVersion === 2 && finding.status === "observed") {
+      const requirements = step.requirements ?? [];
+      const groundedAt = (concept: string, frame: number) => {
+        const selected = canonical(concept) === canonical(step.subjectConcept) ? check.subject?.selectedObjectId : check.target?.selectedObjectId;
+        if (!selected || frame < check.firstFrame! || frame > check.lastFrame!) return false;
+        const track = tracks.find(track => canonical(track.concept) === canonical(concept));
+        const first = Math.min(frame, Math.round(finding.startMs! * ANALYSIS_FPS / 1000));
+        const last = Math.max(frame, Math.round(finding.endMs! * ANALYSIS_FPS / 1000));
+        return Boolean(continuousTrack(track, first, last, selected));
+      };
+      const valid = requirements.length > 0 && requirements.every(req => {
+        const assessments = candidate?.requirementAssessments?.filter(item => item.requirementId === req.id) ?? [];
+        const assessment = assessments[0];
+        const moment = candidate?.[req.phase];
+        const frame = assessment ? Math.round(assessment.timestampMs * ANALYSIS_FPS / 1000) : -1;
+        return assessments.length === 1 && assessment?.visible && assessment.matchesRequirement && assessment.decisiveDetailsVisible
+          && moment?.visible && moment.matchesRequirement && Math.round(moment.timestampMs * ANALYSIS_FPS / 1000) === frame
+          && groundedAt(req.subjectConcept, frame)
+          && (!req.targetConcept || groundedAt(req.targetConcept, frame));
+      });
+      if (!valid) {
+        finding.status = "uncertain";
+        finding.explanation = "The approved evidence requirements are not all visibly grounded, including their decisive details. Inspect the individual evidence; missing support cannot establish completion.";
+      } else {
+        finding.satisfiedRequirementIds = requirements.map(req => req.id);
+        for (const req of requirements) {
+          const assessment = candidate!.requirementAssessments!.find(item => item.requirementId === req.id)!;
+          const frameIndex = Math.round(assessment.timestampMs * ANALYSIS_FPS / 1000);
+          finding.startMs = Math.min(finding.startMs!, assessment.timestampMs);
+          finding.endMs = Math.max(finding.endMs!, assessment.timestampMs);
+          for (const concept of [req.subjectConcept, req.targetConcept].filter((value): value is string => value !== null)) {
+            const objectId = canonical(concept) === canonical(step.subjectConcept) ? check.subject!.selectedObjectId! : check.target!.selectedObjectId!;
+            finding.evidence.push({ concept, objectId, frameIndex });
+          }
+        }
+      }
+    }
     if (candidate?.subject && finding.status === "observed") {
       finding.moments = (["before", "action", "after"] as const).flatMap(phase => {
         const moment = candidate[phase];
@@ -339,6 +376,45 @@ export function evaluateEvidence(plan: ApprovedPlan, observation: Observation, t
     }
     check.finding = findingSchema.parse(finding);
     checks.push(check);
+  }
+  if (plan.schemaVersion === 2) {
+    for (const rel of plan.relationships ?? []) {
+      const a = checks.find(check => check.stepId === rel.from)!, b = checks.find(check => check.stepId === rel.to)!;
+      let status: Finding["status"] = "uncertain";
+      const interval = (check: StepCheck) => {
+        const candidate = observation.candidates.find(item => item.stepId === check.stepId);
+        const value = candidate?.actionInterval;
+        if (!value?.boundariesVisible || value.startMs >= value.endMs || check.finding.status !== "observed") return null;
+        const first = Math.round(value.startMs * ANALYSIS_FPS / 1000), last = Math.round(value.endMs * ANALYSIS_FPS / 1000);
+        if (first >= last || !candidate?.action || candidate.action.timestampMs < value.startMs || candidate.action.timestampMs > value.endMs) return null;
+        if (value.startMs < check.finding.startMs! || value.endMs > check.finding.endMs!) return null;
+        const track = tracks.find(track => canonical(track.concept) === canonical(check.subject!.concept));
+        if (!continuousTrack(track, first, last, check.subject?.selectedObjectId ?? undefined)) return null;
+        return value;
+      };
+      if (a.finding.status === "observed" && b.finding.status === "observed") {
+        if (rel.type === "same_instance") {
+          const first = Math.min(a.firstFrame!, b.firstFrame!), last = Math.max(a.lastFrame!, b.lastFrame!);
+          const track = tracks.find(track => canonical(track.concept) === canonical(a.subject!.concept));
+          if (a.subject?.selectedObjectId === b.subject?.selectedObjectId && continuousTrack(track, first, last, a.subject!.selectedObjectId!)) status = "observed";
+        } else {
+          const ia = interval(a), ib = interval(b), margin = 1000 / ANALYSIS_FPS;
+          if (ia && ib) {
+            if (rel.type === "before") {
+              if (ib.startMs - ia.endMs > margin) status = "observed";
+              else if (ia.endMs - ib.startMs > margin) status = "not_observed";
+            } else {
+              const overlap = Math.min(ia.endMs, ib.endMs) - Math.max(ia.startMs, ib.startMs);
+              if (overlap > margin) status = "observed";
+              else if (overlap < -margin) status = "not_observed";
+            }
+          }
+        }
+      }
+      const from = plan.steps.find(step => step.id === rel.from)!.label, to = plan.steps.find(step => step.id === rel.to)!.label;
+      const description = `${from} ${rel.type === "before" ? "must finish before" : rel.type === "overlap" ? "must visibly overlap" : "must use the same subject instance as"} ${to}. ${status === "observed" ? "Supported by grounded evidence." : status === "not_observed" ? "The visible action intervals contradict this relationship. Individual actions remain inspectable." : "This relationship remains unresolved; sampling, visibility or identity is insufficient."}`;
+      for (const check of [a, b]) check.finding.relationships = [...check.finding.relationships ?? [], { id: rel.id, description, status }];
+    }
   }
   const diagnostics = verificationDiagnosticsSchema.parse({ ruleVersion: VERIFICATION_RULE_VERSION, checks });
   return { findings: diagnostics.checks.map((check) => check.finding), diagnostics };

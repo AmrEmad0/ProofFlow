@@ -9,6 +9,7 @@ import { PlannerError, plannerStore } from "../planner/store";
 import { requireWorkspaceOrigin, sessionHash, sessionToken } from "../http/session";
 import type { VerificationWorker } from "../verification/worker";
 import type { RunRow } from "../verification/store";
+import { manualPlanInputSchema, editChecksSchema } from "../../shared/planner";
 import { LIMITS } from "../../shared/proof-plan";
 import { referenceAnalyzer, type ReferenceAnalysis } from "../planner/reference";
 import { plannerEvents } from "../planner/stream";
@@ -43,15 +44,7 @@ export function planRoutes(db: Database, config: Config, conversation?: PlanConv
       const hash = sessionHash(request);
       if (busySessions.has(hash)) throw new PlannerError(409, "Wait for the current plan change before saving your checks.");
       return store.saveManual(params.id, hash, body);
-    }, { params: planParams, body: t.Object({
-      revision: t.Integer({ minimum: 0 }), title: t.String({ minLength: 1, maxLength: 160 }),
-      steps: t.Array(t.Object({
-        id: t.String({ minLength: 1, maxLength: 80 }),
-        checkType: t.Union([t.Literal("object_enters_region"), t.Literal("visible_state_change"), t.Literal("object_present_at_end")]),
-        subjectConcept: t.String({ minLength: 1, maxLength: 120 }), targetConcept: t.Nullable(t.String({ minLength: 1, maxLength: 120 })),
-        beforeState: t.Nullable(t.String({ minLength: 1, maxLength: 240 })), afterState: t.Nullable(t.String({ minLength: 1, maxLength: 240 })),
-      }, { additionalProperties: false }), { minItems: 1, maxItems: LIMITS.steps }),
-    }, { additionalProperties: false }) })
+    }, { params: planParams, body: manualPlanInputSchema })
     .post("/api/plans/:id/starter", ({ params, request, body }) => {
       const hash = sessionHash(request);
       if (busySessions.has(hash)) throw new PlannerError(409, "Wait for the current plan change before choosing an example.");
@@ -181,11 +174,7 @@ export function planRoutes(db: Database, config: Config, conversation?: PlanConv
       const hash = sessionHash(request);
       if (busySessions.has(hash)) throw new PlannerError(409, "Wait for the current change to finish, then try saving again. Your edit is still here.");
       return store.editChecks(params.id, hash, body);
-    }, { params: planParams, body: t.Object({ revision: t.Integer({ minimum: 0 }), steps: t.Array(t.Object({
-      id: t.String({ minLength: 1, maxLength: 80 }), subjectConcept: t.String({ minLength: 1, maxLength: 120 }),
-      targetConcept: t.Nullable(t.String({ minLength: 1, maxLength: 120 })),
-      beforeState: t.Nullable(t.String({ minLength: 1, maxLength: 240 })), afterState: t.Nullable(t.String({ minLength: 1, maxLength: 240 })),
-    }, { additionalProperties: false }), { minItems: 1, maxItems: LIMITS.steps }) }, { additionalProperties: false }) })
+    }, { params: planParams, body: editChecksSchema })
     .post("/api/plans/:id/restore", ({ params, body, request }) => {
       const hash = sessionHash(request);
       if (busySessions.has(hash)) throw new PlannerError(409, "Wait for the current change to finish before undoing it.");

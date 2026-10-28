@@ -1,8 +1,10 @@
 import { z } from "zod";
-import { LIMITS, checkTypeSchema, proofPlanSchema, proofStepSchema, type ProofStep } from "./proof-plan";
+import { LIMITS, defaultRequirements, relationshipSchema, checkTypeSchema, proofPlanSchema, proofStepSchema, type ProofStep } from "./proof-plan";
 
 export const editableCheckSchema = z.strictObject({
   id: proofStepSchema.shape.id,
+  requirements: proofStepSchema.shape.requirements,
+  goalSource: proofStepSchema.shape.goalSource,
   subjectConcept: proofStepSchema.shape.subjectConcept,
   targetConcept: proofStepSchema.shape.targetConcept,
   beforeState: proofStepSchema.shape.beforeState,
@@ -17,18 +19,27 @@ export type EditableCheck = z.infer<typeof editableCheckSchema>;
 export const manualPlanInputSchema = z.strictObject({
   revision: z.number().int().nonnegative(),
   title: proofPlanSchema.shape.title,
-  steps: z.array(editableCheckSchema.extend({ checkType: checkTypeSchema })).min(1).max(LIMITS.steps),
+  goal: proofPlanSchema.shape.goal.optional(),
+  limitations: proofPlanSchema.shape.limitations.optional(),
+  relationships: z.array(relationshipSchema).max(20).optional(),
+  unresolvedGoals: proofPlanSchema.shape.unresolvedGoals,
+  steps: z.array(editableCheckSchema.extend({ checkType: checkTypeSchema, label: proofStepSchema.shape.label.optional(), observableEvidence: proofStepSchema.shape.observableEvidence.optional() })).min(1).max(LIMITS.steps),
 });
 export type ManualPlanInput = z.infer<typeof manualPlanInputSchema>;
 
 export function buildManualPlan(input: ManualPlanInput) {
-  const steps = input.steps.map(step => describeEditedCheck({ ...step, label: "", observableEvidence: "" }, step));
-  return proofPlanSchema.parse({ schemaVersion: 1, title: input.title, goal: steps.map(step => step.label).join(". "), steps,
-    limitations: ["Only visible evidence can be assessed. Hidden or occluded outcomes remain uncertain."] });
+  const steps = input.steps.map(step => {
+    const described = describeEditedCheck({ ...step, requirements: undefined, label: "", observableEvidence: "" }, { ...step, requirements: undefined });
+    return { ...described, label: step.label ?? described.label, observableEvidence: step.observableEvidence ?? described.observableEvidence, goalSource: step.goalSource ?? described.label, requirements: step.requirements ?? defaultRequirements(described) };
+  });
+  return proofPlanSchema.parse({ schemaVersion: 2, title: input.title, goal: input.goal ?? steps.map(step => step.label).join(". "), steps,
+    relationships: input.relationships ?? [], unresolvedGoals: input.unresolvedGoals ?? [],
+    limitations: input.limitations ?? ["Only visible evidence can be assessed. Hidden or occluded outcomes remain uncertain."] });
 }
 
 export function describeEditedCheck(original: ProofStep, edit: EditableCheck): ProofStep {
   const step = { ...original, ...edit };
+  if (original.requirements) return step;
   switch (step.checkType) {
     case "object_enters_region":
       return { ...step, beforeState: null, afterState: null,

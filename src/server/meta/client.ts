@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import type { Config } from "../config";
 
 export const MODELS = { muse: "muse-spark-1.3-contributor", sam: "sam-3.1" } as const;
-export const PROMPT_VERSION = "2026-10-28.3";
+export const PROMPT_VERSION = "2026-10-28.4";
 
 // Lazy creation keeps health/template routes available without credentials.
 export function createMetaClient(config: Config): OpenAI {

@@ -17,12 +17,12 @@ export type RunRow = {
 export function verificationStore(db: Database) {
   function approved(versionId: string, sessionHash?: string) {
     const row = db.query<{
-      id: string; title_snapshot: string; goal_snapshot: string; steps_json: string; limitations_json: string; contract_hash: string;
+      id: string; schema_version: number; contract_json: string | null; title_snapshot: string; goal_snapshot: string; steps_json: string; limitations_json: string; contract_hash: string;
     }, [string, string | null, string | null]>(`SELECT v.* FROM plan_versions v JOIN planner_owners o ON o.plan_id = v.plan_id JOIN plans p ON p.id = v.plan_id
       WHERE v.id = ? AND v.status = 'approved' AND p.deleted_at IS NULL AND (? IS NULL OR o.session_hash = ?)`).get(versionId, sessionHash ?? null, sessionHash ?? null);
     if (!row) throw new PlannerError(404, "The approved plan could not be found in your workspace.");
-    const plan = approvedPlanSchema.parse({ schemaVersion: 1, title: row.title_snapshot, goal: row.goal_snapshot,
-      steps: JSON.parse(row.steps_json), limitations: JSON.parse(row.limitations_json),
+    const plan = approvedPlanSchema.parse({ ...(row.contract_json ? JSON.parse(row.contract_json) : { schemaVersion: row.schema_version, title: row.title_snapshot, goal: row.goal_snapshot,
+      steps: JSON.parse(row.steps_json), limitations: JSON.parse(row.limitations_json) }),
       approvedVersionId: row.id, contractHash: row.contract_hash });
     const { approvedVersionId: _version, contractHash: _hash, ...contract } = plan;
     if (hashContract(contract) !== plan.contractHash) throw new Error("Approved contract integrity check failed.");

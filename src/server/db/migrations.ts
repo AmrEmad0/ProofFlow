@@ -213,6 +213,10 @@ const migrations = [{
       SELECT id FROM task_sessions WHERE reference GLOB 'DEMO-????????'
       AND json_extract(settings_json, '$.recording.id') = '__demo_feed__'
     );`,
+}, {
+  version: 15,
+  sql: `ALTER TABLE plan_versions ADD COLUMN schema_version INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE plan_versions ADD COLUMN contract_json TEXT CHECK (contract_json IS NULL OR json_valid(contract_json));`,
 }];
 
 export function migrate(db: Database): void {

@@ -21,6 +21,7 @@ export function VerificationStatus({ run }: { run: RunDetails }) {
       </div>
     </div>
     {run.state === "completed" && <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px]" aria-label="Check result summary">
+      {run.approvedPlan.schemaVersion === 2 && <span className="text-amber-800">{new Set(findings.flatMap(item => item.relationships?.filter(rel => rel.status !== "observed").map(rel => rel.id) ?? [])).size} relationships unresolved or contradicted</span>}
       <span className="font-medium text-emerald-700">{findings.filter(item => item.status === "observed").length} observed</span>
       <span className="text-muted-foreground">{findings.filter(item => item.status === "not_observed").length} not observed</span>
       <span className="text-amber-800">{findings.filter(item => item.status === "uncertain").length} uncertain</span>

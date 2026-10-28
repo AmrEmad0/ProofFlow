@@ -48,7 +48,7 @@ function rememberMessage(id: string | null, message: string) {
 }
 
 function editableChecks(saved: SavedPlan): EditableCheck[] {
-  return saved.plan!.steps.map(({ id, subjectConcept, targetConcept, beforeState, afterState }) => ({ id, subjectConcept, targetConcept, beforeState, afterState }));
+  return saved.plan!.steps.map(({ id, subjectConcept, targetConcept, beforeState, afterState, requirements, goalSource }) => ({ id, subjectConcept, targetConcept, beforeState, afterState, requirements, goalSource }));
 }
 
 export function PlannerWorkspace({ initialStarter = false, planId = null }: { initialStarter?: boolean; planId?: string | null }) {

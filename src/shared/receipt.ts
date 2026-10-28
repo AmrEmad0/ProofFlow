@@ -14,6 +14,10 @@ export const findingSchema = z.strictObject({
   startMs: z.number().int().nonnegative().nullable(),
   endMs: z.number().int().nonnegative().nullable(),
   explanation: z.string().min(1),
+  satisfiedRequirementIds: z.array(z.string()).optional(),
+  relationships: z.array(z.strictObject({
+    id: z.string(), description: z.string(), status: findingStatusSchema,
+  })).optional(),
   moments: z.array(z.strictObject({
     phase: z.enum(["before", "action", "after"]), timestampMs: z.number().int().nonnegative(),
     description: z.string().min(1),

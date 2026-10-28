@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import { plannerReplySchema, type PlannerReply, type ReferenceMedia } from "../../shared/planner";
-import { proofPlanShape, type ProofPlan } from "../../shared/proof-plan";
+import { planningPlanShape, type ProofPlan } from "../../shared/proof-plan";
 import type { Config } from "../config";
 import { runMediaCommand } from "../media/process";
 import { normalizeVideo } from "../media/video";
@@ -17,7 +17,7 @@ import { PlannerError } from "./store";
 const referenceReplySchema = z.strictObject({
   reply: z.string().trim().min(1).max(4000),
   summary: z.string().trim().min(1).max(6000),
-  plan: proofPlanShape.nullable(),
+  plan: planningPlanShape.nullable(),
 });
 export type ReferenceAnalysis = (file: File, message: string, plan: ProofPlan | null, signal: AbortSignal, onReplyText?: (text: string) => void) => Promise<{ reply: PlannerReply; reference: ReferenceMedia }>;
 

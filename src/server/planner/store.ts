@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { buildManualPlan, manualPlanInputSchema, describeEditedCheck, editChecksSchema, savedPlanSchema, type PlannerMessage, type PlannerReply, type SavedPlan, type ReferenceMedia } from "../../shared/planner";
 import { packproofTemplate } from "../../shared/packproof";
-import { LIMITS, proofPlanSchema, type ProofPlan } from "../../shared/proof-plan";
+import { LIMITS, upgradePlan, proofPlanSchema, type ProofPlan } from "../../shared/proof-plan";
 import { hashContract } from "../engine/contract";
 
 export class PlannerError extends Error {
@@ -10,7 +10,7 @@ export class PlannerError extends Error {
 
 type VersionRow = {
   id: string; version: number; status: "draft" | "approved";
-  title_snapshot: string; goal_snapshot: string; steps_json: string; limitations_json: string;
+  schema_version: number; contract_json: string | null; title_snapshot: string; goal_snapshot: string; steps_json: string; limitations_json: string;
   contract_hash: string | null; approved_at: string | null;
 };
 
@@ -21,8 +21,8 @@ export function plannerStore(db: Database) {
     ).get(id, sessionHash);
     if (!owner) throw new PlannerError(404, "This template could not be found in your workspace.");
     const row = db.query<VersionRow, [string]>("SELECT * FROM plan_versions WHERE plan_id = ? ORDER BY version DESC LIMIT 1").get(id);
-    const plan = row ? proofPlanSchema.parse({
-      schemaVersion: 1, title: row.title_snapshot, goal: row.goal_snapshot,
+    const plan = row ? proofPlanSchema.parse(row.contract_json ? JSON.parse(row.contract_json) : {
+      schemaVersion: row.schema_version, title: row.title_snapshot, goal: row.goal_snapshot,
       steps: JSON.parse(row.steps_json), limitations: JSON.parse(row.limitations_json),
     }) : null;
     const messages = db.query<PlannerMessage, [string]>("SELECT role, content FROM planner_messages WHERE plan_id = ? ORDER BY id").all(id);
@@ -36,9 +36,9 @@ export function plannerStore(db: Database) {
   function addVersion(id: string, version: number, input: ProofPlan) {
     const plan = proofPlanSchema.parse(input);
     db.query(`INSERT INTO plan_versions
-      (id, plan_id, version, status, title_snapshot, goal_snapshot, steps_json, limitations_json)
-      VALUES (?, ?, ?, 'draft', ?, ?, ?, ?)`).run(
-      crypto.randomUUID(), id, version, plan.title, plan.goal, JSON.stringify(plan.steps), JSON.stringify(plan.limitations),
+      (id, plan_id, version, status, title_snapshot, goal_snapshot, steps_json, limitations_json, schema_version, contract_json)
+      VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?)`).run(
+      crypto.randomUUID(), id, version, plan.title, plan.goal, JSON.stringify(plan.steps), JSON.stringify(plan.limitations), plan.schemaVersion, JSON.stringify(plan),
     );
     db.query("UPDATE plans SET title = ? WHERE id = ?").run(plan.title, id);
   }
@@ -77,12 +77,25 @@ export function plannerStore(db: Database) {
   function saveManual(id: string, sessionHash: string, input: unknown) {
     const parsed = manualPlanInputSchema.safeParse(input);
     if (!parsed.success) throw new PlannerError(400, "Add a plan name and fill in 1–5 checks.");
-    let plan: ProofPlan;
-    try { plan = buildManualPlan(parsed.data); }
-    catch { throw new PlannerError(400, `Fill in each check’s required fields and use at most ${LIMITS.concepts} different objects.`); }
     db.transaction(() => {
       const current = read(id, sessionHash);
       if (current.revision !== parsed.data.revision) throw new PlannerError(409, "This plan changed. Reload it before saving your manual checks.");
+      const previous = current.plan;
+      const input = parsed.data;
+      let plan: ProofPlan;
+      try {
+        plan = buildManualPlan({ ...input,
+          goal: input.goal ?? previous?.goal,
+          limitations: input.limitations ?? previous?.limitations,
+          relationships: input.relationships ?? previous?.relationships,
+          unresolvedGoals: input.unresolvedGoals ?? previous?.unresolvedGoals,
+          steps: input.steps.map(step => {
+            const original = previous?.schemaVersion === 2 ? previous.steps.find(item => item.id === step.id && item.checkType === step.checkType) : undefined;
+            return { ...step, requirements: step.requirements ?? original?.requirements, goalSource: step.goalSource ?? original?.goalSource,
+              label: step.label ?? original?.label, observableEvidence: step.observableEvidence ?? original?.observableEvidence };
+          }),
+        });
+      } catch { throw new PlannerError(400, `Fill in each check’s evidence requirements, resolve removed checks’ relationships, and use at most ${LIMITS.concepts} different objects.`); }
       if (hashContract(plan) === current.contractHash) return;
       addVersion(id, (current.version ?? 0) + 1, plan);
       db.query("UPDATE planner_owners SET revision = revision + 1 WHERE plan_id = ?").run(id);
@@ -111,6 +124,7 @@ export function plannerStore(db: Database) {
         throw new PlannerError(409, "The draft changed. Review the latest version before approving.");
       }
       if (!current.plan || !current.versionId) throw new PlannerError(400, "Create a proof plan before approving it.");
+      if (current.plan.unresolvedGoals?.length) throw new PlannerError(400, "Resolve all unclear or unsupported goals before approval.");
       if (videoConsent && !current.videoConsentAt) db.query("UPDATE plans SET video_consent_at = ? WHERE id = ?").run(new Date().toISOString(), id);
       if (current.status === "approved") return;
       db.query("UPDATE plan_versions SET status = 'approved', contract_hash = ?, approved_at = ? WHERE id = ?")
@@ -125,7 +139,7 @@ export function plannerStore(db: Database) {
       const current = read(id, sessionHash);
       if (current.revision !== revision) throw new PlannerError(409, "The template changed. Reload it to continue.");
       if (!current.plan || current.status !== "approved") throw new PlannerError(400, "Only an approved template needs a new draft.");
-      addVersion(id, (current.version ?? 0) + 1, current.plan);
+      addVersion(id, (current.version ?? 0) + 1, upgradePlan(current.plan));
       db.query("UPDATE planner_owners SET revision = revision + 1 WHERE plan_id = ?").run(id);
     })();
     return read(id, sessionHash);
@@ -158,11 +172,13 @@ export function plannerStore(db: Database) {
         if (!original) throw new PlannerError(400, "This check is no longer in the plan. Reload the saved draft.");
         if (original.checkType === "object_enters_region" && !edit.targetConcept) throw new PlannerError(400, "Choose where the item should go.");
         if (original.checkType === "visible_state_change" && (!edit.beforeState || !edit.afterState)) throw new PlannerError(400, "Describe what the object looks like before and after.");
-        const unchanged = ["subjectConcept", "targetConcept", "beforeState", "afterState"].every((key) => original[key as keyof typeof edit] === edit[key as keyof typeof edit]);
+        const unchanged = ["subjectConcept", "targetConcept", "beforeState", "afterState", "requirements", "goalSource"].every(key => edit[key as keyof typeof edit] === undefined || JSON.stringify(original[key as keyof typeof original]) === JSON.stringify(edit[key as keyof typeof edit]));
         return unchanged ? original : describeEditedCheck(original, edit);
       });
       if (updated.length === originals.length && updated.every((step, index) => step === originals[index])) return current.plan!;
-      return { ...current.plan!, goal: updated.map((step) => step.label).join(". "), steps: updated };
+      const plan = current.plan!;
+      if (plan.relationships?.some(rel => !updated.some(step => step.id === rel.from) || !updated.some(step => step.id === rel.to))) throw new PlannerError(400, "This check has relationships. Remove them in the manual editor before deleting it.");
+      return { ...plan, steps: updated };
     }, true);
   }
 
@@ -170,7 +186,7 @@ export function plannerStore(db: Database) {
     return changeDraft(id, sessionHash, revision, () => {
       const row = db.query<VersionRow, [string, string]>("SELECT * FROM plan_versions WHERE id = ? AND plan_id = ?").get(versionId, id);
       if (!row) throw new PlannerError(404, "That saved version could not be found.");
-      return proofPlanSchema.parse({ schemaVersion: 1, title: row.title_snapshot, goal: row.goal_snapshot,
+      return proofPlanSchema.parse(row.contract_json ? JSON.parse(row.contract_json) : { schemaVersion: row.schema_version, title: row.title_snapshot, goal: row.goal_snapshot,
         steps: JSON.parse(row.steps_json), limitations: JSON.parse(row.limitations_json) });
     });
   }

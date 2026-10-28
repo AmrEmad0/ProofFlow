@@ -30,7 +30,18 @@ const objectSchema = z.strictObject({ concept: z.string().trim().min(1).max(120)
 const groundingSchema = z.strictObject({
   concept: z.string().min(1), objectId: z.string().min(1).describe("Exact raw SAM objectId from the allowed references; never the full display label"), timestampMs: z.number().int().min(0).max(LIMITS.durationMs),
 });
+export const requirementAssessmentSchema = z.strictObject({
+  requirementId: z.string().min(1), timestampMs: z.number().int().min(0).max(LIMITS.durationMs),
+  visible: z.boolean(), matchesRequirement: z.boolean(), decisiveDetailsVisible: z.boolean(),
+  description: z.string().trim().min(1).max(600),
+});
+export const actionIntervalSchema = z.strictObject({
+  startMs: z.number().int().min(0).max(LIMITS.durationMs), endMs: z.number().int().min(0).max(LIMITS.durationMs),
+  boundariesVisible: z.boolean(),
+});
 export const evidenceCandidateSchema = legacyObservationSchema.shape.candidates.element.extend({
+  requirementAssessments: z.array(requirementAssessmentSchema).max(3),
+  actionInterval: actionIntervalSchema.nullable(),
   before: momentSchema.nullable(), action: momentSchema.nullable(), after: momentSchema.nullable(),
   subject: objectSchema, target: objectSchema.nullable(),
   contradictions: z.array(z.string().min(1).max(600)).max(10),
@@ -44,6 +55,8 @@ export const currentObservationSchema = z.strictObject({
 export const observationSchema = legacyObservationSchema.extend({
   schemaVersion: z.literal(2).optional(),
   candidates: z.array(legacyObservationSchema.shape.candidates.element.extend({
+    requirementAssessments: z.array(requirementAssessmentSchema).max(3).optional(),
+    actionInterval: actionIntervalSchema.nullable().optional(),
     before: momentSchema.nullable().optional(), action: momentSchema.nullable().optional(), after: momentSchema.nullable().optional(),
     subject: objectSchema.optional(), target: objectSchema.nullable().optional(),
     contradictions: z.array(z.string()).optional(), grounding: z.array(groundingSchema).optional(),

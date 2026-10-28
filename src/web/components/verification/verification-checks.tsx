@@ -36,10 +36,12 @@ export function VerificationChecks({ run, selectedId, currentIds, playing, onIns
             </span>
           </span>
         </button>
+        {finding?.relationships?.map(rel => <p key={rel.id} className={`ml-10 mt-2 rounded border p-2 text-sm ${rel.status === "observed" ? "text-emerald-700" : "text-amber-800"}`}>Relationship: {rel.status.replaceAll("_", " ")}. {rel.description}</p>)}
         {finding?.status === "uncertain" && <p className="mt-1 ml-10 text-[12px] leading-5 text-muted-foreground">{style?.hint}</p>}
         {finding && <>
           {!run.media && <p className="mt-1 ml-10 text-[12px] text-muted-foreground">The video evidence is unavailable.</p>}
           <details className="group/reason ml-10"><summary className="flex min-h-8 w-fit cursor-pointer list-none items-center gap-1 rounded-md py-1 text-[11px] text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">Why this result?<ChevronDown className="size-3 transition-transform group-open/reason:rotate-180" aria-hidden="true" /></summary><p className="mt-1 break-words text-sm leading-6 text-muted-foreground">{finding.explanation}</p>
+            {finding.satisfiedRequirementIds?.map(id => <p key={id} className="text-sm">Satisfied: {step.requirements?.find(req => req.id === id)?.description ?? id}</p>)}
             {finding.moments && finding.moments.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{finding.moments.map(moment => <Button key={moment.phase} variant="ghost" className="h-9 px-2 text-xs" disabled={!run.media} title={moment.description} aria-label={`Inspect ${moment.phase} evidence: ${moment.description}`} onClick={() => onInspect(step.id, moment.timestampMs)}>{moment.phase[0]!.toUpperCase() + moment.phase.slice(1)} · {formatTime(moment.timestampMs)}</Button>)}</div>}{finding.evidence.length > 0 && <p className="mt-2 break-words text-xs leading-6 text-muted-foreground">Tracked evidence: {finding.evidence.map((item) => `${item.concept} · object ${item.objectId} · frame ${item.frameIndex}`).join(" / ")}</p>}</details>
         </>}
       </article></li>;
