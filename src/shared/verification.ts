@@ -15,6 +15,8 @@ export const conceptTrackSchema = z.strictObject({
   concept: z.string().min(1), outcome: z.enum(["completed", "failed"]), boxes: z.array(trackBoxSchema),
 });
 export const runSummarySchema = z.strictObject({
+  recordingKind: z.enum(["demo", "camera"]).nullable().optional(),
+  taskSessionId: z.uuid().nullable().default(null), taskReference: z.string().nullable().default(null),
   id: z.uuid(), approvedVersionId: z.uuid(), planVersion: z.number().int().positive(), state: runStateSchema,
   createdAt: z.string(), completedAt: z.string().nullable(), expiresAt: z.string(),
   error: z.string().nullable(), durationMs: z.number().int().positive().nullable(),

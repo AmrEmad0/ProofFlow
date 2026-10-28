@@ -1,3 +1,4 @@
+import { createCaptureWorker } from "./triggers/capture-worker";
 import { staticPlugin } from "@elysia/static";
 import { mkdir } from "node:fs/promises";
 import { createApp } from "./app";
@@ -10,6 +11,7 @@ await mkdir(config.STORAGE_PATH, { recursive: true, mode: 0o700 });
 const db = openDatabase(config.DATABASE_PATH);
 const worker = createVerificationWorker(db, config);
 await worker.startWhenAvailable();
+const captures = createCaptureWorker(db, config, worker);
 const app = createApp(db, config, undefined, worker);
 
 if (config.NODE_ENV === "production") {
@@ -35,6 +37,7 @@ async function shutdown() {
   if (stopping) return;
   stopping = true;
   await app.stop();
+  await captures.stop();
   await worker.stop();
   db.close();
   process.exit(0);

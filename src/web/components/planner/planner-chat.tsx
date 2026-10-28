@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowRight, ArrowUp, LoaderCircle, Package, Workflow, Coffee, PanelTop, Paperclip, X, ImageIcon, Film, ChevronDown } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, LoaderCircle, Package, PencilLine, Workflow, Coffee, PanelTop, Paperclip, X, ImageIcon, Film, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { LIMITS } from "../../../shared/proof-plan";
@@ -19,10 +19,11 @@ type Props = {
   onInputChange: (value: string) => void;
   onSend: (message: string, media?: File) => Promise<void>;
   onStarter: () => void;
+  onManual: () => void;
   onReload: () => void;
 };
 
-export function PlannerChat({ saved, starter, pending, sending, referenceSending, pendingMessage, partialReply, configured, error, input, onInputChange: setInput, onSend, onStarter, onReload }: Props) {
+export function PlannerChat({ saved, starter, pending, sending, referenceSending, pendingMessage, partialReply, configured, error, input, onInputChange: setInput, onSend, onStarter, onManual, onReload }: Props) {
   const [media, setMedia] = useState<File | null>(null);
   const [localUrl, setLocalUrl] = useState<string | null>(null);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
@@ -107,7 +108,7 @@ export function PlannerChat({ saved, starter, pending, sending, referenceSending
       <p className="sr-only" role="status">{sending ? "Assistant is responding." : error ? "Message failed. Your draft is preserved." : messages.length ? "Assistant response complete." : ""}</p>
       <div className="chat-composer-area p-4 sm:p-5">
         {error && <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/5 p-3" role="alert"><p className="text-sm leading-5 text-destructive">{error}</p>{saved && <button onClick={onReload} disabled={pending} className="mt-2 text-xs font-medium underline underline-offset-4">Reload saved draft</button>}</div>}
-        {!configured && <p className="mb-4 text-sm leading-6 text-muted-foreground">The assistant is unavailable right now. {hasPlan ? "You can still change your checks directly." : "You can use and change the box packing example."}</p>}
+        {!configured && <p className="mb-4 text-sm leading-6 text-muted-foreground">The assistant is unavailable right now. {hasPlan ? "You can still change your checks directly." : "You can build your plan manually or use an example."}</p>}
         {hasPlan && messages.length === 0 && !input.trim() && <div className="mb-3 flex flex-wrap gap-2" role="group" aria-label="Suggestions for your assistant">{[
           { label: "Explain this plan", message: "Can you explain what this plan can check?" },
           { label: "Change a check", message: "I’d like to change one of the checks." },
@@ -140,6 +141,7 @@ export function PlannerChat({ saved, starter, pending, sending, referenceSending
         </form>
         {!hasPlan && messages.length === 0 && !sending && <>
           <p className="reference-limits">Images up to 10 MB <span aria-hidden="true">·</span> Videos up to 30 sec / 25 MB</p>
+          <Button variant="outline" className="mt-4 w-full gap-2" disabled={pending} onClick={onManual}><PencilLine className="size-4" />Build manually</Button>
           <div className="process-ideas">
             <p className="starter-label">Need a starting point?</p>
             <div className="process-idea-grid" aria-label="Process ideas">{[

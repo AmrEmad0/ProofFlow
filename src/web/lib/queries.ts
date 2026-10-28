@@ -4,6 +4,22 @@ import { api } from "./eden";
 import { savedPlanSchema } from "../../shared/planner";
 import { runDetailsSchema, runSummarySchema } from "../../shared/verification";
 import { isActiveRun } from "../../shared/receipt";
+import { triggerOverviewSchema } from "../../shared/triggers";
+
+export function planTriggersQuery(planId: string | null) {
+  return queryOptions({
+    queryKey: ["triggers", planId],
+    queryFn: async () => {
+      if (!planId) throw new Error("Create a plan to save its triggers.");
+      const result = await api.api.plans({ id: planId }).triggers.get();
+      if (result.error) throw apiError(result.error.value, "Trigger settings could not be loaded.");
+      return triggerOverviewSchema.parse(result.data);
+    },
+    refetchInterval: 3000,
+    enabled: Boolean(planId),
+    retry: false,
+  });
+}
 
 const healthStatusSchema = z.object({
   status: z.enum(["ok", "degraded"]),

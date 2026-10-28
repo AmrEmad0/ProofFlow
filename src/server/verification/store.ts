@@ -3,6 +3,8 @@ import { approvedPlanSchema } from "../../shared/proof-plan";
 import { runDetailsSchema, runSummarySchema, verificationActivitySchema, type VerificationActivity, type RunSummary } from "../../shared/verification";
 import { hashContract } from "../engine/contract";
 import { plannerStore, PlannerError } from "../planner/store";
+import { triggerSettingsSchema } from "../../shared/triggers";
+import { triggerStore } from "../triggers/store";
 
 export type RunRow = {
   id: string; plan_version_id: string; state: RunSummary["state"]; video_path: string;
@@ -36,7 +38,9 @@ export function verificationStore(db: Database) {
   }
 
   function summary(run: RunRow): RunSummary {
-    return runSummarySchema.parse({ id: run.id, approvedVersionId: run.plan_version_id,
+    const task = db.query<{ id: string; reference: string | null; settings_json: string }, [string]>("SELECT id, reference, settings_json FROM task_sessions WHERE run_id = ?").get(run.id);
+    return runSummarySchema.parse({ recordingKind: task ? triggerSettingsSchema.parse(JSON.parse(task.settings_json)).recording?.kind ?? null : null, id: run.id, approvedVersionId: run.plan_version_id,
+      taskSessionId: task?.id ?? null, taskReference: task?.reference ?? null,
       planVersion: db.query<{ version: number }, [string]>("SELECT version FROM plan_versions WHERE id = ?").get(run.plan_version_id)!.version, state: run.state,
       createdAt: run.created_at, completedAt: run.completed_at, expiresAt: run.expires_at, error: run.error_message, durationMs: run.duration_ms });
   }
@@ -69,10 +73,11 @@ export function verificationStore(db: Database) {
       ORDER BY r.created_at DESC, r.rowid DESC`).all(planId).map(summary);
   }
 
-  function create(id: string, versionId: string, hash: string, sessionHash: string, path: string, retentionHours: number) {
+  function create(id: string, versionId: string, hash: string, sessionHash: string, path: string, retentionHours: number, taskSessionId?: string) {
     db.transaction(() => {
       const plan = approved(versionId, sessionHash);
       if (plan.contractHash !== hash) throw new PlannerError(409, "The approved plan does not match the version you reviewed.");
+      if (taskSessionId) triggerStore(db).attachment(taskSessionId, sessionHash, versionId);
       const active = db.query<{ count: number }, [string]>(`SELECT count(*) AS count FROM runs r JOIN plan_versions v ON v.id = r.plan_version_id
         JOIN planner_owners o ON o.plan_id = v.plan_id WHERE o.session_hash = ? AND r.state NOT IN ('completed', 'failed')`).get(sessionHash)?.count ?? 0;
       if (active > 0) throw new PlannerError(409, "A video is already being processed in your workspace. Wait for it to finish.");
@@ -83,6 +88,7 @@ export function verificationStore(db: Database) {
       const now = new Date().toISOString();
       db.query("INSERT INTO runs (id, plan_version_id, state, video_path, consent_at, expires_at) VALUES (?, ?, 'queued', ?, ?, ?)")
         .run(id, versionId, path, now, new Date(Date.now() + retentionHours * 3_600_000).toISOString());
+      if (taskSessionId) db.query("UPDATE task_sessions SET run_id = ? WHERE id = ?").run(id, taskSessionId);
     })();
     return summary(row(id, sessionHash));
   }

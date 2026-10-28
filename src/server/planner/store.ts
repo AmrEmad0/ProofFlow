@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { describeEditedCheck, editChecksSchema, savedPlanSchema, type PlannerMessage, type PlannerReply, type SavedPlan, type ReferenceMedia } from "../../shared/planner";
+import { buildManualPlan, manualPlanInputSchema, describeEditedCheck, editChecksSchema, savedPlanSchema, type PlannerMessage, type PlannerReply, type SavedPlan, type ReferenceMedia } from "../../shared/planner";
 import { packproofTemplate } from "../../shared/packproof";
 import { LIMITS, proofPlanSchema, type ProofPlan } from "../../shared/proof-plan";
 import { hashContract } from "../engine/contract";
@@ -61,6 +61,33 @@ export function plannerStore(db: Database) {
       JOIN planner_owners o ON o.plan_id = p.id
       LEFT JOIN plan_versions v ON v.plan_id = p.id AND v.version = (SELECT max(version) FROM plan_versions WHERE plan_id = p.id)
       WHERE o.session_hash = ? AND p.deleted_at IS NULL ORDER BY p.created_at DESC, p.rowid DESC`).all(sessionHash);
+  }
+
+  function useStarter(id: string, sessionHash: string, revision: number) {
+    db.transaction(() => {
+      const current = read(id, sessionHash);
+      if (current.revision !== revision) throw new PlannerError(409, "This plan changed. Reload before choosing an example.");
+      if (current.plan) throw new PlannerError(409, "This plan already has checks. Start a new plan to use the example.");
+      addVersion(id, 1, packproofTemplate);
+      db.query("UPDATE planner_owners SET revision = revision + 1 WHERE plan_id = ?").run(id);
+    })();
+    return read(id, sessionHash);
+  }
+
+  function saveManual(id: string, sessionHash: string, input: unknown) {
+    const parsed = manualPlanInputSchema.safeParse(input);
+    if (!parsed.success) throw new PlannerError(400, "Add a plan name and fill in 1–5 checks.");
+    let plan: ProofPlan;
+    try { plan = buildManualPlan(parsed.data); }
+    catch { throw new PlannerError(400, `Fill in each check’s required fields and use at most ${LIMITS.concepts} different objects.`); }
+    db.transaction(() => {
+      const current = read(id, sessionHash);
+      if (current.revision !== parsed.data.revision) throw new PlannerError(409, "This plan changed. Reload it before saving your manual checks.");
+      if (hashContract(plan) === current.contractHash) return;
+      addVersion(id, (current.version ?? 0) + 1, plan);
+      db.query("UPDATE planner_owners SET revision = revision + 1 WHERE plan_id = ?").run(id);
+    })();
+    return read(id, sessionHash);
   }
 
   function saveReply(id: string, sessionHash: string, revision: number, message: string, reply: PlannerReply, reference?: ReferenceMedia) {
@@ -178,6 +205,9 @@ export function plannerStore(db: Database) {
 
   function finishDelete(id: string) {
     db.transaction(() => {
+      db.query("DELETE FROM trigger_events WHERE plan_id = ?").run(id);
+      db.query("DELETE FROM task_sessions WHERE plan_id = ?").run(id);
+      db.query("DELETE FROM plan_triggers WHERE plan_id = ?").run(id);
       db.query("UPDATE plans SET reference_media_json = NULL WHERE id = ?").run(id);
       db.query("DELETE FROM planner_messages WHERE plan_id = ?").run(id);
       db.query("DELETE FROM plan_versions WHERE plan_id = ? AND status = 'draft'").run(id);
@@ -189,5 +219,5 @@ export function plannerStore(db: Database) {
     })();
   }
 
-  return { read, create, list, saveReply, approve, revise, editChecks, restore, copy, markDeleted, restoreDeleted, finishDelete };
+  return { read, create, list, useStarter, saveManual, saveReply, approve, revise, editChecks, restore, copy, markDeleted, restoreDeleted, finishDelete };
 }

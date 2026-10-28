@@ -11,6 +11,7 @@ import type { PlanConversation } from "./planner/chat";
 import { runRoutes } from "./routes/runs";
 import type { VerificationWorker } from "./verification/worker";
 import { workspaceOrigins } from "./http/session";
+import { triggerRoutes } from "./routes/triggers";
 
 export function createApp(db: Database, config: Config, conversation?: PlanConversation, worker?: VerificationWorker, analyzeReference?: ReferenceAnalysis) {
   return new Elysia({ normalize: false, serve: { maxRequestBodySize: 26 * 1024 * 1024 } })
@@ -28,6 +29,7 @@ export function createApp(db: Database, config: Config, conversation?: PlanConve
     .use(healthRoutes(db, config, () => Boolean(worker?.ready && config.modelConfigured)))
     .use(templateRoutes)
     .use(planRoutes(db, config, conversation, worker, analyzeReference))
+    .use(triggerRoutes(db, config))
     .use(runRoutes(db, config, worker));
 }
 

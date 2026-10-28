@@ -12,7 +12,9 @@ export const videoStatusLabels: Record<RunState, string> = {
 
 export function recordingName(runs: RunSummary[], id: string) {
   const index = runs.findIndex((run) => run.id === id);
-  return index < 0 ? "Recording" : `Recording ${runs.length - index}`;
+  const run = runs[index];
+  const name = run?.taskReference ?? (index < 0 ? "Recording" : `Recording ${runs.length - index}`);
+  return run?.recordingKind === "demo" ? `Demo replay · ${name}` : name;
 }
 
 export function VideoLibrary({ runs, selectedId, loading, error, uploading, refreshing, onSelect, onNew, onRefresh }: {

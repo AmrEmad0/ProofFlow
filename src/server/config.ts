@@ -9,6 +9,8 @@ const envSchema = z.object({
   DATABASE_PATH: z.string().min(1).default("./data/proofflow.sqlite"),
   STORAGE_PATH: z.string().min(1).default("./data/private"),
   META_API_BASE_URL: z.url().default("https://api.meta.ai/v1"),
+  DEMO_VIDEO_PATH: z.string().min(1).default("./data/demos"),
+  CAMERA_SOURCES: z.string().default("{}"),
   MODEL_API_KEY: z.string().optional(),
   FFMPEG_PATH: z.string().min(1).default("ffmpeg"),
   FFPROBE_PATH: z.string().min(1).default("ffprobe"),
@@ -20,6 +22,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   return {
     ...values,
     DATABASE_PATH: values.DATABASE_PATH === ":memory:" ? ":memory:" : resolve(values.DATABASE_PATH),
+    DEMO_VIDEO_PATH: resolve(values.DEMO_VIDEO_PATH),
     STORAGE_PATH: resolve(values.STORAGE_PATH),
     modelConfigured: Boolean(values.MODEL_API_KEY?.trim() && values.MODEL_API_KEY !== "replace-with-your-own-key"),
   };

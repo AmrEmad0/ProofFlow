@@ -19,8 +19,11 @@ import { DeletePlanDialog } from "./delete-plan-dialog";
 import { WorkspaceSidebar } from "../workspace/workspace-sidebar";
 import { WorkspaceSettings } from "../workspace/workspace-settings";
 import { VerificationWorkspace } from "../verification/verification-workspace";
+import { PlanTriggers } from "../triggers/plan-triggers";
+import type { TaskSession } from "../../../shared/triggers";
+import { ManualPlanEditor, type ManualPlanDraft } from "./manual-plan-editor";
 
-type Action = { type: "create"; template: "blank" | "packproof" } | { type: "send"; message: string; media?: File } | { type: "approve" } | { type: "copy" } | { type: "edit"; steps: EditableCheck[] } | { type: "restore"; versionId: string };
+type Action = { type: "create"; template: "blank" | "packproof" } | { type: "send"; message: string; media?: File } | { type: "approve" } | { type: "copy" } | { type: "edit"; steps: EditableCheck[] } | { type: "restore"; versionId: string } | { type: "manual"; draft: ManualPlanDraft };
 
 const actionFeedback = {
   create: { loading: "Creating draft…", success: "Draft created", error: "Couldn’t create draft" },
@@ -29,6 +32,7 @@ const actionFeedback = {
   copy: { loading: "Copying your checks…", success: "Copy ready to change", error: "Couldn’t copy plan" },
   edit: { loading: "Saving your checks…", success: "Checks saved", error: "Couldn’t save checks" },
   restore: { loading: "Undoing the change…", success: "Previous checks restored", error: "Couldn’t undo the change" },
+  manual: { loading: "Saving your plan…", success: "Plan saved for review", error: "Couldn’t save your plan" },
 };
 
 function rememberedMessage(id: string | null): string {
@@ -58,9 +62,12 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
   const [input, setInput] = useState(() => rememberedMessage(planId));
   const [undo, setUndo] = useState<{ planId: string; versionId: string; revision: number; changedIds: string[]; message: string } | null>(null);
   const [view, setView] = useState<"auto" | "plan" | "video" | "upload">("auto");
+  const [task, setTask] = useState<TaskSession | null>(null);
   const [editingApproved, setEditingApproved] = useState(false);
+  const [manualEditing, setManualEditing] = useState(false);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [preparingTrigger, setPreparingTrigger] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const health = useQuery(plannerStatusQuery);
@@ -72,9 +79,11 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
   const configured = health.data?.configured ?? false;
 
   function select(id: string | null, keepInput = false) {
+    if (id !== activeId) setTask(null);
     setActiveId(id);
     setError(null);
     if (!keepInput) {
+      setManualEditing(false);
       setPartialReply(""); setEditingApproved(false); setInput(rememberedMessage(id)); setView("auto"); setPropertiesOpen(false); setUndo(null);
       heading.current?.focus({ preventScroll: true });
       window.scrollTo({ top: 0 });
@@ -86,6 +95,8 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
   useEffect(() => {
     if (planId === activeId) return;
     setActiveId(planId);
+    setManualEditing(false);
+    setTask(null);
     setEditingApproved(false);
     setError(null);
     setPartialReply("");
@@ -113,15 +124,40 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
     return value;
   }
 
+  async function ensureTriggerPlan() {
+    if (saved) return saved;
+    setPreparingTrigger(true);
+    try {
+      const value = await create(initialStarter ? "packproof" : "blank", true);
+      remember(value);
+      return value;
+    } finally {
+      setPreparingTrigger(false);
+    }
+  }
+
   async function save(action: Action) {
     setError(null);
-    if (action.type === "create") return create(action.template);
+    if (action.type === "create") {
+      if (saved && !saved.plan && action.template === "packproof") {
+        const response = await api.api.plans({ id: saved.id }).starter.post({ revision: saved.revision });
+        if (response.error) throw apiError(response.error.value, "The example could not be added to your plan.");
+        return savedPlanSchema.parse(response.data);
+      }
+      return create(action.template);
+    }
     let target = saved;
-    if (!target && action.type === "send" && !activeId) {
-      target = await create(initialStarter ? "packproof" : "blank", true);
+    if (!target && (action.type === "send" || action.type === "manual") && !activeId) {
+      target = await create(action.type === "manual" ? "blank" : initialStarter ? "packproof" : "blank", true);
+      if (action.type === "manual") remember(target);
     }
     if (!target) throw new Error("Load or create a template to continue.");
     const endpoint = api.api.plans({ id: target.id });
+    if (action.type === "manual") {
+      const response = await endpoint.manual.post({ revision: target.revision, ...action.draft });
+      if (response.error) throw apiError(response.error.value, "Your manual plan could not be saved.");
+      return savedPlanSchema.parse(response.data);
+    }
     if (action.type === "send") {
       setPartialReply("");
       const controller = new AbortController();
@@ -160,6 +196,7 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
         setUndo({ planId: value.id, versionId: saved.versionId, revision: value.revision, changedIds, message: removed ? "Check removed. You can undo this change." : "Checks updated. Review the changes below." });
       } else setUndo(null);
       remember(value);
+      if (action.type === "manual") { setManualEditing(false); setView("plan"); }
       if (value.status !== "approved") { setEditingApproved(false); setView("plan"); }
       if (action.type === "approve") openUpload();
       if (action.type === "send") {
@@ -199,7 +236,7 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
     retry: false,
   });
 
-  const pending = mutation.isPending || removePlan.isPending;
+  const pending = mutation.isPending || removePlan.isPending || preparingTrigger;
   const sending = mutation.isPending && mutation.variables?.type === "send";
   const openingVideos = Boolean(approvedVersionId) && view === "auto" && previousRuns.isPending;
   const loading = (Boolean(activeId) && current.isPending) || openingVideos;
@@ -249,7 +286,7 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
   }, []);
 
   const pageHeading = <div className="min-w-0">
-    <h1 ref={heading} tabIndex={-1} className={`font-semibold tracking-tight outline-none ${videoView ? "text-2xl" : "text-2xl sm:text-3xl"}`}>{openingVideos ? "Opening your plan" : videoView ? "Videos & evidence" : editingApproved ? "Edit your checks" : approved ? "Your plan is ready" : hasPlan ? "Review your checks" : "Create your proof plan"}</h1>
+    <h1 ref={heading} tabIndex={-1} className={`font-semibold tracking-tight outline-none ${videoView ? "text-2xl" : "text-2xl sm:text-3xl"}`}>{openingVideos ? "Opening your plan" : videoView ? "Videos & evidence" : manualEditing ? "Build your own plan" : editingApproved ? "Edit your checks" : approved ? "Your plan is ready" : hasPlan ? "Review your checks" : "Create your proof plan"}</h1>
     <p className={videoView ? "sr-only" : "mt-2 text-base leading-7 text-muted-foreground"}>{openingVideos ? "Loading your videos and saved checks." : videoView ? "Inspect each check alongside its video evidence." : editingApproved ? "Save your changes, then use the updated checks for a video." : approved ? "Ask a question, revise your plan, or check a video." : hasPlan ? "Adjust the checks here, then choose Check a video when you’re ready." : "Describe your process or add a reference. Review and approve the suggested checks before verifying a video."}</p>
   </div>;
 
@@ -269,7 +306,7 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
           <span className="shrink-0 text-xs text-muted-foreground" role="status">{sending ? "Replying…" : pending ? "Saving…" : saved ? "Saved" : ""}</span>
         </header>
         <div className={videoView ? "px-4 pt-4 pb-6 sm:px-6" : "px-4 pt-6 pb-8 sm:px-8 sm:pt-7"}>
-          <div className={`workspace-enter mx-auto ${videoView ? "max-w-[1500px]" : "max-w-6xl"}`}>
+          <div className={`workspace-enter mx-auto ${videoView || hasPlan ? "max-w-[1500px]" : "max-w-[1100px]"}`}>
             <ol hidden={Boolean(videoView)} className={videoView ? "hidden" : `workflow-steps mb-6 ${!hasPlan ? "workflow-steps-start" : ""}`} aria-label="Verification progress">
               {["Create plan", "Verify video"].map((label, index) => (
                 <li key={label} aria-current={step === index ? "step" : undefined} className={step === index ? "is-current" : step > index ? "is-complete" : ""}>
@@ -280,11 +317,16 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
             {!videoView && <div className={`mb-6 flex flex-wrap items-start justify-between gap-4 ${!hasPlan ? "planner-intro" : ""}`}>{pageHeading}{Boolean(previousRuns.data?.length) && <Button variant="outline" onClick={() => { setEditingApproved(false); setView("video"); }}>Videos & evidence ({previousRuns.data!.length})</Button>}</div>}
             {undo && saved?.id === undo.planId && saved.revision === undo.revision && <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-primary/5 p-4"><p role="status" className="text-base">{undo.message}</p><Button variant="outline" disabled={pending} onClick={() => act({ type: "restore", versionId: undo.versionId })}><RotateCcw />Undo change</Button></div>}
             {displayedError && (videoView || loading) && <p role="alert" className="mb-4 rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">{displayedError}</p>}
-            {!loading && saved && (approved || videoView || Boolean(previousRuns.data?.length)) && <div hidden={!videoView}><VerificationWorkspace key={saved.id} saved={saved} heading={videoView ? pageHeading : null} visible={Boolean(videoView)} startNewUpload={view === "upload"} onReviewPlan={() => setView("plan")} /></div>}
-            {loading ? <Skeleton className="h-96 rounded-2xl" aria-label={openingVideos ? "Loading plan videos" : "Loading saved plan"} /> : videoView ? null : <div className={hasPlan ? "grid items-start gap-5 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]" : "mx-auto max-w-[720px]"}>
-              <PlannerChat saved={saved} starter={starter} pending={pending} sending={sending} partialReply={partialReply} referenceSending={sending && mutation.variables?.type === "send" && Boolean(mutation.variables.media)} pendingMessage={(sending || partialReply) && mutation.variables?.type === "send" ? mutation.variables.message : null} configured={configured} error={displayedError} input={input} onInputChange={(message) => { setInput(message); rememberMessage(activeId, message); }} onSend={async (message, media) => { await mutation.mutateAsync({ type: "send", message, media }); }} onStarter={() => act({ type: "create", template: "packproof" })} onReload={() => { void reloadDraft().catch(() => {}); }} />
-              {hasPlan && <PlanPreview key={activeId ?? "preview"} saved={saved} starter={starter ? packproofTemplate : null} pending={pending || current.isError} editingApproved={editingApproved} onFinishEditing={() => setEditingApproved(false)} onRevise={openEditor} onCopy={() => act({ type: "copy" })} onEdit={editCheck} onRemove={removeCheck} onReload={reloadDraft} changedIds={undo?.planId === saved?.id ? undo?.changedIds ?? [] : []} onUseStarter={() => act({ type: "create", template: "packproof" })} onVerify={() => approved && saved?.videoConsentAt ? openUpload() : act({ type: "approve" })} />}
+            <div className={loading ? "" : "grid items-start gap-6 lg:grid-cols-[230px_minmax(0,1fr)]"}>
+            {!loading && <PlanTriggers key={saved?.id ?? "new"} setup={!videoView} saved={saved} disabled={pending} onEnsurePlan={ensureTriggerPlan} onAttach={task => { setTask(task); setEditingApproved(false); setView("video"); }} />}
+            <div className="min-w-0">
+            {!loading && saved && (approved || videoView || Boolean(previousRuns.data?.length)) && <div hidden={!videoView}><VerificationWorkspace key={saved.id} saved={saved} heading={videoView ? pageHeading : null} visible={Boolean(videoView)} startNewUpload={view === "upload"} task={task} onClearTask={() => setTask(null)} onReviewPlan={() => setView("plan")} /></div>}
+            {loading ? <Skeleton className="h-96 rounded-2xl" aria-label={openingVideos ? "Loading plan videos" : "Loading saved plan"} /> : videoView ? null : manualEditing ? <ManualPlanEditor saved={saved} pending={pending} onSave={async draft => { await mutation.mutateAsync({ type: "manual", draft }); }} onCancel={() => setManualEditing(false)} /> : <div className={hasPlan ? "grid items-start gap-5 2xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]" : "min-w-0"}>
+              <PlannerChat saved={saved} starter={starter} pending={pending} sending={sending} partialReply={partialReply} referenceSending={sending && mutation.variables?.type === "send" && Boolean(mutation.variables.media)} pendingMessage={(sending || partialReply) && mutation.variables?.type === "send" ? mutation.variables.message : null} configured={configured} error={displayedError} input={input} onInputChange={(message) => { setInput(message); rememberMessage(activeId, message); }} onSend={async (message, media) => { await mutation.mutateAsync({ type: "send", message, media }); }} onStarter={() => act({ type: "create", template: "packproof" })} onManual={() => setManualEditing(true)} onReload={() => { void reloadDraft().catch(() => {}); }} />
+              {hasPlan && <PlanPreview key={activeId ?? "preview"} saved={saved} starter={starter ? packproofTemplate : null} pending={pending || current.isError} editingApproved={editingApproved} onFinishEditing={() => setEditingApproved(false)} onRevise={openEditor} onCopy={() => act({ type: "copy" })} onEdit={editCheck} onRemove={removeCheck} onReload={reloadDraft} changedIds={undo?.planId === saved?.id ? undo?.changedIds ?? [] : []} onUseStarter={() => act({ type: "create", template: "packproof" })} onManual={() => setManualEditing(true)} onVerify={() => approved && saved?.videoConsentAt ? openUpload() : act({ type: "approve" })} />}
             </div>}
+            </div>
+            </div>
             {current.isError && <Button variant="outline" className="mt-3 h-9 gap-2" onClick={() => select(null)}><RotateCcw className="size-3.5" />Back to a new plan</Button>}
             <footer className="mt-8 pb-2 text-center text-xs text-muted-foreground">Powered by Meta Muse Spark & SAM 3.1</footer>
           </div>

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { ArrowDownToLine, LoaderCircle, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/eden";
-import { apiError, planRunsQuery, runDetailsQuery, verificationStatusQuery } from "@/lib/queries";
+import { apiError, planRunsQuery, planTriggersQuery, runDetailsQuery, verificationStatusQuery } from "@/lib/queries";
 import { toast } from "@/components/ui/toast";
 import { downloadJson, withFeedback } from "@/lib/feedback";
 import { useVerificationFeedback } from "./verification-feedback";
@@ -16,6 +16,7 @@ import { EvidencePlayer } from "./evidence-player";
 import { recordingName, VideoLibrary } from "./video-library";
 import { VideoUpload } from "./video-upload";
 import { VerificationStatus } from "./verification-status";
+import type { TaskSession } from "../../../shared/triggers";
 
 const selectionKey = (planId: string) => `proofflow.videoSelection.${planId}`;
 
@@ -26,7 +27,7 @@ function rememberedVideo(planId: string): string | null {
   } catch { return null; }
 }
 
-export function VerificationWorkspace({ saved, heading, visible, startNewUpload, onReviewPlan }: { saved: SavedPlan; heading: ReactNode; visible: boolean; startNewUpload: boolean; onReviewPlan: () => void }) {
+export function VerificationWorkspace({ saved, heading, visible, startNewUpload, task = null, onClearTask, onReviewPlan }: { saved: SavedPlan; heading: ReactNode; visible: boolean; startNewUpload: boolean; task?: TaskSession | null; onClearTask?: () => void; onReviewPlan: () => void }) {
   const queryClient = useQueryClient();
   const watchRun = useVerificationFeedback();
   const container = useRef<HTMLDivElement>(null);
@@ -54,6 +55,9 @@ export function VerificationWorkspace({ saved, heading, visible, startNewUpload,
   useEffect(() => {
     if (startNewUpload) { setSelection("upload"); setConfirmDelete(false); setError(null); }
   }, [startNewUpload]);
+  useEffect(() => {
+    if (task) { setSelection("upload"); setConfirmDelete(false); setError(null); }
+  }, [task?.id]);
 
   useEffect(() => {
     if (!file) { setPreview(null); return; }
@@ -102,9 +106,10 @@ export function VerificationWorkspace({ saved, heading, visible, startNewUpload,
   }
 
   async function uploadVideo(selectedFile: File | null) {
-    if (saved.status !== "approved") throw new Error("Review and approve your current checks before uploading a video.");
-    if (!selectedFile || !consent || !saved.contractHash) throw new Error("Choose a video and give permission to send it to Meta first.");
-    const result = await api.api.runs.post({ video: selectedFile, consent: "true", approvedVersionId: versionId, contractHash: saved.contractHash });
+    if (!task && saved.status !== "approved") throw new Error("Review and approve your current checks before uploading a video.");
+    const contractHash = task?.contractHash ?? saved.contractHash;
+    if (!selectedFile || !consent || !contractHash) throw new Error("Choose a video and give permission to send it to Meta first.");
+    const result = await api.api.runs.post({ video: selectedFile, consent: "true", approvedVersionId: task?.approvedVersionId ?? versionId, contractHash, ...(task ? { taskSessionId: task.id } : {}) });
     if (result.error) throw apiError(result.error.value, "The recording could not be uploaded.");
     return runSummarySchema.parse(result.data);
   }
@@ -113,6 +118,8 @@ export function VerificationWorkspace({ saved, heading, visible, startNewUpload,
     queryClient.setQueryData<RunSummary[]>(listKey, (current) => [result, ...(current ?? []).filter((item) => item.id !== result.id)]);
     watchRun(result.id);
     setSelection(result.id); setFile(null); setError(null);
+    onClearTask?.();
+    void queryClient.invalidateQueries({ queryKey: planTriggersQuery(saved.id).queryKey });
     void queryClient.invalidateQueries({ queryKey: listKey });
   }, onError: (failure) => setError(failure.message), retry: false });
 
@@ -147,7 +154,8 @@ export function VerificationWorkspace({ saved, heading, visible, startNewUpload,
       {runId && run && <div className="min-w-0 sm:text-right"><h2 className="text-[14px] font-semibold tracking-tight">{recordingName(recordings, run.id)}</h2><p className="mt-1 text-[12px] leading-5 text-muted-foreground">{new Date(run.createdAt).toLocaleString()}{run.durationMs ? ` · ${(run.durationMs / 1000).toFixed(1)} seconds` : ""} · Plan v{run.planVersion}</p></div>}
     </div>
     <div className="min-w-0 space-y-3">
-      {showLibrary && <VideoLibrary runs={recordings} selectedId={runId} loading={runs.isPending} error={runs.error?.message ?? null} uploading={upload.isPending || processing} refreshing={runs.isRefetching} onSelect={selectVideo} onNew={() => saved.status === "approved" && consent ? chooser.current?.click() : onReviewPlan()} onRefresh={refreshRuns} />}
+      {showLibrary && <VideoLibrary runs={recordings} selectedId={runId} loading={runs.isPending} error={runs.error?.message ?? null} uploading={upload.isPending || processing} refreshing={runs.isRefetching} onSelect={id => { onClearTask?.(); selectVideo(id); }} onNew={() => { onClearTask?.(); if (saved.status === "approved" && consent) chooser.current?.click(); else onReviewPlan(); }} onRefresh={refreshRuns} />}
+      {task && <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-primary/5 p-3 text-sm"><p>Attach a recording for <strong>{task.reference ?? "this task"}</strong>. Verification uses the approved checks saved when it started.</p><Button variant="ghost" size="sm" disabled={upload.isPending} onClick={onClearTask}>Remove task link</Button></div>}
       <div className="min-w-0 space-y-3">
         {displayedError && <div role="alert" className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm leading-6 text-destructive">{displayedError}{!error && <button className="ml-2 underline" onClick={refreshRuns}>Reload videos</button>}</div>}
         {runId ? run ? <>
@@ -155,9 +163,9 @@ export function VerificationWorkspace({ saved, heading, visible, startNewUpload,
           {run.warnings.map((warning) => <p key={warning} className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900">{warning}</p>)}
           <EvidencePlayer key={run.id} run={run} />
           {!isActiveRun(run.state) && <div className="flex flex-wrap items-center justify-between gap-3 px-1 py-2"><span className="text-[12px] text-muted-foreground">Expires {new Date(run.expiresAt).toLocaleString()}</span><div className="flex flex-wrap gap-2">{run.receipt && <Button variant="outline" className="h-8 gap-2 rounded-lg px-3" onClick={exportReceipt}><ArrowDownToLine />Export evidence</Button>}{confirmDelete ? <><Button variant="destructive" className="h-8 px-3" disabled={remove.isPending} onClick={() => remove.mutate(run.id)}>Delete video & evidence</Button><Button variant="ghost" disabled={remove.isPending} onClick={() => setConfirmDelete(false)}>Cancel</Button></> : <Button variant="ghost" className="h-8 gap-2 px-3" onClick={() => setConfirmDelete(true)}><Trash2 />Delete</Button>}</div></div>}
-        </> : details.isPending ? <div role="status" className="flex min-h-64 items-center justify-center gap-2 rounded-2xl border bg-card p-6 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Loading video…</div> : <div className="rounded-2xl border bg-card p-6 text-sm text-muted-foreground">This video could not be opened. Select another recording or add a new video.</div> : runs.isPending && selection === null ? <p role="status" className="p-6 text-sm text-muted-foreground">Loading your video library…</p> : saved.status !== "approved" || !consent ? <section className="rounded-2xl border bg-card p-5"><h2 className="text-lg font-semibold">Review your updated checks</h2><p className="mt-2 text-sm text-muted-foreground">Your earlier recordings are still available. Review your updated plan, then choose Check a video.</p><Button variant="outline" className="mt-4" onClick={onReviewPlan}>Review checks</Button></section> : <>
-          <details className="rounded-xl border bg-card px-4 py-2"><summary className="cursor-pointer py-1 text-sm font-medium">Plan checks & filming tips</summary><RecordingChecklist saved={saved} onReviewPlan={onReviewPlan} /></details>
-          <VideoUpload file={file} localUrl={localUrl} uploading={upload.isPending} processing={processing} available={readiness.data?.available ?? false} retentionHours={readiness.data?.retentionHours ?? 24} version={saved.version} onChoose={choose} onClear={() => { setFile(null); setError(null); }} onInvalid={selectionError} onUpload={() => upload.mutate()} />
+        </> : details.isPending ? <div role="status" className="flex min-h-64 items-center justify-center gap-2 rounded-2xl border bg-card p-6 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Loading video…</div> : <div className="rounded-2xl border bg-card p-6 text-sm text-muted-foreground">This video could not be opened. Select another recording or add a new video.</div> : runs.isPending && selection === null ? <p role="status" className="p-6 text-sm text-muted-foreground">Loading your video library…</p> : (!task && saved.status !== "approved") || !consent ? <section className="rounded-2xl border bg-card p-5"><h2 className="text-lg font-semibold">Review your updated checks</h2><p className="mt-2 text-sm text-muted-foreground">Your earlier recordings are still available. Review your updated plan, then choose Check a video.</p><Button variant="outline" className="mt-4" onClick={onReviewPlan}>Review checks</Button></section> : <>
+          {!task && <details className="rounded-xl border bg-card px-4 py-2"><summary className="cursor-pointer py-1 text-sm font-medium">Plan checks & filming tips</summary><RecordingChecklist saved={saved} onReviewPlan={onReviewPlan} /></details>}
+          <VideoUpload file={file} localUrl={localUrl} uploading={upload.isPending} processing={processing} available={readiness.data?.available ?? false} retentionHours={readiness.data?.retentionHours ?? 24} version={task ? null : saved.version} onChoose={choose} onClear={() => { setFile(null); setError(null); }} onInvalid={selectionError} onUpload={() => upload.mutate()} />
         </>}
       </div>
     </div>

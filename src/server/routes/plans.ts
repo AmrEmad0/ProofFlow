@@ -39,6 +39,24 @@ export function planRoutes(db: Database, config: Config, conversation?: PlanConv
       return store.create(hash, body.template);
     }, { body: t.Object({ template: t.Union([t.Literal("blank"), t.Literal("packproof")]) }, { additionalProperties: false }) })
     .get("/api/plans/:id", ({ params, request }) => store.read(params.id, sessionHash(request)), { params: planParams })
+    .post("/api/plans/:id/manual", ({ params, request, body }) => {
+      const hash = sessionHash(request);
+      if (busySessions.has(hash)) throw new PlannerError(409, "Wait for the current plan change before saving your checks.");
+      return store.saveManual(params.id, hash, body);
+    }, { params: planParams, body: t.Object({
+      revision: t.Integer({ minimum: 0 }), title: t.String({ minLength: 1, maxLength: 160 }),
+      steps: t.Array(t.Object({
+        id: t.String({ minLength: 1, maxLength: 80 }),
+        checkType: t.Union([t.Literal("object_enters_region"), t.Literal("visible_state_change"), t.Literal("object_present_at_end")]),
+        subjectConcept: t.String({ minLength: 1, maxLength: 120 }), targetConcept: t.Nullable(t.String({ minLength: 1, maxLength: 120 })),
+        beforeState: t.Nullable(t.String({ minLength: 1, maxLength: 240 })), afterState: t.Nullable(t.String({ minLength: 1, maxLength: 240 })),
+      }, { additionalProperties: false }), { minItems: 1, maxItems: LIMITS.steps }),
+    }, { additionalProperties: false }) })
+    .post("/api/plans/:id/starter", ({ params, request, body }) => {
+      const hash = sessionHash(request);
+      if (busySessions.has(hash)) throw new PlannerError(409, "Wait for the current plan change before choosing an example.");
+      return store.useStarter(params.id, hash, body.revision);
+    }, { params: planParams, body: revisionBody })
     .delete("/api/plans/:id", async ({ params, request }) => {
       const hash = sessionHash(request);
       store.read(params.id, hash);

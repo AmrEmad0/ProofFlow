@@ -19,7 +19,7 @@ export function VideoUpload({ file, localUrl, uploading, processing, available, 
     : null;
 
   return <section className="rounded-2xl border bg-card p-4 sm:p-5" aria-label="Upload a new video">
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><h2 className="flex items-center gap-2 text-lg font-semibold"><Upload className="size-5 text-primary" aria-hidden="true" />Check a video</h2><span className="flex items-center gap-1.5 text-sm text-emerald-700"><Check className="size-4" aria-hidden="true" />Approved checks · v{version}</span></div>
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><h2 className="flex items-center gap-2 text-lg font-semibold"><Upload className="size-5 text-primary" aria-hidden="true" />Check a video</h2><span className="flex items-center gap-1.5 text-sm text-emerald-700"><Check className="size-4" aria-hidden="true" />{version ? `Approved checks · v${version}` : "Task’s approved checks"}</span></div>
     <input ref={chooser} type="file" aria-label="Choose a video recording" accept=".mp4,.mov,.webm,video/mp4,video/quicktime,video/webm" className="sr-only" tabIndex={-1} disabled={uploading} onChange={(event) => { onChoose(event.target.files?.[0]); event.target.value = ""; }} />
     <div onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); if (!uploading) onChoose(event.dataTransfer.files[0]); }}>
       {file ? <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-muted/20 p-3">

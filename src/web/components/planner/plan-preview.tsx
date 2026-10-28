@@ -36,13 +36,14 @@ type Props = {
   onUseStarter: () => void;
   onVerify: () => void;
   onCopy: () => void;
+  onManual: () => void;
   onEdit: (edit: EditableCheck) => Promise<void>;
   onRemove: (id: string) => void;
   onReload: () => Promise<void>;
   changedIds: string[];
 };
 
-export function PlanPreview({ saved, starter, pending, onRevise, editingApproved, onFinishEditing, onUseStarter, onVerify, onCopy, onEdit, onRemove, onReload, changedIds }: Props) {
+export function PlanPreview({ saved, starter, pending, onRevise, editingApproved, onFinishEditing, onUseStarter, onVerify, onCopy, onManual, onEdit, onRemove, onReload, changedIds }: Props) {
   const detailsId = useId();
   const [videoConsent, setVideoConsent] = useState(false);
   const canContinue = Boolean(saved?.videoConsentAt || videoConsent);
@@ -70,7 +71,7 @@ export function PlanPreview({ saved, starter, pending, onRevise, editingApproved
       <div className="p-4 sm:p-5">
         <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0"><h2 className="break-words text-xl font-semibold tracking-tight">{plan.title}</h2><div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span>{plan.steps.length} checks · {saved ? `Version ${saved.version}` : "Example"}</span><span className={`rounded-full px-2 py-0.5 font-medium ${approved ? "bg-emerald-50 text-emerald-800" : "bg-muted"}`}>{approved ? "Ready to use" : "Draft"}</span></div></div>
-          {saved?.plan && <Button onClick={onCopy} disabled={pending} variant="ghost" className="px-2 text-sm"><Copy className="size-4" />Copy and change</Button>}
+          {saved?.plan && <div className="flex flex-wrap gap-1"><Button onClick={onManual} disabled={pending} variant="ghost" className="px-2 text-sm"><PencilLine className="size-4" />Edit manually</Button><Button onClick={onCopy} disabled={pending} variant="ghost" className="px-2 text-sm"><Copy className="size-4" />Copy and change</Button></div>}
         </div>
         <ol className="divide-y rounded-xl border">{plan.steps.map((step, index) => (
           <li key={step.id} className={`proof-step ${changedIds.includes(step.id) ? "bg-primary/5" : ""}`}>

@@ -61,7 +61,7 @@ export function runRoutes(db: Database, config: Config, worker?: VerificationWor
         await mkdir(directory, { recursive: true, mode: 0o700 });
         const path = join(directory, "source.upload");
         await Bun.write(path, body.video, { mode: 0o600 });
-        const run = store.create(id, body.approvedVersionId, body.contractHash, hash, path, config.MEDIA_RETENTION_HOURS);
+        const run = store.create(id, body.approvedVersionId, body.contractHash, hash, path, config.MEDIA_RETENTION_HOURS, body.taskSessionId);
         saved = true;
         set.status = 202;
         worker.kick();
@@ -73,6 +73,7 @@ export function runRoutes(db: Database, config: Config, worker?: VerificationWor
     }, { body: t.Object({
       approvedVersionId: t.String({ format: "uuid" }), contractHash: t.String({ pattern: "^[a-f0-9]{64}$" }),
       consent: t.Literal("true"), video: t.File({ minSize: 1, maxSize: LIMITS.uploadBytes }),
+      taskSessionId: t.Optional(t.String({ format: "uuid" })),
     }, { additionalProperties: false }) })
     .get("/api/runs/:id", async ({ params, request }) => {
       const details = store.details(params.id, sessionHash(request));

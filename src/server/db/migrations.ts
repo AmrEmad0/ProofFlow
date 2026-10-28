@@ -146,6 +146,54 @@ const migrations = [{
   version: 9,
   sql: `ALTER TABLE plans RENAME COLUMN reference_video_json TO reference_media_json;
     CREATE TABLE planner_remote_files (id TEXT PRIMARY KEY, cleanup_after INTEGER NOT NULL);`,
+}, {
+  version: 10,
+  sql: `
+    CREATE TABLE plan_triggers (
+      plan_id TEXT PRIMARY KEY REFERENCES plans(id) ON DELETE CASCADE,
+      revision INTEGER NOT NULL DEFAULT 0,
+      settings_json TEXT NOT NULL CHECK (json_valid(settings_json)),
+      api_key_hash TEXT
+    );
+    CREATE TABLE task_sessions (
+      id TEXT PRIMARY KEY,
+      plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+      plan_version_id TEXT NOT NULL REFERENCES plan_versions(id),
+      contract_hash TEXT NOT NULL,
+      configuration_revision INTEGER NOT NULL,
+      settings_json TEXT NOT NULL CHECK (json_valid(settings_json)),
+      reference TEXT,
+      source TEXT NOT NULL CHECK (source IN ('manual', 'scanner', 'api')),
+      state TEXT NOT NULL CHECK (state IN ('active', 'finished', 'cancelled')),
+      started_at TEXT NOT NULL,
+      ended_at TEXT,
+      run_id TEXT UNIQUE REFERENCES runs(id) ON DELETE SET NULL
+    );
+    CREATE UNIQUE INDEX one_active_task_per_plan ON task_sessions(plan_id) WHERE state = 'active';
+    CREATE INDEX task_sessions_plan ON task_sessions(plan_id, started_at);
+    CREATE TABLE trigger_events (
+      plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+      event_id TEXT NOT NULL,
+      payload_hash TEXT NOT NULL,
+      session_id TEXT NOT NULL REFERENCES task_sessions(id) ON DELETE CASCADE,
+      PRIMARY KEY(plan_id, event_id)
+    );
+  `,
+}, {
+  version: 11,
+  sql: `ALTER TABLE plan_triggers ADD COLUMN start_link_token TEXT;
+    ALTER TABLE plan_triggers ADD COLUMN finish_link_token TEXT;
+    UPDATE plan_triggers SET start_link_token = lower(hex(randomblob(32))) WHERE json_extract(settings_json, '$.start') = 'api';
+    UPDATE plan_triggers SET finish_link_token = lower(hex(randomblob(32))) WHERE json_extract(settings_json, '$.finish') = 'api';
+    CREATE UNIQUE INDEX trigger_start_link ON plan_triggers(start_link_token) WHERE start_link_token IS NOT NULL;
+    CREATE UNIQUE INDEX trigger_finish_link ON plan_triggers(finish_link_token) WHERE finish_link_token IS NOT NULL;`,
+}, {
+  version: 12,
+  sql: `CREATE TABLE trigger_captures (
+    session_id TEXT PRIMARY KEY REFERENCES task_sessions(id) ON DELETE CASCADE,
+    state TEXT NOT NULL CHECK (state IN ('queued','capturing','captured','done','failed')),
+    lease_until INTEGER, error_message TEXT
+  );`,
 }];
 
 export function migrate(db: Database): void {
