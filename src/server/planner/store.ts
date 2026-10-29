@@ -91,7 +91,8 @@ export function plannerStore(db: Database) {
           unresolvedGoals: input.unresolvedGoals ?? previous?.unresolvedGoals,
           steps: input.steps.map(step => {
             const original = previous?.schemaVersion === 2 ? previous.steps.find(item => item.id === step.id && item.checkType === step.checkType) : undefined;
-            return { ...step, requirements: step.requirements ?? original?.requirements, goalSource: step.goalSource ?? original?.goalSource,
+            const sameScope = JSON.stringify(step.visualCheck) === JSON.stringify(original?.visualCheck);
+            return { ...step, requirements: step.requirements ?? (sameScope ? original?.requirements : undefined), goalSource: step.goalSource ?? original?.goalSource,
               label: step.label ?? original?.label, observableEvidence: step.observableEvidence ?? original?.observableEvidence };
           }),
         });
@@ -172,7 +173,7 @@ export function plannerStore(db: Database) {
         if (!original) throw new PlannerError(400, "This check is no longer in the plan. Reload the saved draft.");
         if (original.checkType === "object_enters_region" && !edit.targetConcept) throw new PlannerError(400, "Choose where the item should go.");
         if (original.checkType === "visible_state_change" && (!edit.beforeState || !edit.afterState)) throw new PlannerError(400, "Describe what the object looks like before and after.");
-        const unchanged = ["subjectConcept", "targetConcept", "beforeState", "afterState", "requirements", "goalSource"].every(key => edit[key as keyof typeof edit] === undefined || JSON.stringify(original[key as keyof typeof original]) === JSON.stringify(edit[key as keyof typeof edit]));
+        const unchanged = ["subjectConcept", "targetConcept", "beforeState", "afterState", "requirements", "goalSource", "visualCheck", "label", "observableEvidence"].every(key => edit[key as keyof typeof edit] === undefined || JSON.stringify(original[key as keyof typeof original]) === JSON.stringify(edit[key as keyof typeof edit]));
         return unchanged ? original : describeEditedCheck(original, edit);
       });
       if (updated.length === originals.length && updated.every((step, index) => step === originals[index])) return current.plan!;

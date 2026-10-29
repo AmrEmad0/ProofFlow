@@ -43,7 +43,7 @@ export const receiptSchema = z.strictObject({
   contractHash: z.string().regex(/^[a-f0-9]{64}$/),
   findings: z.array(findingSchema).min(1).max(LIMITS.steps),
   provenance: z.strictObject({
-    museModel: z.literal("muse-spark-1.3-contributor"),
+    museModel: z.literal("muse-spark-1.3"),
     samModel: z.literal("sam-3.1"),
     promptVersion: z.string().min(1),
     verificationRuleVersion: z.string().min(1),

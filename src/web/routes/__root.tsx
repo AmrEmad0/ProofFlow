@@ -1,4 +1,6 @@
-import type { QueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { connectWorkspaceEvents } from "@/lib/workspace-events";
 import { createRootRouteWithContext, Link, Outlet } from "@tanstack/react-router";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toast";
@@ -11,6 +13,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 });
 
 function Root() {
+  const client = useQueryClient();
+  useEffect(() => connectWorkspaceEvents(client), [client]);
   return (
     <Toaster timeout={4000} limit={3}><VerificationFeedbackProvider><TooltipProvider><div className="min-h-screen bg-background">
       <a href="#main-content" className="sr-only z-50 rounded-lg bg-primary p-3 text-primary-foreground focus:not-sr-only focus:absolute focus:left-4 focus:top-4">Skip to main content</a>

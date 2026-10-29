@@ -1,6 +1,6 @@
 import type OpenAI from "openai";
 import { z } from "zod";
-import { LIMITS, proofPlanSchema, planningPlanShape } from "../../shared/proof-plan";
+import { proofPlanSchema, planningPlanShape } from "../../shared/proof-plan";
 import { planningInstructions } from "./chat";
 import { MODELS } from "../meta/client";
 
@@ -25,7 +25,7 @@ export async function draftPlan(client: OpenAI, goal: string) {
   });
   const message = response.choices[0]?.message;
   if (message?.refusal || !message?.content) throw new Error("The model did not return an observable proof plan.");
-  const result = draftResponseSchema.parse(JSON.parse(message.content));
+  const result = draftResponseSchema.extend({ plan: proofPlanSchema.nullable() }).parse(JSON.parse(message.content));
   if (!result.plan || result.rejectionReason !== null) throw new Error("The goal could not be expressed as an observable proof plan.");
   return proofPlanSchema.parse(result.plan);
 }

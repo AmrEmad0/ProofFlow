@@ -51,7 +51,7 @@ function samResponse(terminal: "response.completed" | "response.incomplete") {
 describe("Meta adapters with local transport fixtures", () => {
   test("drafts use Muse and Chat Completions response_format, then enforce domain rules", async () => {
     const client = fixtureClient(chatResponse({ plan: packproofTemplate, rejectionReason: null }), (body) => {
-      expect(body.model).toBe("muse-spark-1.3-contributor");
+      expect(body.model).toBe("muse-spark-1.3");
       expect(body).toHaveProperty("response_format");
       expect(body).not.toHaveProperty("text");
     });
@@ -67,7 +67,7 @@ describe("Meta adapters with local transport fixtures", () => {
 
   test("Muse video requests reuse a file ID with Responses text.format and reject unknown step IDs", async () => {
     const client = fixtureClient(videoResponse("insert-product"), (body) => {
-      expect(body.model).toBe("muse-spark-1.3-contributor");
+      expect(body.model).toBe("muse-spark-1.3");
       expect(body).toHaveProperty("text.format");
       expect(body).not.toHaveProperty("response_format");
       expect(JSON.stringify(body.input)).toContain('"type":"input_file","file_id":"file-shared"');

@@ -5,6 +5,7 @@ import { createApp } from "./app";
 import { loadConfig } from "./config";
 import { openDatabase } from "./db";
 import { createVerificationWorker } from "./verification/worker";
+import { workspaceEvents } from "./http/workspace-events";
 
 const config = loadConfig();
 await mkdir(config.STORAGE_PATH, { recursive: true, mode: 0o700 });
@@ -36,6 +37,7 @@ let stopping = false;
 async function shutdown() {
   if (stopping) return;
   stopping = true;
+  workspaceEvents(db).close();
   await app.stop();
   await captures.stop();
   await worker.stop();

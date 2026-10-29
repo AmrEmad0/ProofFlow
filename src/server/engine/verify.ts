@@ -2,51 +2,15 @@ import { canonicalConcept as canonical, type ApprovedPlan, type ProofStep } from
 import { findingSchema, type Finding } from "../../shared/receipt";
 import { ANALYSIS_FPS, type ConceptTrack, type TrackBox } from "../../shared/verification";
 import { structuredConflicts, type Observation } from "../../shared/observation";
-import { verificationDiagnosticsSchema, type StepCheck, type TrackWindow } from "../../shared/diagnostics";
+import { verificationDiagnosticsSchema, type StepCheck } from "../../shared/diagnostics";
 
-export const VERIFICATION_RULE_VERSION = "2026-10-28.8";
+import { continuousTrack, describeTrack, fullyFramed, visibleStateInstances } from "./track-evidence";
+import { evaluateVisualCheck } from "./visual-check";
+
+export const VERIFICATION_RULE_VERSION = "2026-10-29.1";
 type Candidate = Observation["candidates"][number];
 type Anchor = { objectId: string; firstFrame: number };
 type EvaluatedStep = StepCheck & { actionEndMs?: number };
-const fullyFramed = (box: TrackBox) => box.left > 0 && box.top > 0 && box.right < 1 && box.bottom < 1;
-
-function continuousTrack(track: ConceptTrack | undefined, first: number, last: number, objectId?: string): TrackBox[] | null {
-  if (!track || track.outcome !== "completed" || last - first < 1) return null;
-  const boxes: TrackBox[] = [];
-  for (let frame = first; frame <= last; frame++) {
-    const matches = track.boxes.filter((box) => box.frameIndex === frame && (objectId === undefined || box.objectId === objectId));
-    if (matches.length !== 1) return null;
-    boxes.push(matches[0]!);
-  }
-  return new Set(boxes.map((box) => box.objectId)).size === 1 ? boxes : null;
-}
-
-function visibleStateInstances(track: ConceptTrack | undefined, first: number, last: number): string[] {
-  return [...new Set(track?.boxes.map(box => box.objectId))].filter(id => {
-    const boxes = continuousTrack(track, first, last, id);
-    // A frame-edge fragment cannot establish an object's visible before/after
-    // states. Keep all fully framed continuous alternatives, regardless of size.
-    return boxes && [boxes[0]!, boxes.at(-1)!].every(fullyFramed);
-  });
-}
-
-function describeTrack(concept: string, track: ConceptTrack | undefined, first: number, last: number): TrackWindow {
-  const boxes = track?.boxes.filter((box) => box.frameIndex >= first && box.frameIndex <= last) ?? [];
-  const frames = Array.from({ length: Math.max(0, last - first + 1) }, (_, index) => index + first);
-  const at = (frame: number) => boxes.filter((box) => box.frameIndex === frame);
-  return {
-    concept, outcome: track?.outcome ?? "missing", selectedObjectId: null,
-    missingFrames: frames.filter((frame) => at(frame).length === 0),
-    multipleFrames: frames.filter((frame) => at(frame).length > 1),
-    objects: [...new Set(boxes.map((box) => box.objectId))].map((objectId) => {
-      const object = boxes.filter((box) => box.objectId === objectId);
-      return { objectId, frames: new Set(object.map((box) => box.frameIndex)).size,
-        firstFrame: Math.min(...object.map((box) => box.frameIndex)), lastFrame: Math.max(...object.map((box) => box.frameIndex)),
-        missingFrames: frames.filter((frame) => !object.some((box) => box.frameIndex === frame)),
-        duplicateFrames: frames.filter((frame) => object.filter((box) => box.frameIndex === frame).length > 1) };
-    }),
-  };
-}
 
 function overlap(subject: TrackBox, region: TrackBox): number {
   const width = Math.max(0, Math.min(subject.right, region.right) - Math.max(subject.left, region.left));
@@ -150,6 +114,7 @@ function evaluate(step: ProofStep, candidate: Candidate | undefined, tracks: Con
   const check: StepCheck = { stepId: step.id, firstFrame: null, lastFrame: null, subject: null, target: null,
     regionCandidates: [], decision: "no_window", finding: base };
   function finish(decision: StepCheck["decision"], finding: Finding): StepCheck { return { ...check, decision, finding }; }
+  if (step.checkType === "visual_check") return evaluateVisualCheck(step, candidate, tracks, frameCount, check);
   if (!candidate) return check;
   if (candidate.startMs === null || candidate.endMs === null) {
     // A visible non-event has no event timestamp. Whole-clip coverage can still
@@ -371,7 +336,7 @@ export function evaluateEvidence(plan: ApprovedPlan, observation: Observation, t
     if (candidate?.subject && finding.status === "observed") {
       finding.moments = (["before", "action", "after"] as const).flatMap(phase => {
         const moment = candidate[phase];
-        return moment?.visible && moment.matchesRequirement ? [{ phase, timestampMs: moment.timestampMs, description: moment.description }] : [];
+        return (step.checkType !== "visual_check" || step.requirements?.some(req => req.phase === phase)) && moment?.visible && moment.matchesRequirement ? [{ phase, timestampMs: moment.timestampMs, description: moment.description }] : [];
       });
     }
     check.finding = findingSchema.parse(finding);

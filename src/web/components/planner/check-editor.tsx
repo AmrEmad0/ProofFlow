@@ -5,6 +5,8 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import type { EditableCheck } from "../../../shared/planner";
 import { describeEditedCheck, editableCheckSchema } from "../../../shared/planner";
 import { EvidenceFields } from "./evidence-fields";
+import { VisualCheckFields } from "./visual-check-fields";
+import { updateManualCheck, manualRequirements } from "@/lib/manual-plan";
 import type { ProofStep } from "../../../shared/proof-plan";
 
 export function CheckEditor({ step, pending, onClose, onSave, onReload }: {
@@ -12,12 +14,13 @@ export function CheckEditor({ step, pending, onClose, onSave, onReload }: {
 }) {
   const prefix = useId();
   const [edit, setEdit] = useState<EditableCheck>({ id: step.id, subjectConcept: step.subjectConcept,
-    targetConcept: step.targetConcept, beforeState: step.beforeState, afterState: step.afterState, requirements: step.requirements, goalSource: step.goalSource });
+    targetConcept: step.targetConcept, beforeState: step.beforeState, afterState: step.afterState, requirements: step.requirements, goalSource: step.goalSource,
+    visualCheck: step.visualCheck, label: step.label, observableEvidence: step.observableEvidence });
   const [error, setError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const busy = pending || reloading;
-  const original = editableCheckSchema.parse({ id: step.id, subjectConcept: step.subjectConcept, targetConcept: step.targetConcept, beforeState: step.beforeState, afterState: step.afterState, requirements: step.requirements, goalSource: step.goalSource });
+  const original = editableCheckSchema.parse({ id: step.id, subjectConcept: step.subjectConcept, targetConcept: step.targetConcept, beforeState: step.beforeState, afterState: step.afterState, requirements: step.requirements, goalSource: step.goalSource, visualCheck: step.visualCheck, label: step.label, observableEvidence: step.observableEvidence });
   const normalized = editableCheckSchema.safeParse(edit);
   const changed = normalized.success && JSON.stringify(normalized.data) !== JSON.stringify(original);
   const preview = describeEditedCheck(step, edit);
@@ -41,6 +44,10 @@ export function CheckEditor({ step, pending, onClose, onSave, onReload }: {
         try { await onSave({ ...edit, requirements: edit.requirements?.map(req => ({ ...req, subjectConcept: edit.subjectConcept, targetConcept: edit.targetConcept })) }); onClose(); }
         catch (failure) { setError(failure instanceof Error ? failure.message : "Couldn’t save your change. Your edit is still here."); }
       }}>
+        {step.checkType === "visual_check" && <VisualCheckFields disabled={busy} value={edit} onChange={patch => setEdit(current => {
+          const next = updateManualCheck({ ...step, ...current }, patch);
+          return { ...current, ...patch, requirements: next.requirements ?? manualRequirements(next) };
+        })} />}
         {fields.map(({ key, label, hint, limit }, index) => <div key={key}>
           <label htmlFor={`${prefix}-${key}`} className="mb-2 block text-base font-medium">{label}</label>
           <Input id={`${prefix}-${key}`} autoFocus={index === 0} value={edit[key] ?? ""} required maxLength={limit}
@@ -48,7 +55,8 @@ export function CheckEditor({ step, pending, onClose, onSave, onReload }: {
             onChange={(event) => setEdit((current) => ({ ...current, [key]: event.target.value }))} />
           <p id={`${prefix}-${key}-hint`} className="mt-2 text-sm text-muted-foreground">{hint}</p>
         </div>)}
-        {edit.requirements && <EvidenceFields requirements={edit.requirements} onChange={requirements => setEdit(current => ({ ...current, requirements }))} />}
+        {step.checkType === "visual_check" && <label className="block text-sm">Other item or area involved (optional)<Input value={edit.targetConcept ?? ""} maxLength={120} disabled={busy} onChange={event => setEdit(current => ({ ...current, targetConcept: event.target.value || null }))} /></label>}
+        {edit.requirements && <EvidenceFields visualCheck={edit.visualCheck} requirements={edit.requirements} onChange={requirements => setEdit(current => ({ ...current, requirements }))} />}
         <div className="rounded-xl border bg-muted/30 p-4"><p className="text-sm font-medium">What the camera needs to show</p><p className="mt-2 break-words text-base leading-7">{preview.observableEvidence}</p></div>
         {error && <div className="space-y-2"><p role="alert" className="text-base text-destructive">{error}</p>
           <Button type="button" variant="outline" disabled={busy} onClick={async () => {

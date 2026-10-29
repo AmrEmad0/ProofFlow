@@ -3,14 +3,15 @@ import OpenAI from "openai";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
-import { plannerReplySchema, type PlannerReply, type ReferenceMedia } from "../../shared/planner";
-import { planningPlanShape, type ProofPlan } from "../../shared/proof-plan";
+import { plannerReplySchema, type PlannerReply, type ReferenceMedia, type PlannerPreview } from "../../shared/planner";
+import { planningPlanShape, proofPlanSchema, type ProofPlan } from "../../shared/proof-plan";
 import type { Config } from "../config";
 import { runMediaCommand } from "../media/process";
 import { normalizeVideo } from "../media/video";
 import { createMetaClient, MODELS } from "../meta/client";
 import { uploadVideo, deleteVideo } from "../meta/files";
 import { planningInstructions } from "./chat";
+import { PlanPreviewDecoder } from "./plan-preview";
 import { ReplyTextDecoder } from "./reply-text";
 import { PlannerError } from "./store";
 
@@ -19,10 +20,10 @@ const referenceReplySchema = z.strictObject({
   summary: z.string().trim().min(1).max(6000),
   plan: planningPlanShape.nullable(),
 });
-export type ReferenceAnalysis = (file: File, message: string, plan: ProofPlan | null, signal: AbortSignal, onReplyText?: (text: string) => void) => Promise<{ reply: PlannerReply; reference: ReferenceMedia }>;
+export type ReferenceAnalysis = (file: File, message: string, plan: ProofPlan | null, signal: AbortSignal, onReplyText?: (text: string) => void, onPlanPreview?: (preview: PlannerPreview) => void) => Promise<{ reply: PlannerReply; reference: ReferenceMedia }>;
 
 export function referenceAnalyzer(config: Config, db: Database): ReferenceAnalysis {
-  return async (file, message, plan, signal, onReplyText) => {
+  return async (file, message, plan, signal, onReplyText, onPlanPreview) => {
     const root = join(config.STORAGE_PATH, "planner-temporary");
     await mkdir(root, { recursive: true, mode: 0o700 });
     const directory = await mkdtemp(join(root, "reference-"));
@@ -65,6 +66,7 @@ export function referenceAnalyzer(config: Config, db: Database): ReferenceAnalys
       if (onReplyText) {
         const stream = await client.responses.create({ ...parameters, stream: true }, { signal, maxRetries: 0 });
         const decoder = new ReplyTextDecoder();
+        const preview = new PlanPreviewDecoder(value => onPlanPreview?.(value));
         let lastText = "";
         let completed = false;
         output = "";
@@ -73,6 +75,7 @@ export function referenceAnalyzer(config: Config, db: Database): ReferenceAnalys
             if (event.type === "response.output_text.delta") {
               output += event.delta;
               if (output.length > 128_000) throw new Error("Reference planning response exceeded the size limit.");
+              preview.push(event.delta);
               const text = decoder.push(event.delta);
               if (text.length > 4000) throw new Error("Reference planning reply exceeded the size limit.");
               if (text !== lastText) { onReplyText(text); lastText = text; }
@@ -87,7 +90,7 @@ export function referenceAnalyzer(config: Config, db: Database): ReferenceAnalys
         if (response.status !== "completed") throw new Error("Reference planning did not complete.");
         output = response.output_text;
       }
-      const result = referenceReplySchema.parse(JSON.parse(output));
+      const result = referenceReplySchema.extend({ plan: proofPlanSchema.nullable() }).parse(JSON.parse(output));
       return { reply: plannerReplySchema.parse({ reply: result.reply, plan: result.plan }), reference: {
         name: file.name.slice(0, 255) || "Reference media", kind: isImage ? "image" : "video", durationMs, summary: result.summary,
       } };

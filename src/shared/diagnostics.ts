@@ -23,7 +23,7 @@ export const stepCheckSchema = z.strictObject({
     subjectObjectId: z.string().optional(), endFrame: frame.nullable().optional(),
     containment: z.array(z.strictObject({ frameIndex: frame, ratio: z.number().min(0).max(1) })),
   })),
-  decision: z.enum(["no_window", "contradictory_proposal", "ambiguous_proposal", "subject_track", "final_presence", "state_change", "target_track", "entry_geometry", "step_order"]),
+  decision: z.enum(["no_window", "contradictory_proposal", "ambiguous_proposal", "subject_track", "final_presence", "state_change", "visual_evidence", "target_track", "entry_geometry", "step_order"]),
   finding: findingSchema,
 });
 

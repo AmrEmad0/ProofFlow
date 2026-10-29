@@ -10,7 +10,7 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 import { api } from "@/lib/eden";
 import { readPlannerStream } from "@/lib/planner-stream";
 import { apiError, plannerStatusQuery, planRunsQuery, plansQuery, savedPlanQuery } from "@/lib/queries";
-import { deletePlanResultSchema, savedPlanSchema, type EditableCheck, type SavedPlan } from "../../../shared/planner";
+import { deletePlanResultSchema, savedPlanSchema, type EditableCheck, type PlannerPreview, type SavedPlan } from "../../../shared/planner";
 import { packproofTemplate } from "../../../shared/packproof";
 import { PlanPreview } from "./plan-preview";
 import { PlannerChat } from "./planner-chat";
@@ -48,7 +48,7 @@ function rememberMessage(id: string | null, message: string) {
 }
 
 function editableChecks(saved: SavedPlan): EditableCheck[] {
-  return saved.plan!.steps.map(({ id, subjectConcept, targetConcept, beforeState, afterState, requirements, goalSource }) => ({ id, subjectConcept, targetConcept, beforeState, afterState, requirements, goalSource }));
+  return saved.plan!.steps.map(({ id, subjectConcept, targetConcept, beforeState, afterState, requirements, goalSource, visualCheck, label, observableEvidence }) => ({ id, subjectConcept, targetConcept, beforeState, afterState, requirements, goalSource, visualCheck, label, observableEvidence }));
 }
 
 export function PlannerWorkspace({ initialStarter = false, planId = null }: { initialStarter?: boolean; planId?: string | null }) {
@@ -56,6 +56,7 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
   const queryClient = useQueryClient();
   const [activeId, setActiveId] = useState<string | null>(planId);
   const [error, setError] = useState<string | null>(null);
+  const [planPreview, setPlanPreview] = useState<PlannerPreview | null>(null);
   const [partialReply, setPartialReply] = useState("");
   const requestController = useRef<AbortController | null>(null);
   useEffect(() => () => requestController.current?.abort(), []);
@@ -84,7 +85,7 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
     setError(null);
     if (!keepInput) {
       setManualEditing(false);
-      setPartialReply(""); setEditingApproved(false); setInput(rememberedMessage(id)); setView("auto"); setPropertiesOpen(false); setUndo(null);
+      setPartialReply(""); setPlanPreview(null); setEditingApproved(false); setInput(rememberedMessage(id)); setView("auto"); setPropertiesOpen(false); setUndo(null);
       heading.current?.focus({ preventScroll: true });
       window.scrollTo({ top: 0 });
     }
@@ -99,7 +100,7 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
     setTask(null);
     setEditingApproved(false);
     setError(null);
-    setPartialReply("");
+    setPartialReply(""); setPlanPreview(null);
     setInput(rememberedMessage(planId));
     setView("auto");
     setPropertiesOpen(false);
@@ -159,7 +160,7 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
       return savedPlanSchema.parse(response.data);
     }
     if (action.type === "send") {
-      setPartialReply("");
+      setPartialReply(""); setPlanPreview(null);
       const controller = new AbortController();
       requestController.current = controller;
       try {
@@ -168,7 +169,7 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
           : await endpoint.messages.post({ message: action.message, revision: target.revision }, { query: { stream: "true" }, fetch: { signal: controller.signal } });
         if (failure) throw apiError(failure.value, "Your message could not be sent. Please try again.");
         if (!data || !(Symbol.asyncIterator in data)) throw new Error("The chat stream could not be opened. Please try again.");
-        return await readPlannerStream(data, setPartialReply);
+        return await readPlannerStream(data, setPartialReply, setPlanPreview);
       } finally {
         controller.abort();
         if (requestController.current === controller) requestController.current = null;
@@ -200,7 +201,7 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
       if (value.status !== "approved") { setEditingApproved(false); setView("plan"); }
       if (action.type === "approve") openUpload();
       if (action.type === "send") {
-        setPartialReply("");
+        setPartialReply(""); setPlanPreview(null);
         rememberMessage(saved?.id ?? activeId, "");
         rememberMessage(value.id, "");
       }
@@ -258,7 +259,7 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
   async function reloadDraft() {
     await withFeedback(current.refetch({ throwOnError: true }), { loading: "Reloading draft…", success: "Draft reloaded", error: "Couldn’t reload draft" });
     setError(null);
-    setPartialReply("");
+    setPartialReply(""); setPlanPreview(null);
   }
 
   function openEditor() {
@@ -287,7 +288,7 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
 
   const pageHeading = <div className="min-w-0">
     <h1 ref={heading} tabIndex={-1} className={`font-semibold tracking-tight outline-none ${videoView ? "text-2xl" : "text-2xl sm:text-3xl"}`}>{openingVideos ? "Opening your plan" : videoView ? "Videos & evidence" : manualEditing ? "Build your own plan" : editingApproved ? "Edit your checks" : approved ? "Your plan is ready" : hasPlan ? "Review your checks" : "Create your proof plan"}</h1>
-    <p className={videoView ? "sr-only" : "mt-2 text-base leading-7 text-muted-foreground"}>{openingVideos ? "Loading your videos and saved checks." : videoView ? "Inspect each check alongside its video evidence." : editingApproved ? "Save your changes, then use the updated checks for a video." : approved ? "Ask a question, revise your plan, or check a video." : hasPlan ? "Adjust the checks here, then choose Check a video when you’re ready." : "Describe your process or add a reference. Review and approve the suggested checks before verifying a video."}</p>
+    <p className={videoView ? "sr-only" : "mt-2 text-base leading-7 text-muted-foreground"}>{openingVideos ? "Loading your videos and saved checks." : videoView ? "Inspect each check alongside its video evidence." : manualEditing ? "Choose visible actions, name the objects, and watch your plan take shape. Save a draft, then review and approve it." : editingApproved ? "Save your changes, then use the updated checks for a video." : approved ? "Ask a question, revise your plan, or check a video." : hasPlan ? "Adjust the checks here, then choose Check a video when you’re ready." : "Describe your process or add a reference. Review and approve the suggested checks before verifying a video."}</p>
   </div>;
 
   return (
@@ -324,7 +325,7 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
             <div className="min-w-0">
             {!loading && saved && (approved || videoView || Boolean(previousRuns.data?.length)) && <div hidden={!videoView}><VerificationWorkspace key={saved.id} saved={saved} heading={videoView ? pageHeading : null} visible={Boolean(videoView)} startNewUpload={view === "upload"} task={task} onClearTask={() => setTask(null)} onReviewPlan={() => setView("plan")} /></div>}
             {loading ? <Skeleton className="h-96 rounded-2xl" aria-label={openingVideos ? "Loading plan videos" : "Loading saved plan"} /> : videoView ? null : manualEditing ? <ManualPlanEditor saved={saved} pending={pending} onSave={async draft => { await mutation.mutateAsync({ type: "manual", draft }); }} onCancel={() => setManualEditing(false)} /> : <div className={hasPlan ? "grid items-start gap-5 2xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]" : "min-w-0"}>
-              <PlannerChat saved={saved} starter={starter} pending={pending} sending={sending} partialReply={partialReply} referenceSending={sending && mutation.variables?.type === "send" && Boolean(mutation.variables.media)} pendingMessage={(sending || partialReply) && mutation.variables?.type === "send" ? mutation.variables.message : null} configured={configured} error={displayedError} input={input} onInputChange={(message) => { setInput(message); rememberMessage(activeId, message); }} onSend={async (message, media) => { await mutation.mutateAsync({ type: "send", message, media }); }} onStarter={() => act({ type: "create", template: "packproof" })} onManual={() => setManualEditing(true)} onReload={() => { void reloadDraft().catch(() => {}); }} />
+              <PlannerChat saved={saved} starter={starter} pending={pending} sending={sending} partialReply={partialReply} planPreview={planPreview} referenceSending={sending && mutation.variables?.type === "send" && Boolean(mutation.variables.media)} pendingMessage={(sending || partialReply) && mutation.variables?.type === "send" ? mutation.variables.message : null} configured={configured} error={displayedError} input={input} onInputChange={(message) => { setInput(message); rememberMessage(activeId, message); }} onSend={async (message, media) => { await mutation.mutateAsync({ type: "send", message, media }); }} onStarter={() => act({ type: "create", template: "packproof" })} onManual={() => setManualEditing(true)} onReload={() => { void reloadDraft().catch(() => {}); }} />
               {hasPlan && <PlanPreview key={activeId ?? "preview"} saved={saved} starter={starter ? packproofTemplate : null} pending={pending || current.isError} editingApproved={editingApproved} onFinishEditing={() => setEditingApproved(false)} onRevise={openEditor} onCopy={() => act({ type: "copy" })} onEdit={editCheck} onRemove={removeCheck} onReload={reloadDraft} changedIds={undo?.planId === saved?.id ? undo?.changedIds ?? [] : []} onUseStarter={() => act({ type: "create", template: "packproof" })} onManual={() => setManualEditing(true)} onVerify={() => approved && saved?.videoConsentAt ? openUpload() : act({ type: "approve" })} />}
             </div>}
             </div>

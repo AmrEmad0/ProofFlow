@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowRight, ArrowUp, LoaderCircle, Package, PencilLine, Workflow, Coffee, PanelTop, Paperclip, X, ImageIcon, Film, ChevronDown } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, Package, PencilLine, Workflow, Coffee, PanelTop, Paperclip, X, ImageIcon, Film, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { LIMITS } from "../../../shared/proof-plan";
-import type { SavedPlan } from "../../../shared/planner";
+import type { PlannerPreview, SavedPlan } from "../../../shared/planner";
 
 type Props = {
   saved: SavedPlan | null;
@@ -13,6 +13,7 @@ type Props = {
   referenceSending: boolean;
   pendingMessage: string | null;
   partialReply: string;
+  planPreview: PlannerPreview | null;
   configured: boolean;
   error: string | null;
   input: string;
@@ -23,7 +24,7 @@ type Props = {
   onReload: () => void;
 };
 
-export function PlannerChat({ saved, starter, pending, sending, referenceSending, pendingMessage, partialReply, configured, error, input, onInputChange: setInput, onSend, onStarter, onManual, onReload }: Props) {
+export function PlannerChat({ saved, starter, pending, sending, referenceSending, pendingMessage, partialReply, planPreview, configured, error, input, onInputChange: setInput, onSend, onStarter, onManual, onReload }: Props) {
   const [media, setMedia] = useState<File | null>(null);
   const [localUrl, setLocalUrl] = useState<string | null>(null);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
@@ -60,7 +61,7 @@ export function PlannerChat({ saved, starter, pending, sending, referenceSending
   const messages = saved?.messages ?? [];
   const isStarting = !hasPlan && messages.length === 0 && !sending && !partialReply;
   useEffect(() => { followReply.current = true; setShowLatest(false); }, [saved?.id, pendingMessage]);
-  useEffect(() => { if (history.current && followReply.current) history.current.scrollTop = history.current.scrollHeight; }, [saved?.id, messages.length, pendingMessage, partialReply, error]);
+  useEffect(() => { if (history.current && followReply.current) history.current.scrollTop = history.current.scrollHeight; }, [saved?.id, messages.length, pendingMessage, partialReply, planPreview, error]);
 
   function scrollToLatest() {
     followReply.current = true;
@@ -88,20 +89,26 @@ export function PlannerChat({ saved, starter, pending, sending, referenceSending
         <div className="min-w-0 flex-1"><h2 className="text-sm font-semibold">Plan assistant</h2><p className="mt-0.5 text-xs text-muted-foreground">{hasPlan ? "Refine your checks, one message at a time." : "Build checks for what matters."}</p></div>
         <span className="chat-header-status"><span className={`size-1.5 rounded-full ${sending ? "bg-primary animate-pulse" : configured ? "bg-emerald-500" : "bg-muted-foreground"}`} />{sending ? "Working" : configured ? "Muse Spark" : "Offline"}</span>
       </div>
-      {messages.length === 0 && !sending && !partialReply && <div className="chat-welcome"><span className="eyebrow">{hasPlan ? "MAKE IT YOURS" : "YOUR PROCESS, STEP BY STEP"}</span><h3 className="mt-2 text-xl font-semibold tracking-tight">{hasPlan ? "What would you like to refine?" : "What would you like to verify?"}</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{hasPlan ? "Ask about a check, change a detail, or get help setting up your camera." : "Describe the actions your video should capture. Add an image or short video for more context."}</p></div>}
-      {(messages.length > 0 || sending || partialReply) && <div ref={history} className="chat-history space-y-6 overflow-y-auto p-4 sm:p-5" role="log" aria-label="Planning conversation" aria-live="off" aria-busy={sending} onScroll={(event) => { const element = event.currentTarget; followReply.current = element.scrollHeight - element.scrollTop - element.clientHeight < 64; setShowLatest(!followReply.current); }}>
+      {messages.length === 0 && !sending && !partialReply && <div className="chat-welcome"><span className="eyebrow">{hasPlan ? "MAKE IT YOURS" : "YOUR PROCESS, STEP BY STEP"}</span><h3 className="mt-2 text-xl font-semibold tracking-tight">{hasPlan ? "What would you like to refine?" : "What would you like to verify?"}</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{hasPlan ? "Ask about a check, change a detail, or get help setting up your camera." : "Describe what you want to verify in your own words. We’ll turn it into evidence checks you can edit and approve. Add an image or short video for context."}</p></div>}
+      {(messages.length > 0 || sending || partialReply || planPreview) && <div ref={history} className="chat-history space-y-6 overflow-y-auto p-4 sm:p-5" role="log" aria-label="Planning conversation" aria-live="off" aria-busy={sending} onScroll={(event) => { const element = event.currentTarget; followReply.current = element.scrollHeight - element.scrollTop - element.clientHeight < 64; setShowLatest(!followReply.current); }}>
         {messages.map((message, index) => <div key={`${saved?.id}-${index}`} className={message.role === "user" ? "chat-message-user" : "chat-message-assistant"}>
           {message.role === "assistant" && <p className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-primary"><Workflow className="size-3" aria-hidden="true" />ProofFlow</p>}
           <MessageContent content={message.content} user={message.role === "user"} />
         </div>)}
-        {(sending || partialReply) && <>
+        {(sending || partialReply || planPreview) && <>
           <div className="chat-message-user">
             {referenceSending && media && <ReferencePreview key={localUrl} media={media} url={localUrl} isImage={isImage} />}
             {referenceSending && !media && <p className="mb-2 flex items-center gap-2 text-xs font-medium"><Paperclip className="size-3.5" aria-hidden="true" />Reference attached</p>}
             <p className="whitespace-pre-wrap break-words text-sm leading-6">{referenceSending && !input.trim() ? "Help me build a plan from this reference." : pendingMessage}</p>
           </div>
           {partialReply && <div className="pr-2"><p className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-primary"><Workflow className="size-3" aria-hidden="true" />ProofFlow</p><p className="chat-reply whitespace-pre-wrap break-words text-sm leading-7">{partialReply}{sending && <span className="chat-cursor" aria-hidden="true" />}</p></div>}
-          {sending ? <p className="flex items-center gap-2.5 py-1 text-xs text-muted-foreground" role="status"><LoaderCircle className="size-4 animate-spin" aria-hidden="true" />{partialReply ? "Finishing response…" : referenceSending ? "Reading your reference and drafting checks…" : "Thinking…"}</p> : <p className="text-xs text-muted-foreground">This reply wasn’t saved. Your previous checks are unchanged.</p>}
+          {sending && planPreview && <div className="rounded-xl border border-primary/20 bg-primary/5 p-4" aria-label="Live plan draft">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">Live draft · Not saved yet</p>
+            {planPreview.title && <p className="mt-2 break-words text-sm font-medium">{planPreview.title}</p>}
+            <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm leading-6">{planPreview.checks.map((label, index) => <li key={index} className="break-words">{label}</li>)}</ol>
+            <p className="mt-3 text-xs leading-5 text-muted-foreground">Checks appear as they arrive. Review the complete plan before approving.</p>
+          </div>}
+          {sending ? <PlannerActivity replying={Boolean(partialReply)} drafting={Boolean(planPreview)} reference={referenceSending} /> : <p className="text-xs text-muted-foreground">This reply wasn’t saved. Your previous checks are unchanged.</p>}
         </>}
       </div>}
       {showLatest && <div className="flex justify-center border-t py-2"><Button variant="outline" className="h-9 rounded-full text-xs" onClick={scrollToLatest}><ArrowDown className="size-3.5" />Latest message</Button></div>}
@@ -130,13 +137,13 @@ export function PlannerChat({ saved, starter, pending, sending, referenceSending
           </div>
         </div>}
         <input ref={chooser} type="file" accept=".jpg,.jpeg,.png,.webp,.mp4,.mov,.webm" aria-label="Choose a reference image or video" className="sr-only" tabIndex={-1} disabled={pending || !configured} onChange={(event) => { choose(event.target.files?.[0]); event.target.value = ""; }} />
-        <form onSubmit={(event) => { event.preventDefault(); void send(); }} className="chat-composer @container rounded-2xl border bg-card p-2 transition-shadow focus-within:border-primary/50 focus-within:ring-3 focus-within:ring-primary/5">
+        <form data-sending={sending || undefined} onSubmit={(event) => { event.preventDefault(); void send(); }} className="chat-composer @container rounded-2xl border bg-card p-2 transition-shadow focus-within:border-primary/50 focus-within:ring-3 focus-within:ring-primary/5">
           <label htmlFor="plan-message" className="sr-only">Message ProofFlow</label>
           {isStarting && <span className="composer-label" aria-hidden="true">Describe your process</span>}
-          <Textarea ref={composer} id="plan-message" value={sending ? "" : input} onChange={(event) => setInput(event.target.value)} maxLength={2000} disabled={pending || !configured} placeholder={sending ? "Your plan assistant is working…" : media ? "What should this process include or change? (optional)" : isStarting ? "e.g. Place the product in the box, add the packing slip, then close the lid…" : "Describe your process or ask for a change…"} className="min-h-20 max-h-40 overflow-y-auto resize-none border-0 bg-transparent px-2 py-2 text-base shadow-none focus-visible:ring-0" onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} />
+          <Textarea ref={composer} id="plan-message" value={sending ? "" : input} onChange={(event) => setInput(event.target.value)} maxLength={2000} disabled={pending || !configured} placeholder={sending ? "You can follow up when the reply is ready" : media ? "What should this process include or change? (optional)" : isStarting ? "e.g. Wipe the tabletop, place the cup beside the plate, and show the lid closed at the end…" : "Describe your process or ask for a change…"} className="min-h-20 max-h-40 overflow-y-auto resize-none border-0 bg-transparent px-2 py-2 text-base shadow-none focus-visible:ring-0" onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} />
           <div className="composer-toolbar flex items-center justify-between gap-3 px-1 pb-1">
-            <Button type="button" variant="ghost" aria-label="Attach reference image or video" className="gap-2 px-2 text-xs text-muted-foreground" disabled={pending || !configured} onClick={() => chooser.current?.click()}><Paperclip className="size-4" />{media ? "Replace reference" : "Add reference"}</Button><span className="ml-auto text-xs text-muted-foreground">{input.length > 1800 ? `${input.length}/2000` : <span className="hidden @min-[480px]:inline">Shift + Enter for new line</span>}</span>
-            <Button type="submit" disabled={(!input.trim() && !media) || pending || !configured || Boolean(media && (!consent || !mediaReady || attachmentError))} className={`composer-submit h-11 shrink-0 rounded-xl ${isStarting ? "gap-2 px-3.5" : "size-11"}`} aria-label="Send message">{sending ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : <ArrowUp className="size-4" aria-hidden="true" />}{isStarting && <span className="hidden sm:inline">Draft plan</span>}</Button>
+            <Button type="button" variant="ghost" aria-label="Attach reference image or video" className="gap-2 px-2 text-xs text-muted-foreground" disabled={pending || !configured} onClick={() => chooser.current?.click()}><Paperclip className="size-4" />{media ? "Replace reference" : "Add reference"}</Button><span className="ml-auto text-xs text-muted-foreground">{sending ? null : input.length > 1800 ? `${input.length}/2000` : <span className="hidden @min-[480px]:inline">Shift + Enter for new line</span>}</span>
+            <Button type="submit" disabled={(!input.trim() && !media) || pending || !configured || Boolean(media && (!consent || !mediaReady || attachmentError))} className={`composer-submit h-11 shrink-0 rounded-xl ${isStarting ? "gap-2 px-3.5" : "size-11"}`} aria-label="Send message"><ArrowUp className="size-4" aria-hidden="true" />{isStarting && <span className="hidden sm:inline">Draft plan</span>}</Button>
           </div>
         </form>
         {!hasPlan && messages.length === 0 && !sending && <>
@@ -174,4 +181,26 @@ function ReferencePreview({ media, url, isImage, onInvalidVideo, onValidVideo }:
     </summary>
     {url && (isImage ? <img src={url} alt="Selected process reference" className="mt-3 max-h-48 w-full rounded-lg bg-muted object-contain" /> : <video src={url} controls playsInline preload="metadata" aria-label="Reference video preview" className="mt-3 max-h-48 w-full rounded-lg bg-muted" onError={() => onInvalidVideo?.("This video could not be previewed. Try another MP4, MOV, or WebM file.")} onLoadedMetadata={(event) => { if (!Number.isFinite(event.currentTarget.duration) || event.currentTarget.duration * 1000 > LIMITS.durationMs) onInvalidVideo?.("Choose a video up to 30 seconds."); else onValidVideo?.(); }} />)}
   </details>;
+}
+
+function PlannerActivity({ replying, drafting, reference }: { replying: boolean; drafting: boolean; reference: boolean }) {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const started = Date.now();
+    const timer = window.setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const label = drafting ? "Writing your checks" : replying ? "Continuing the response" : reference ? "Looking at your reference" : "Thinking through your request";
+  const detail = drafting ? "Your draft is taking shape above." : replying ? "The reply is appearing above as it arrives." : elapsed >= 30 ? "This is taking a little longer. Your request is still in progress." : reference ? "Preparing a response from your image or video." : "The reply will appear here as soon as it’s ready.";
+  return <div className={`planner-activity ${replying || drafting ? "planner-activity-streaming" : ""}`} role="status">
+    <div className="planner-activity-heading">
+      <span className="planner-activity-icon" aria-hidden="true"><Workflow className="size-4" /></span>
+      <span className="text-xs font-medium">ProofFlow</span>
+      <span className="planner-activity-dots" aria-hidden="true"><i /><i /><i /></span>
+      {elapsed >= 10 && <span className="ml-auto text-[11px] tabular-nums text-muted-foreground" aria-hidden="true">{elapsed}s</span>}
+    </div>
+    <p className="mt-3 text-sm font-medium">{label}<span aria-hidden="true">…</span></p>
+    <p className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</p>
+    {!replying && !drafting && <div className="planner-activity-lines" aria-hidden="true"><span /><span /><span /></div>}
+  </div>;
 }

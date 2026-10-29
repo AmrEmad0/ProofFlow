@@ -1,8 +1,8 @@
 import { sse } from "elysia";
-import type { PlannerStreamEvent, SavedPlan } from "../../shared/planner";
+import type { PlannerPreview, PlannerStreamEvent, SavedPlan } from "../../shared/planner";
 
 export async function* plannerEvents(
-  complete: (onReplyText: (text: string) => void, signal: AbortSignal) => Promise<SavedPlan>,
+  complete: (onReplyText: (text: string) => void, signal: AbortSignal, onPlanPreview: (preview: PlannerPreview) => void) => Promise<SavedPlan>,
   requestSignal: AbortSignal,
 ) {
   const cancellation = new AbortController();
@@ -12,7 +12,7 @@ export async function* plannerEvents(
       const emit = (event: PlannerStreamEvent) => { if (!signal.aborted) controller.enqueue(event); };
       emit({ type: "start" });
       try {
-        const saved = await complete((text) => emit({ type: "reply", text }), signal);
+        const saved = await complete((text) => emit({ type: "reply", text }), signal, preview => emit({ type: "preview", preview }));
         emit({ type: "done", saved });
       } catch (error) {
         emit({ type: "error", message: error instanceof Error ? error.message : "The reply was interrupted. Please try again." });

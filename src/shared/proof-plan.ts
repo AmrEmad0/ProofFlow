@@ -11,12 +11,18 @@ export const checkTypeSchema = z.enum([
   "object_enters_region",
   "visible_state_change",
   "object_present_at_end",
+  "visual_check",
 ]);
+
+export const visualCheckSchema = z.strictObject({
+  kind: z.enum(["action", "condition"]),
+  timing: z.enum(["anytime", "start", "end"]),
+});
 
 export const evidenceRequirementSchema = z.strictObject({
   id: z.string().trim().min(1).max(80),
   phase: z.enum(["before", "action", "after"]),
-  rule: z.enum(["outside", "crossing", "inside", "initial_state", "transition", "resulting_state", "ending_presence"]),
+  rule: z.enum(["outside", "crossing", "inside", "initial_state", "transition", "resulting_state", "ending_presence", "visual_evidence"]),
   description: z.string().trim().min(1).max(600),
   subjectConcept: z.string().trim().min(1).max(120),
   targetConcept: z.string().trim().min(1).max(120).nullable(),
@@ -32,6 +38,7 @@ export const proofStepSchema = z.strictObject({
   id: z.string().trim().min(1).max(80),
   label: z.string().trim().min(1).max(240),
   checkType: checkTypeSchema,
+  visualCheck: visualCheckSchema.nullable().optional(),
   subjectConcept: z.string().trim().min(1).max(120),
   targetConcept: z.string().trim().min(1).max(120).nullable(),
   beforeState: z.string().trim().min(1).max(240).nullable(),
@@ -46,6 +53,10 @@ export const proofStepSchema = z.strictObject({
   if (step.checkType === "visible_state_change" && (!step.beforeState || !step.afterState)) {
     ctx.addIssue({ code: "custom", path: ["beforeState"], message: "A state change needs visible before and after states." });
   }
+  if (step.checkType === "visual_check") {
+    if (!step.visualCheck || step.beforeState || step.afterState) ctx.addIssue({ code: "custom", message: "A visual check needs an action or condition scope; describe its evidence in requirements." });
+    if (step.visualCheck?.kind === "action" && step.visualCheck.timing !== "anytime") ctx.addIssue({ code: "custom", message: "Action timing uses relationships; start/end scopes are for conditions." });
+  } else if (step.visualCheck) ctx.addIssue({ code: "custom", message: "Only visual checks use a custom evidence scope." });
 });
 
 // Keep the shape separate so model JSON Schema contains structural constraints;
@@ -61,6 +72,7 @@ export const proofPlanShape = z.strictObject({
 });
 
 export const proofPlanSchema = proofPlanShape.superRefine((plan, ctx) => {
+  if (plan.schemaVersion === 1 && plan.steps.some(step => step.checkType === "visual_check")) ctx.addIssue({ code: "custom", message: "Visual checks require version 2 evidence requirements." });
   if (plan.schemaVersion === 2) {
     const issue = (message: string) => ctx.addIssue({ code: "custom", message });
     if (!plan.relationships || !plan.unresolvedGoals) issue("Version 2 needs explicit relationships and unresolved goals.");
@@ -68,9 +80,12 @@ export const proofPlanSchema = proofPlanShape.superRefine((plan, ctx) => {
       if (step.checkType === "object_present_at_end" && (step.targetConcept || step.beforeState || step.afterState)) issue("Final presence has no target or preceding state change.");
       const rules = step.checkType === "object_enters_region" ? { before: "outside", action: "crossing", after: "inside" }
         : step.checkType === "visible_state_change" ? { before: "initial_state", action: "transition", after: "resulting_state" } : { before: "", action: "", after: "ending_presence" };
-      for (const req of step.requirements ?? []) if (req.rule !== rules[req.phase]) issue("Evidence rules must match the supported check type and phase; descriptions cannot add capabilities.");
+      for (const req of step.requirements ?? []) if (req.rule !== (step.checkType === "visual_check" ? "visual_evidence" : rules[req.phase])) issue("Evidence rules must match the supported check type and phase; descriptions cannot add capabilities.");
       const phases = step.requirements?.map(req => req.phase).sort().join(",");
-      if (!step.goalSource || phases !== (step.checkType === "object_present_at_end" ? "after" : "action,after,before")) issue("Each check needs its goal source and exactly its supported evidence phases.");
+      const validPhases = step.checkType === "visual_check"
+        ? step.visualCheck?.kind === "condition" ? phases === "after" : Boolean(step.requirements?.some(req => req.phase === "action")) && new Set(step.requirements?.map(req => req.phase)).size === step.requirements?.length
+        : phases === (step.checkType === "object_present_at_end" ? "after" : "action,after,before");
+      if (!step.goalSource || !validPhases) issue("Each check needs its goal source and exactly its supported evidence phases.");
       if (new Set(step.requirements?.map(req => req.id)).size !== step.requirements?.length) issue("Requirement IDs must be unique within a check.");
       for (const req of step.requirements ?? []) if (req.subjectConcept !== step.subjectConcept || req.targetConcept !== step.targetConcept) issue("Requirements must reference the check's approved subject and target.");
     }
@@ -83,6 +98,7 @@ export const proofPlanSchema = proofPlanShape.superRefine((plan, ctx) => {
       const a = plan.steps.find(step => step.id === rel.from), b = plan.steps.find(step => step.id === rel.to);
       if (rel.type === "same_instance" && a?.subjectConcept !== b?.subjectConcept) issue("Same-instance relationships need matching subject concepts.");
       if (rel.type !== "same_instance" && (a?.checkType === "object_present_at_end" || b?.checkType === "object_present_at_end")) issue("Final presence is independent of action order.");
+      if (rel.type !== "same_instance" && (a?.visualCheck?.kind === "condition" || b?.visualCheck?.kind === "condition")) issue("Temporal relationships require actions, not condition checks.");
       if (rel.type === "before") edges.set(rel.from, [...edges.get(rel.from) ?? [], rel.to]);
     }
     const reaches = (from: string, to: string, seen = new Set<string>()): boolean => {
@@ -121,7 +137,7 @@ export function trackedConcepts(plan: { steps: ProofStep[] }): string[] {
 
 export const planningPlanShape = proofPlanShape.extend({
   schemaVersion: z.literal(2),
-  steps: z.array(proofStepSchema.safeExtend({ goalSource: z.string().min(1).max(1000), requirements: z.array(evidenceRequirementSchema).min(1).max(3) })).min(1).max(LIMITS.steps),
+  steps: z.array(proofStepSchema.safeExtend({ visualCheck: visualCheckSchema.nullable(), goalSource: z.string().min(1).max(1000), requirements: z.array(evidenceRequirementSchema).min(1).max(3) })).min(1).max(LIMITS.steps),
   relationships: z.array(relationshipSchema).max(20),
   unresolvedGoals: proofPlanShape.shape.unresolvedGoals.unwrap(),
 });
@@ -138,6 +154,11 @@ export function upgradePlan(plan: ProofPlan): ProofPlan {
 }
 
 export function defaultRequirements(step: ProofStep): z.infer<typeof evidenceRequirementSchema>[] {
+  if (step.checkType === "visual_check") {
+    const phase = step.visualCheck?.kind === "action" ? "action" : "after";
+    return [{ id: `${step.id}-${phase}`, phase, rule: "visual_evidence", description: step.observableEvidence || step.label,
+      subjectConcept: step.subjectConcept, targetConcept: step.targetConcept, decisiveDetails: ["The named subject and the details needed to judge this requirement"] }];
+  }
   const descriptions = step.checkType === "object_enters_region"
     ? { before: `${step.subjectConcept} visibly outside ${step.targetConcept}`, action: `${step.subjectConcept} visibly crossing the opening of ${step.targetConcept}`, after: `${step.subjectConcept} visibly inside ${step.targetConcept}` }
     : { before: `${step.subjectConcept} visibly ${step.beforeState}`, action: `${step.subjectConcept} visibly changing from ${step.beforeState} to ${step.afterState}`, after: step.checkType === "object_present_at_end" ? `${step.subjectConcept} visibly present in the ending frames` : `${step.subjectConcept} visibly ${step.afterState}` };

@@ -5,6 +5,9 @@ export const editableCheckSchema = z.strictObject({
   id: proofStepSchema.shape.id,
   requirements: proofStepSchema.shape.requirements,
   goalSource: proofStepSchema.shape.goalSource,
+  visualCheck: proofStepSchema.shape.visualCheck,
+  label: proofStepSchema.shape.label.optional(),
+  observableEvidence: proofStepSchema.shape.observableEvidence.optional(),
   subjectConcept: proofStepSchema.shape.subjectConcept,
   targetConcept: proofStepSchema.shape.targetConcept,
   beforeState: proofStepSchema.shape.beforeState,
@@ -29,7 +32,7 @@ export type ManualPlanInput = z.infer<typeof manualPlanInputSchema>;
 
 export function buildManualPlan(input: ManualPlanInput) {
   const steps = input.steps.map(step => {
-    const described = describeEditedCheck({ ...step, requirements: undefined, label: "", observableEvidence: "" }, { ...step, requirements: undefined });
+    const described = describeEditedCheck({ ...step, requirements: undefined, label: step.label ?? "", observableEvidence: step.observableEvidence ?? "" }, { ...step, requirements: undefined });
     return { ...described, label: step.label ?? described.label, observableEvidence: step.observableEvidence ?? described.observableEvidence, goalSource: step.goalSource ?? described.label, requirements: step.requirements ?? defaultRequirements(described) };
   });
   return proofPlanSchema.parse({ schemaVersion: 2, title: input.title, goal: input.goal ?? steps.map(step => step.label).join(". "), steps,
@@ -41,6 +44,8 @@ export function describeEditedCheck(original: ProofStep, edit: EditableCheck): P
   const step = { ...original, ...edit };
   if (original.requirements) return step;
   switch (step.checkType) {
+    case "visual_check":
+      return { ...step, beforeState: null, afterState: null };
     case "object_enters_region":
       return { ...step, beforeState: null, afterState: null,
         label: `Put ${step.subjectConcept} inside ${step.targetConcept}`.slice(0, 240),
@@ -92,9 +97,16 @@ export type PlannerMessage = z.infer<typeof plannerMessageSchema>;
 export type PlannerReply = z.infer<typeof plannerReplySchema>;
 export type SavedPlan = z.infer<typeof savedPlanSchema>;
 
+export const plannerPreviewSchema = z.strictObject({
+  title: proofPlanSchema.shape.title.nullable(),
+  checks: z.array(proofStepSchema.shape.label).max(LIMITS.steps),
+});
+export type PlannerPreview = z.infer<typeof plannerPreviewSchema>;
+
 export const plannerStreamEventSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("start") }),
   z.strictObject({ type: z.literal("reply"), text: z.string().max(4000) }),
+  z.strictObject({ type: z.literal("preview"), preview: plannerPreviewSchema }),
   z.strictObject({ type: z.literal("done"), saved: savedPlanSchema }),
   z.strictObject({ type: z.literal("error"), message: z.string() }),
 ]);

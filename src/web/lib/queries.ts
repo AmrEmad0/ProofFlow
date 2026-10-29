@@ -5,6 +5,8 @@ import { savedPlanSchema } from "../../shared/planner";
 import { runDetailsSchema, runSummarySchema } from "../../shared/verification";
 import { isActiveRun } from "../../shared/receipt";
 import { triggerOverviewSchema } from "../../shared/triggers";
+import { verificationReadinessSchema } from "../../shared/workspace-events";
+import { workspaceStreamConnected } from "./workspace-events";
 
 export function planTriggersQuery(planId: string | null) {
   return queryOptions({
@@ -15,7 +17,17 @@ export function planTriggersQuery(planId: string | null) {
       if (result.error) throw apiError(result.error.value, "Trigger settings could not be loaded.");
       return triggerOverviewSchema.parse(result.data);
     },
-    refetchInterval: 3000,
+    refetchInterval: (query) => {
+      if (workspaceStreamConnected()) return false;
+      const overview = query.state.data;
+      if (!overview) return false;
+      const { settings } = overview.configuration;
+      // API triggers can create sessions while this browser is idle.
+      const watchingExternalEvents = settings.start === "api" || settings.finish === "api";
+      const capturing = overview.sessions.some((session) => session.state === "active"
+        || session.captureState === "queued" || session.captureState === "capturing" || session.captureState === "captured");
+      return watchingExternalEvents || overview.feed?.running || capturing ? 15_000 : false;
+    },
     enabled: Boolean(planId),
     retry: false,
   });
@@ -44,9 +56,10 @@ export const verificationStatusQuery = queryOptions({
   queryFn: async () => {
     const { data, error } = await api.api.verification.status.get();
     if (error) throw apiError(error.value, "Video verification could not be reached.");
-    return z.object({ available: z.boolean(), retentionHours: z.number() }).parse(data);
+    return verificationReadinessSchema.parse(data);
   },
-  refetchInterval: 30_000,
+  refetchInterval: () => workspaceStreamConnected() ? false : 30_000,
+  staleTime: 30_000,
 });
 
 export const packproofQuery = queryOptions({
@@ -108,7 +121,7 @@ export function planRunsQuery(planId: string | null) {
     },
     enabled: Boolean(planId),
     retry: false,
-    refetchInterval: (query) => query.state.data?.some((run) => isActiveRun(run.state)) ? 2000 : false,
+    refetchInterval: (query) => !workspaceStreamConnected() && query.state.data?.some((run) => isActiveRun(run.state)) ? 15_000 : false,
   });
 }
 
@@ -124,10 +137,11 @@ export function runDetailsQuery(id: string | null) {
     },
     retry: false,
     refetchInterval: (query) => {
+      if (workspaceStreamConnected()) return false;
       const error = query.state.error;
       if (error && "status" in error && (error.status === 404 || error.status === 403)) return false;
       if (query.state.data && !isActiveRun(query.state.data.state)) return false;
-      return query.state.error ? 5000 : 1000;
+      return 15_000;
     },
   });
 }

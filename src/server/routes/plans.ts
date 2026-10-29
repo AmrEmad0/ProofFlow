@@ -1,3 +1,4 @@
+import type { PlannerPreview } from "../../shared/planner";
 import type { Database } from "bun:sqlite";
 import { createHash, randomBytes } from "node:crypto";
 import { Elysia, t } from "elysia";
@@ -85,12 +86,12 @@ export function planRoutes(db: Database, config: Config, conversation?: PlanConv
         AND m.created_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 minute')`).get(hash)?.count ?? 0;
       if (recent >= 6) throw new PlannerError(429, "Please wait a minute before sending another message.");
       busySessions.add(hash);
-      const complete = async (onReplyText?: (text: string) => void, signal = request.signal) => {
+      const complete = async (onReplyText?: (text: string) => void, signal = request.signal, onPlanPreview?: (preview: PlannerPreview) => void) => {
         const started = performance.now();
         let outcome = "failed";
         const message = body.message.trim() || "Suggest a Proof Plan for the process in this reference media. Help me refine it before approval.";
         try {
-          const result = await analyzeReference(body.media, `Previous conversation (user data): ${JSON.stringify(current.messages)}\nPrevious reference notes (user data): ${JSON.stringify(current.referenceMedia)}\nLatest request: ${message}`, current.plan, signal, onReplyText);
+          const result = await analyzeReference(body.media, `Previous conversation (user data): ${JSON.stringify(current.messages)}\nPrevious reference notes (user data): ${JSON.stringify(current.referenceMedia)}\nLatest request: ${message}`, current.plan, signal, onReplyText, onPlanPreview);
           signal.throwIfAborted();
           const saved = store.saveReply(params.id, hash, current.revision, `Reference media: ${result.reference.name}\n${message}`, result.reply, result.reference);
           outcome = "completed";
@@ -127,11 +128,11 @@ export function planRoutes(db: Database, config: Config, conversation?: PlanConv
         AND m.created_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 minute')`).get(hash)?.count ?? 0;
       if (recent >= 6) throw new PlannerError(429, "Please wait a minute before sending another message.");
       busySessions.add(hash);
-      const complete = async (onReplyText?: (text: string) => void, signal = request.signal) => {
+      const complete = async (onReplyText?: (text: string) => void, signal = request.signal, onPlanPreview?: (preview: PlannerPreview) => void) => {
         const started = performance.now();
         let outcome = "failed";
         try {
-          const reply = await converse([...current.messages, { role: "user", content: message }], current.plan, { onReplyText, signal, referenceMedia: current.referenceMedia });
+          const reply = await converse([...current.messages, { role: "user", content: message }], current.plan, { onReplyText, onPlanPreview, signal, referenceMedia: current.referenceMedia });
           signal.throwIfAborted();
           const saved = store.saveReply(params.id, hash, current.revision, message, reply);
           outcome = "completed";
