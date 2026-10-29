@@ -123,7 +123,7 @@ export function EvidencePlayer({ run, autoPlay = true }: { run: RunDetails; auto
               onSeeking={(event) => { setPlaying(false); setHasPosition(true); setTime(event.currentTarget.currentTime); }}
               onSeeked={(event) => { setPlaying(!event.currentTarget.paused && !event.currentTarget.ended); setTime(event.currentTarget.currentTime); }}
               onEnded={() => { setPlaying(false); setHasPosition(false); }}
-              onError={() => { setPlaying(false); setHasPosition(false); reportPlaybackError("The video could not be loaded. It may have expired; reload the run to check."); }} />
+              onError={() => { setPlaying(false); setHasPosition(false); reportPlaybackError("The video could not be loaded. Reload the run and try again."); }} />
         {overlays && <svg className="pointer-events-none absolute inset-0 size-full" viewBox={`0 0 ${run.media.width} ${run.media.height}`} preserveAspectRatio="none" aria-label={`Tracked object geometry at ${formatTime(time * 1000)}`}>{run.tracks.flatMap((track, index) => track.boxes.filter((box) => box.frameIndex === frame).map((box) => {
           const width = run.media!.width; const height = run.media!.height;
           const label = `${track.concept} #${box.objectId}`;

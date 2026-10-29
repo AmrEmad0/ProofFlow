@@ -30,6 +30,10 @@ const objectSchema = z.strictObject({ concept: z.string().trim().min(1).max(120)
 const groundingSchema = z.strictObject({
   concept: z.string().min(1), objectId: z.string().min(1).describe("Exact raw SAM objectId from the allowed references; never the full display label"), timestampMs: z.number().int().min(0).max(LIMITS.durationMs),
 });
+export const objectAssessmentSchema = groundingSchema.extend({
+  matchesIntendedObject: z.boolean(), decisiveDetailsVisible: z.boolean(),
+  description: z.string().trim().min(1).max(600),
+});
 export const requirementAssessmentSchema = z.strictObject({
   requirementId: z.string().min(1), timestampMs: z.number().int().min(0).max(LIMITS.durationMs),
   visible: z.boolean(), matchesRequirement: z.boolean(), decisiveDetailsVisible: z.boolean(),
@@ -46,6 +50,7 @@ export const evidenceCandidateSchema = legacyObservationSchema.shape.candidates.
   subject: objectSchema, target: objectSchema.nullable(),
   contradictions: z.array(z.string().min(1).max(600)).max(10),
   grounding: z.array(groundingSchema).max(12),
+  objectAssessments: z.array(objectAssessmentSchema).max(48).default([]),
 });
 export const currentObservationSchema = z.strictObject({
   schemaVersion: z.literal(2), candidates: z.array(evidenceCandidateSchema).max(LIMITS.steps),
@@ -59,6 +64,7 @@ export const observationSchema = legacyObservationSchema.extend({
     actionInterval: actionIntervalSchema.nullable().optional(),
     before: momentSchema.nullable().optional(), action: momentSchema.nullable().optional(), after: momentSchema.nullable().optional(),
     subject: objectSchema.optional(), target: objectSchema.nullable().optional(),
+    objectAssessments: z.array(objectAssessmentSchema).max(48).optional(),
     contradictions: z.array(z.string()).optional(), grounding: z.array(groundingSchema).optional(),
   })).max(LIMITS.steps),
 });

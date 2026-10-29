@@ -112,7 +112,7 @@ export function planRoutes(db: Database, config: Config, conversation?: PlanConv
       return complete();
     }, { params: planParams, query: t.Object({ stream: t.Optional(t.Literal("true")) }), body: t.Object({
       media: t.File({ minSize: 1, maxSize: LIMITS.uploadBytes }),
-      message: t.String({ maxLength: 2000 }), revision: t.String({ pattern: "^[0-9]+$", maxLength: 12 }), consent: t.Literal("true"),
+      message: t.String({ maxLength: 2000 }), revision: t.String({ pattern: "^[0-9]+$", maxLength: 12 }),
     }, { additionalProperties: false }) })
     .post("/api/plans/:id/messages", async ({ params, body, query, request, set }) => {
       const hash = sessionHash(request);

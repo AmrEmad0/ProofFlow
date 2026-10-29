@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowRight, ArrowUp, Package, PencilLine, Workflow, Coffee, PanelTop, Paperclip, X, ImageIcon, Film, ChevronDown } from "lucide-react";
+import { ArrowDown, ArrowUp, Package, PencilLine, Workflow, Coffee, PanelTop, Paperclip, X, ImageIcon, Film, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { ChatMarkdown } from "./chat-markdown";
 import { LIMITS } from "../../../shared/proof-plan";
 import type { PlannerPreview, SavedPlan } from "../../../shared/planner";
 
@@ -28,7 +29,6 @@ export function PlannerChat({ saved, starter, pending, sending, referenceSending
   const [media, setMedia] = useState<File | null>(null);
   const [localUrl, setLocalUrl] = useState<string | null>(null);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  const [consent, setConsent] = useState(false);
   const [mediaReady, setMediaReady] = useState(false);
   const chooser = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
@@ -39,7 +39,7 @@ export function PlannerChat({ saved, starter, pending, sending, referenceSending
     setLocalUrl(url);
     return () => URL.revokeObjectURL(url);
   }, [media]);
-  useEffect(() => { setMedia(null); setConsent(false); setAttachmentError(null); }, [saved?.id]);
+  useEffect(() => { setMedia(null); setAttachmentError(null); }, [saved?.id]);
   function choose(file?: File) {
     if (!file) return;
     if (!/\.(png|jpe?g|webp|mp4|mov|webm)$/i.test(file.name)) {
@@ -51,7 +51,7 @@ export function PlannerChat({ saved, starter, pending, sending, referenceSending
       setAttachmentError(image ? "Choose a nonempty image up to 10 MB." : "Choose a nonempty video up to 25 MB.");
       return;
     }
-    setAttachmentError(null); setMedia(file); setConsent(false); setMediaReady(image);
+    setAttachmentError(null); setMedia(file); setMediaReady(image);
   }
   const history = useRef<HTMLDivElement>(null);
   const followReply = useRef(true);
@@ -71,11 +71,11 @@ export function PlannerChat({ saved, starter, pending, sending, referenceSending
 
   async function send() {
     const message = input.trim() || (media ? "Suggest a Proof Plan for the process in this reference. Help me refine it before approval." : "");
-    if (!message || submitting.current || pending || !configured || (media && (!consent || !mediaReady || attachmentError))) return;
+    if (!message || submitting.current || pending || !configured || (media && (!mediaReady || attachmentError))) return;
     submitting.current = true;
     try {
       await onSend(message, media ?? undefined);
-      setMedia(null); setConsent(false);
+      setMedia(null);
       setInput("");
       requestAnimationFrame(() => composer.current?.focus({ preventScroll: true }));
     } catch { /* Keep the error and unsent message available for retry. */ }
@@ -86,10 +86,10 @@ export function PlannerChat({ saved, starter, pending, sending, referenceSending
     <section className={`chat-panel min-w-0 ${messages.length || sending ? "chat-panel-active" : ""} ${isStarting ? "chat-panel-start" : ""}`} aria-label="Template planning chat">
       <div className="chat-header">
         <span className="chat-avatar"><Workflow className="size-5" aria-hidden="true" /></span>
-        <div className="min-w-0 flex-1"><h2 className="text-sm font-semibold">Plan assistant</h2><p className="mt-0.5 text-xs text-muted-foreground">{hasPlan ? "Refine your checks, one message at a time." : "Build checks for what matters."}</p></div>
-        <span className="chat-header-status"><span className={`size-1.5 rounded-full ${sending ? "bg-primary animate-pulse" : configured ? "bg-emerald-500" : "bg-muted-foreground"}`} />{sending ? "Working" : configured ? "Muse Spark" : "Offline"}</span>
+        <div className="min-w-0 flex-1"><h2 className="text-sm font-semibold">Plan assistant</h2></div>
+        <span className="chat-header-status"><span className={`size-1.5 rounded-full ${sending ? "bg-primary animate-pulse" : configured ? "bg-emerald-500" : "bg-muted-foreground"}`} />{configured ? "Muse Spark" : "Offline"}</span>
       </div>
-      {messages.length === 0 && !sending && !partialReply && <div className="chat-welcome"><span className="eyebrow">{hasPlan ? "MAKE IT YOURS" : "YOUR PROCESS, STEP BY STEP"}</span><h3 className="mt-2 text-xl font-semibold tracking-tight">{hasPlan ? "What would you like to refine?" : "What would you like to verify?"}</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{hasPlan ? "Ask about a check, change a detail, or get help setting up your camera." : "Describe what you want to verify in your own words. We’ll turn it into evidence checks you can edit and approve. Add an image or short video for context."}</p></div>}
+      {messages.length === 0 && !sending && !partialReply && <div className="chat-welcome"><h3 className="text-xl font-semibold tracking-tight">{hasPlan ? "What would you like to refine?" : "What should we check?"}</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{hasPlan ? "Change a check or ask for filming tips." : "Describe your process. We’ll draft the checks."}</p></div>}
       {(messages.length > 0 || sending || partialReply || planPreview) && <div ref={history} className="chat-history space-y-6 overflow-y-auto p-4 sm:p-5" role="log" aria-label="Planning conversation" aria-live="off" aria-busy={sending} onScroll={(event) => { const element = event.currentTarget; followReply.current = element.scrollHeight - element.scrollTop - element.clientHeight < 64; setShowLatest(!followReply.current); }}>
         {messages.map((message, index) => <div key={`${saved?.id}-${index}`} className={message.role === "user" ? "chat-message-user" : "chat-message-assistant"}>
           {message.role === "assistant" && <p className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-primary"><Workflow className="size-3" aria-hidden="true" />ProofFlow</p>}
@@ -101,7 +101,7 @@ export function PlannerChat({ saved, starter, pending, sending, referenceSending
             {referenceSending && !media && <p className="mb-2 flex items-center gap-2 text-xs font-medium"><Paperclip className="size-3.5" aria-hidden="true" />Reference attached</p>}
             <p className="whitespace-pre-wrap break-words text-sm leading-6">{referenceSending && !input.trim() ? "Help me build a plan from this reference." : pendingMessage}</p>
           </div>
-          {partialReply && <div className="pr-2"><p className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-primary"><Workflow className="size-3" aria-hidden="true" />ProofFlow</p><p className="chat-reply whitespace-pre-wrap break-words text-sm leading-7">{partialReply}{sending && <span className="chat-cursor" aria-hidden="true" />}</p></div>}
+          {partialReply && <div className="pr-2"><p className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-primary"><Workflow className="size-3" aria-hidden="true" />ProofFlow</p><div className="chat-reply"><ChatMarkdown content={partialReply} streaming={sending} /></div></div>}
           {sending && planPreview && <div className="rounded-xl border border-primary/20 bg-primary/5 p-4" aria-label="Live plan draft">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">Live draft · Not saved yet</p>
             {planPreview.title && <p className="mt-2 break-words text-sm font-medium">{planPreview.title}</p>}
@@ -127,36 +127,31 @@ export function PlannerChat({ saved, starter, pending, sending, referenceSending
           <p className="pb-3 text-xs text-muted-foreground">Chat uses saved notes. Attach a reference to show new details. This reference has not been verified.</p>
         </details>}
         {attachmentError && <p role="alert" className="mb-3 text-sm text-destructive">{attachmentError}</p>}
-        {media && !sending && <div className="mb-3 overflow-hidden rounded-xl border bg-background">
-          <div className="flex items-center gap-2 p-3">
-            <div className="min-w-0 flex-1"><ReferencePreview key={localUrl} media={media} url={localUrl} isImage={isImage} onInvalidVideo={setAttachmentError} onValidVideo={() => setMediaReady(true)} /></div>
-            <Button variant="ghost" size="icon" aria-label="Remove reference" disabled={pending} onClick={() => { setMedia(null); setConsent(false); setAttachmentError(null); }}><X className="size-4" /></Button>
-          </div>
-          <div className="border-t bg-muted/30 px-3 py-3">
-            <label className="flex cursor-pointer items-start gap-2.5 text-xs leading-5"><input type="checkbox" aria-label="I have permission to share this with Meta AI." checked={consent} disabled={pending} onChange={(event) => setConsent(event.target.checked)} className="mt-0.5 size-4 shrink-0 accent-primary" /><span>I have permission to share this with Meta AI.<span className="mt-1 block text-muted-foreground">Meta may use uploads for training.</span></span></label>
-          </div>
-        </div>}
         <input ref={chooser} type="file" accept=".jpg,.jpeg,.png,.webp,.mp4,.mov,.webm" aria-label="Choose a reference image or video" className="sr-only" tabIndex={-1} disabled={pending || !configured} onChange={(event) => { choose(event.target.files?.[0]); event.target.value = ""; }} />
         <form data-sending={sending || undefined} onSubmit={(event) => { event.preventDefault(); void send(); }} className="chat-composer @container rounded-2xl border bg-card p-2 transition-shadow focus-within:border-primary/50 focus-within:ring-3 focus-within:ring-primary/5">
+          {media && !sending && <div className="reference-attachment">
+            <div className="min-w-0 flex-1"><ReferencePreview key={localUrl} media={media} url={localUrl} isImage={isImage} onInvalidVideo={setAttachmentError} onValidVideo={() => setMediaReady(true)} /></div>
+            <Button type="button" variant="ghost" size="icon" className="size-9 shrink-0 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary" aria-label="Remove reference" disabled={pending} onClick={() => { setMedia(null); setAttachmentError(null); }}><X className="size-3.5" /></Button>
+          </div>}
           <label htmlFor="plan-message" className="sr-only">Message ProofFlow</label>
-          {isStarting && <span className="composer-label" aria-hidden="true">Describe your process</span>}
-          <Textarea ref={composer} id="plan-message" value={sending ? "" : input} onChange={(event) => setInput(event.target.value)} maxLength={2000} disabled={pending || !configured} placeholder={sending ? "You can follow up when the reply is ready" : media ? "What should this process include or change? (optional)" : isStarting ? "e.g. Wipe the tabletop, place the cup beside the plate, and show the lid closed at the end…" : "Describe your process or ask for a change…"} className="min-h-20 max-h-40 overflow-y-auto resize-none border-0 bg-transparent px-2 py-2 text-base shadow-none focus-visible:ring-0" onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} />
+          <Textarea ref={composer} id="plan-message" value={sending ? "" : input} onChange={(event) => setInput(event.target.value)} maxLength={2000} disabled={pending || !configured} placeholder={sending ? "Waiting for reply…" : media ? "What should this process include or change? (optional)" : isStarting ? "e.g. Pack the order, add the receipt, then seal the box…" : "Describe your process or ask for a change…"} className={`max-h-40 overflow-y-auto resize-none border-0 bg-transparent px-2 shadow-none focus-visible:ring-0 ${sending ? "h-11 min-h-0 flex-1 py-3 text-[13px] leading-5" : "min-h-20 py-2 text-base"}`} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} />
           <div className="composer-toolbar flex items-center justify-between gap-3 px-1 pb-1">
-            <Button type="button" variant="ghost" aria-label="Attach reference image or video" className="gap-2 px-2 text-xs text-muted-foreground" disabled={pending || !configured} onClick={() => chooser.current?.click()}><Paperclip className="size-4" />{media ? "Replace reference" : "Add reference"}</Button><span className="ml-auto text-xs text-muted-foreground">{sending ? null : input.length > 1800 ? `${input.length}/2000` : <span className="hidden @min-[480px]:inline">Shift + Enter for new line</span>}</span>
-            <Button type="submit" disabled={(!input.trim() && !media) || pending || !configured || Boolean(media && (!consent || !mediaReady || attachmentError))} className={`composer-submit h-11 shrink-0 rounded-xl ${isStarting ? "gap-2 px-3.5" : "size-11"}`} aria-label="Send message"><ArrowUp className="size-4" aria-hidden="true" />{isStarting && <span className="hidden sm:inline">Draft plan</span>}</Button>
+            {!sending && <Button type="button" variant="ghost" aria-label="Attach reference image or video" title="Images up to 10 MB · Videos up to 30 sec / 25 MB" className="gap-2 px-2 text-xs text-muted-foreground" disabled={pending || !configured} onClick={() => chooser.current?.click()}><Paperclip className="size-4" />{media ? "Replace reference" : "Add reference"}</Button>}<span className="ml-auto text-xs text-muted-foreground">{sending ? null : input.length > 1800 ? `${input.length}/2000` : null}</span>
+            <Button type="submit" disabled={(!input.trim() && !media) || pending || !configured || Boolean(media && (!mediaReady || attachmentError))} className={`composer-submit h-11 shrink-0 rounded-xl ${isStarting ? "gap-2 px-3.5" : "size-11"}`} aria-label="Send message"><ArrowUp className="size-4" aria-hidden="true" />{isStarting && <span className="hidden sm:inline">Draft plan</span>}</Button>
           </div>
         </form>
         {!hasPlan && messages.length === 0 && !sending && <>
-          <p className="reference-limits">Images up to 10 MB <span aria-hidden="true">·</span> Videos up to 30 sec / 25 MB</p>
-          <Button variant="outline" className="mt-4 w-full gap-2" disabled={pending} onClick={onManual}><PencilLine className="size-4" />Build manually</Button>
           <div className="process-ideas">
-            <p className="starter-label">Need a starting point?</p>
+            <span className="starter-label">Try</span>
             <div className="process-idea-grid" aria-label="Process ideas">{[
-              { prompt: "Place a mug on a tray", detail: "Object placement", Icon: Coffee },
-              { prompt: "Close a drawer", detail: "A change in state", Icon: PanelTop },
-            ].map(({ prompt, detail, Icon }) => <button key={prompt} onClick={() => { setInput(prompt); composer.current?.focus(); }} disabled={pending || !configured} className="process-idea"><Icon className="size-4 shrink-0 text-primary" aria-hidden="true" /><span className="min-w-0"><span className="block text-[13px] font-medium">{prompt}</span><span className="mt-0.5 block text-xs text-muted-foreground">{detail}</span></span><ArrowUp className="idea-arrow size-3.5 shrink-0" aria-hidden="true" /></button>)}</div>
+              { prompt: "Place a mug on a tray", Icon: Coffee },
+              { prompt: "Close a drawer", Icon: PanelTop },
+            ].map(({ prompt, Icon }) => <button key={prompt} onClick={() => { setInput(prompt); composer.current?.focus(); }} disabled={pending || !configured} className="process-idea"><Icon className="size-3.5 shrink-0" aria-hidden="true" /><span>{prompt}</span></button>)}</div>
           </div>
-          <button onClick={onStarter} disabled={pending} className="starter-example"><span className="starter-example-icon"><Package className="size-5" aria-hidden="true" /></span><span className="min-w-0 flex-1"><span className="block text-[13px] font-semibold">Explore a complete example</span><span className="mt-1 block text-xs text-muted-foreground">Box packing · 3 editable checks</span></span><ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /></button>
+          <div className="planner-alternatives">
+            <Button variant="ghost" className="gap-2 text-xs text-muted-foreground" disabled={pending} onClick={onManual}><PencilLine className="size-3.5" />Build manually</Button>
+            <Button variant="ghost" className="gap-2 text-xs text-muted-foreground" disabled={pending} onClick={onStarter}><Package className="size-3.5" />Try packing example</Button>
+          </div>
         </>}
       </div>
     </section>
@@ -167,7 +162,7 @@ function MessageContent({ content, user }: { content: string; user: boolean }) {
   const reference = user ? /^Reference media: ([^\n]+)\n([\s\S]*)$/.exec(content) : null;
   return <>
     {reference && <span className="mb-2 flex min-w-0 items-center gap-2 border-b pb-2 text-xs text-muted-foreground"><Paperclip className="size-3.5 shrink-0" /><span className="truncate" title={reference[1]}>{reference[1]}</span></span>}
-    <p className="whitespace-pre-wrap break-words text-sm leading-7">{reference ? reference[2] : content}</p>
+    {user ? <p className="whitespace-pre-wrap break-words text-sm leading-7">{reference ? reference[2] : content}</p> : <ChatMarkdown content={content} />}
   </>;
 }
 
@@ -175,32 +170,24 @@ function ReferencePreview({ media, url, isImage, onInvalidVideo, onValidVideo }:
   const Icon = isImage ? ImageIcon : Film;
   return <details className="group min-w-0">
     <summary className="flex cursor-pointer list-none items-center gap-3 rounded-lg text-left [&::-webkit-details-marker]:hidden">
-      <span className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted">{isImage && url ? <img src={url} alt="" className="size-full object-cover" /> : <Icon className="size-5 text-muted-foreground" aria-hidden="true" />}</span>
-      <span className="min-w-0 flex-1"><span className="block truncate text-xs font-medium" title={media.name}>{media.name}</span><span className="mt-0.5 block text-xs text-muted-foreground">{isImage ? "Image" : "Video"} · {media.size < 1024 * 1024 ? `${Math.ceil(media.size / 1024)} KB` : `${(media.size / (1024 * 1024)).toFixed(1)} MB`} · Preview</span></span>
+      <span className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary/8 text-primary">{isImage && url ? <img src={url} alt="" className="size-full object-cover" /> : <Icon className="size-5" aria-hidden="true" />}</span>
+      <span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-medium" title={media.name}>{media.name}</span><span className="mt-0.5 block text-[11px] text-muted-foreground">{isImage ? "Image" : "Video"} · {media.size < 1024 * 1024 ? `${Math.ceil(media.size / 1024)} KB` : `${(media.size / (1024 * 1024)).toFixed(1)} MB`} · Reference</span></span>
       <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
     </summary>
-    {url && (isImage ? <img src={url} alt="Selected process reference" className="mt-3 max-h-48 w-full rounded-lg bg-muted object-contain" /> : <video src={url} controls playsInline preload="metadata" aria-label="Reference video preview" className="mt-3 max-h-48 w-full rounded-lg bg-muted" onError={() => onInvalidVideo?.("This video could not be previewed. Try another MP4, MOV, or WebM file.")} onLoadedMetadata={(event) => { if (!Number.isFinite(event.currentTarget.duration) || event.currentTarget.duration * 1000 > LIMITS.durationMs) onInvalidVideo?.("Choose a video up to 30 seconds."); else onValidVideo?.(); }} />)}
+    {url && (isImage ? <img src={url} alt="Selected process reference" className="mt-3 max-h-64 w-full rounded-lg bg-muted object-contain" /> : <video src={url} controls playsInline preload="metadata" aria-label="Reference video preview" className="mt-3 max-h-64 w-full rounded-lg bg-muted" onError={() => onInvalidVideo?.("This video could not be previewed. Try another MP4, MOV, or WebM file.")} onLoadedMetadata={(event) => { if (!Number.isFinite(event.currentTarget.duration) || event.currentTarget.duration * 1000 > LIMITS.durationMs) onInvalidVideo?.("Choose a video up to 30 seconds."); else onValidVideo?.(); }} />)}
   </details>;
 }
 
 function PlannerActivity({ replying, drafting, reference }: { replying: boolean; drafting: boolean; reference: boolean }) {
-  const [elapsed, setElapsed] = useState(0);
+  const [slow, setSlow] = useState(false);
   useEffect(() => {
-    const started = Date.now();
-    const timer = window.setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000);
-    return () => window.clearInterval(timer);
+    const timer = window.setTimeout(() => setSlow(true), 30_000);
+    return () => window.clearTimeout(timer);
   }, []);
-  const label = drafting ? "Writing your checks" : replying ? "Continuing the response" : reference ? "Looking at your reference" : "Thinking through your request";
-  const detail = drafting ? "Your draft is taking shape above." : replying ? "The reply is appearing above as it arrives." : elapsed >= 30 ? "This is taking a little longer. Your request is still in progress." : reference ? "Preparing a response from your image or video." : "The reply will appear here as soon as it’s ready.";
-  return <div className={`planner-activity ${replying || drafting ? "planner-activity-streaming" : ""}`} role="status">
-    <div className="planner-activity-heading">
-      <span className="planner-activity-icon" aria-hidden="true"><Workflow className="size-4" /></span>
-      <span className="text-xs font-medium">ProofFlow</span>
-      <span className="planner-activity-dots" aria-hidden="true"><i /><i /><i /></span>
-      {elapsed >= 10 && <span className="ml-auto text-[11px] tabular-nums text-muted-foreground" aria-hidden="true">{elapsed}s</span>}
-    </div>
-    <p className="mt-3 text-sm font-medium">{label}<span aria-hidden="true">…</span></p>
-    <p className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</p>
-    {!replying && !drafting && <div className="planner-activity-lines" aria-hidden="true"><span /><span /><span /></div>}
+  if (replying && !drafting) return null;
+  const label = drafting ? "Drafting checks" : slow ? "Still working" : reference ? "Reviewing reference" : "Thinking";
+  return <div className="planner-activity" role="status">
+    <span className="planner-activity-dots" aria-hidden="true"><i /><i /><i /></span>
+    <span>{label}<span className="sr-only">. {slow ? "Your request is still in progress." : "Assistant is responding."}</span></span>
   </div>;
 }

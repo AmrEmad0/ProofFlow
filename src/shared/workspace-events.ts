@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const verificationReadinessSchema = z.object({ available: z.boolean(), retentionHours: z.number() });
+export const verificationReadinessSchema = z.object({ available: z.boolean() });
 export const workspaceEventSchema = z.discriminatedUnion("type", [
   verificationReadinessSchema.extend({ type: z.literal("ready") }),
   verificationReadinessSchema.extend({ type: z.literal("heartbeat") }),

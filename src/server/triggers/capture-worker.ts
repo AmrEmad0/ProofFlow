@@ -118,7 +118,7 @@ export function createCaptureWorker(db: Database, config: Config, verification: 
         const current = db.query<{ state: string; run_id: string | null }, [string]>("SELECT state, run_id FROM task_sessions WHERE id = ?").get(job.session_id);
         if (!current || current.state === "cancelled" || current.run_id) return;
         db.query("UPDATE task_sessions SET state = 'finished', ended_at = ? WHERE id = ? AND state = 'active'").run(new Date().toISOString(), job.session_id);
-        verificationStore(db).create(job.session_id, job.plan_version_id, job.contract_hash, job.session_hash, path, config.MEDIA_RETENTION_HOURS, job.session_id);
+        verificationStore(db).create(job.session_id, job.plan_version_id, job.contract_hash, job.session_hash, path, job.session_id);
         attached = true;
         db.query("UPDATE trigger_captures SET state = 'done', error_message = NULL WHERE session_id = ?").run(job.session_id);
       })();

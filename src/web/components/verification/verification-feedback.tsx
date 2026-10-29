@@ -53,7 +53,7 @@ export function VerificationFeedbackProvider({ children }: { children: ReactNode
       } else if (result.error && "status" in result.error && (result.error.status === 404 || result.error.status === 403)) {
         if (!notified.current.has(id)) {
           notified.current.add(id);
-          addToast({ id: toastId, type: "warning", title: "Video run unavailable", description: "It may have been deleted or expired." });
+          addToast({ id: toastId, type: "warning", title: "Video run unavailable", description: "It may have been deleted." });
         }
         settled.add(id);
       } else if (result.isError && !unavailable.current.has(id)) {

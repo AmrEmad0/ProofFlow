@@ -162,6 +162,8 @@
   .chat-message-assistant { @apply pr-1; overflow-wrap: anywhere; }
   .chat-composer-area { @apply shrink-0; }
   .chat-panel-active .chat-composer-area { @apply border-t bg-muted/15; }
+  .reference-attachment { @apply mb-2 flex items-start gap-2 rounded-xl border border-primary/15 bg-primary/3 p-2.5; }
+  .reference-attachment summary { @apply min-h-12; }
   .chat-composer { box-shadow: 0 2px 8px -4px oklch(0.2 0.01 65 / 0.16); }
   .planner-intro { @apply max-w-[720px] justify-start pt-3 pb-1 text-left; }
   .planner-intro h1 { @apply text-2xl sm:text-[28px] sm:leading-tight; }
@@ -169,49 +171,72 @@
   .workflow-steps-start { @apply mx-auto max-w-[400px]; }
   .workflow-steps-start > li { @apply text-[13px]; }
   .workflow-steps-start .step-number { @apply size-7 text-xs; }
-  .chat-panel-start { @apply rounded-[22px] border-border/80; box-shadow: 0 4px 6px -4px oklch(0.2 0.01 65 / 0.04), 0 16px 48px -24px oklch(0.2 0.01 65 / 0.15); }
-  .chat-panel-start .chat-header { @apply gap-3 bg-muted/25 px-5 py-4 sm:px-7; }
-  .chat-panel-start .chat-avatar { @apply rounded-xl bg-foreground text-background; box-shadow: inset 0 0 0 1px oklch(1 0 0 / 0.12); }
-  .chat-panel-start .chat-header-status { @apply border-border/70 bg-card text-[11px]; }
-  .chat-panel-start .chat-welcome { @apply px-5 pt-6 pb-0 sm:px-7; }
-  .chat-panel-start .eyebrow { @apply text-[10px] tracking-[0.13em] text-primary; }
-  .chat-panel-start .chat-welcome h3 { @apply mt-2 text-[23px] leading-tight; }
-  .chat-panel-start .chat-welcome p { @apply mt-2 max-w-[540px] text-sm leading-6; }
-  .chat-panel-start .chat-composer-area { @apply px-5 pt-5 pb-5 sm:px-7 sm:pb-6; }
-  .chat-panel-start .chat-composer { @apply rounded-2xl border-border bg-background/40 p-3; box-shadow: inset 0 1px 2px oklch(0.2 0.01 65 / 0.025); }
+  .planner-layout-start > aside { @apply order-2 lg:order-none; }
+  .planner-layout-start > div { @apply order-1 lg:order-none; }
+  .chat-panel-start { @apply rounded-[22px] border-border/80; box-shadow: 0 12px 40px -24px oklch(0.2 0.01 65 / 0.18); }
+  .chat-panel-start .chat-header { @apply gap-2.5 border-0 px-5 py-4 sm:px-7; }
+  .chat-panel-start .chat-avatar { @apply size-8 rounded-lg bg-primary/10 text-primary; }
+  .chat-panel-start .chat-avatar svg { @apply size-4; }
+  .chat-panel-start .chat-header h2 { @apply text-[13px]; }
+  .chat-panel-start .chat-header-status { @apply border-0 bg-muted/60 text-[11px]; }
+  .chat-panel-start .chat-welcome { @apply px-5 pt-5 pb-0 sm:px-7 sm:pt-8; }
+  .chat-panel-start .chat-welcome h3 { @apply text-2xl leading-tight sm:text-[28px]; }
+  .chat-panel-start .chat-welcome p { @apply mt-2 text-[14px] leading-6; }
+  .chat-panel-start .chat-composer-area { @apply px-5 pt-6 pb-3 sm:px-7 sm:pb-4; }
+  .chat-panel-start .chat-composer { @apply rounded-2xl border-primary/25 bg-background/50 p-2 sm:p-3; box-shadow: 0 2px 10px -5px oklch(0.55 0.17 41 / 0.12); }
   .chat-panel-start .chat-composer:focus-within { @apply border-primary/60 bg-card ring-3 ring-primary/8; }
-  .composer-label { @apply block px-2 pt-1 text-xs font-medium; }
-  .chat-panel-start textarea { @apply min-h-24 pt-3 text-sm leading-6 placeholder:text-muted-foreground/85; }
+  .chat-panel-start textarea { @apply min-h-28 pt-2 text-base leading-7 placeholder:text-muted-foreground/80; }
   .chat-panel-start .composer-toolbar { @apply gap-2 px-0 pb-0; }
-  .chat-panel-start .composer-toolbar > span { @apply text-[11px]; }
   .composer-submit { @apply shadow-sm; }
-  .reference-limits { @apply mt-2.5 flex flex-wrap items-center gap-x-1.5 text-[11px] leading-5 text-muted-foreground; }
-  .process-ideas { @apply mt-5 border-t border-border/70 pt-4; }
-  .starter-label { @apply mb-3 text-xs font-medium text-muted-foreground; }
-  .process-idea-grid { @apply grid gap-2 sm:grid-cols-2; }
-  .process-idea { @apply flex min-w-0 items-center gap-3 rounded-xl border border-border/80 bg-card p-3 text-left transition-colors hover:border-primary/35 hover:bg-primary/3 disabled:opacity-50; }
-  .process-idea .text-xs { @apply text-[11px]; }
-  .idea-arrow { @apply ml-auto -rotate-45 text-muted-foreground; }
-  .starter-example { @apply mt-4 flex w-full items-center gap-3 rounded-xl bg-muted/60 p-3 text-left transition-colors hover:bg-muted disabled:opacity-50; }
-  .starter-example-icon { @apply flex size-10 shrink-0 items-center justify-center rounded-lg border border-border/80 bg-card text-primary; }
+  .process-ideas { @apply mt-4 flex flex-wrap items-center gap-2; }
+  .starter-label { @apply mr-1 text-xs text-muted-foreground; }
+  .process-idea-grid { @apply flex flex-wrap gap-2; }
+  .process-idea { @apply flex min-h-9 min-w-0 items-center gap-2 rounded-full border border-border/80 px-3 py-1.5 text-left text-[12px] text-muted-foreground transition-colors hover:border-primary/35 hover:bg-primary/5 hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50; }
+  .planner-alternatives { @apply mt-6 flex flex-wrap items-center justify-between gap-x-2 border-t border-border/60 pt-2; }
+  .planner-alternatives button { @apply h-10 px-2 text-[12px]; }
 
-  .planner-activity { @apply max-w-lg rounded-2xl rounded-tl-sm border border-border/60 bg-muted/25 p-4; }
-  .planner-activity-heading { @apply flex items-center gap-2 text-primary; }
-  .planner-activity-icon { @apply flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10; }
-  .planner-activity-dots { @apply ml-1 flex items-center gap-1; }
-  .planner-activity-dots i { @apply size-1 rounded-full bg-primary/60; animation: planner-dot 1.5s ease-in-out infinite; }
+  .planner-activity { @apply flex min-h-9 items-center gap-3 py-2 text-[13px] text-muted-foreground; }
+  .planner-activity-dots { @apply flex h-5 items-center gap-1 rounded-full bg-primary/8 px-2.5; }
+  .planner-activity-dots i { @apply size-1 rounded-full bg-primary; animation: planner-dot 1.5s ease-in-out infinite; }
   .planner-activity-dots i:nth-child(2) { animation-delay: 160ms; }
   .planner-activity-dots i:nth-child(3) { animation-delay: 320ms; }
-  .planner-activity-lines { @apply mt-4 space-y-2; }
-  .planner-activity-lines span { @apply block h-2 rounded-full; background: linear-gradient(100deg, var(--muted) 20%, color-mix(in oklch, var(--primary) 9%, var(--muted)) 45%, var(--muted) 70%); background-size: 250% 100%; animation: planner-shimmer 2.4s ease-in-out infinite; }
-  .planner-activity-lines span:nth-child(1) { width: 90%; }
-  .planner-activity-lines span:nth-child(2) { width: 72%; animation-delay: 120ms; }
-  .planner-activity-lines span:nth-child(3) { width: 44%; animation-delay: 240ms; }
-  .planner-activity-streaming { @apply border-transparent bg-transparent px-0 py-1; }
-  .planner-activity-streaming .planner-activity-heading { @apply hidden; }
-  .planner-activity-streaming > p:first-of-type { @apply mt-0 text-xs text-muted-foreground; }
-  .planner-activity-streaming > p:last-of-type { @apply hidden; }
-  .chat-composer[data-sending] textarea { @apply min-h-10 text-sm; }
+  .chat-composer[data-sending] { @apply flex items-center gap-2 bg-muted/15; }
+  .chat-composer[data-sending] .composer-toolbar { @apply shrink-0 p-0; }
+  .chat-composer[data-sending] .composer-toolbar > span { @apply hidden; }
+  .chat-composer[data-sending] .composer-submit { @apply size-9; }
+
+  .chat-markdown { @apply min-w-0 text-sm leading-7; overflow-wrap: anywhere; }
+  .chat-markdown > * + * { margin-top: 0.85rem; }
+  .chat-markdown :is(h1, h2, h3, h4, h5, h6) { @apply font-semibold tracking-tight; line-height: 1.4; margin-top: 1.25rem; }
+  .chat-markdown :is(h1, h2) { font-size: 1.125rem; }
+  .chat-markdown :is(h3, h4, h5, h6) { font-size: 1rem; }
+  .chat-markdown > :first-child { margin-top: 0; }
+  .chat-markdown strong { @apply font-semibold; }
+  .chat-markdown .chat-question { @apply rounded-r-lg border-l-2 border-primary/60 bg-primary/5 px-3 py-2.5; }
+  .chat-question-label { @apply mb-1 flex items-center gap-1.5 text-[11px] font-medium leading-5 text-primary; }
+  .chat-question-content { @apply block font-medium leading-6; }
+  .chat-markdown ul { @apply list-disc pl-5; }
+  .chat-markdown ol { @apply list-decimal pl-5; }
+  .chat-markdown li + li { margin-top: 0.35rem; }
+  .chat-markdown li :is(ul, ol, p) { margin-top: 0.35rem; }
+  .chat-markdown li::marker { color: var(--muted-foreground); }
+  .chat-markdown blockquote { @apply border-l-2 border-primary/40 pl-4 text-muted-foreground; }
+  .chat-markdown blockquote > * + * { margin-top: 0.5rem; }
+  .chat-markdown a { @apply text-primary underline underline-offset-4; }
+  .chat-markdown a:hover { @apply decoration-primary/40; }
+  .chat-markdown a:focus-visible { @apply rounded-sm outline-2 outline-offset-2 outline-primary; }
+  .chat-markdown code { @apply rounded bg-muted px-1.5 py-0.5 font-mono text-[13px]; }
+  .chat-markdown pre { @apply max-w-full overflow-x-auto rounded-xl border bg-muted/45 p-4; white-space: pre; overflow-wrap: normal; }
+  .chat-markdown pre code { @apply bg-transparent p-0; }
+  .chat-markdown-table { @apply max-w-full overflow-x-auto rounded-xl border; }
+  .chat-markdown-table:focus-visible { @apply outline-2 outline-offset-2 outline-primary; }
+  .chat-markdown table { @apply w-full border-collapse text-left text-[13px] leading-6; }
+  .chat-markdown :is(th, td) { @apply border-b px-3 py-2 align-top; min-width: 7rem; }
+  .chat-markdown th { @apply bg-muted/60 font-semibold; }
+  .chat-markdown tr:last-child td { @apply border-b-0; }
+  .chat-markdown hr { @apply my-4 border-border; }
+  .chat-markdown input[type="checkbox"] { @apply mr-1 accent-primary; }
+  .chat-markdown .footnotes { @apply border-t pt-3 text-xs text-muted-foreground; }
 
   .chat-cursor { display: inline-block; width: 0.35rem; height: 1em; margin-left: 0.25rem; border-radius: 2px; vertical-align: -0.1em; background: var(--primary); animation: chat-cursor 1s ease-in-out infinite; }
 
@@ -395,7 +420,6 @@
 
 @keyframes planner-dot { 0%, 70%, 100% { opacity: 0.35; transform: translateY(0); } 35% { opacity: 1; transform: translateY(-3px); } }
 @keyframes proof-check-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes planner-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 
 @keyframes chat-cursor { 50% { opacity: 0.25; } }
 

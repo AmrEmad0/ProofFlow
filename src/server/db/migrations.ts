@@ -217,6 +217,9 @@ const migrations = [{
   version: 15,
   sql: `ALTER TABLE plan_versions ADD COLUMN schema_version INTEGER NOT NULL DEFAULT 1;
     ALTER TABLE plan_versions ADD COLUMN contract_json TEXT CHECK (contract_json IS NULL OR json_valid(contract_json));`,
+}, {
+  version: 16,
+  sql: `ALTER TABLE runs DROP COLUMN expires_at;`,
 }];
 
 export function migrate(db: Database): void {

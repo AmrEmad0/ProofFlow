@@ -18,13 +18,14 @@ export const runSummarySchema = z.strictObject({
   recordingKind: z.enum(["demo", "camera"]).nullable().optional(),
   taskSessionId: z.uuid().nullable().default(null), taskReference: z.string().nullable().default(null),
   id: z.uuid(), approvedVersionId: z.uuid(), planVersion: z.number().int().positive(), state: runStateSchema,
-  createdAt: z.string(), completedAt: z.string().nullable(), expiresAt: z.string(),
+  createdAt: z.string(), completedAt: z.string().nullable(),
   error: z.string().nullable(), durationMs: z.number().int().positive().nullable(),
 });
 export const verificationActivitySchema = z.strictObject({
   at: z.iso.datetime(),
   message: z.string().min(1).max(1000),
   kind: z.enum(["progress", "warning"]),
+  stage: z.enum(["preparing", "visual", "tracking", "confirming"]).optional(),
   stepId: z.string().min(1).optional(),
 });
 export type VerificationActivity = z.infer<typeof verificationActivitySchema>;

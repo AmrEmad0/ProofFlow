@@ -5,9 +5,10 @@ import { structuredConflicts, type Observation } from "../../shared/observation"
 import { verificationDiagnosticsSchema, type StepCheck } from "../../shared/diagnostics";
 
 import { continuousTrack, describeTrack, fullyFramed, visibleStateInstances } from "./track-evidence";
+import { assessedStateIdentity } from "./state-identity";
 import { evaluateVisualCheck } from "./visual-check";
 
-export const VERIFICATION_RULE_VERSION = "2026-10-29.1";
+export const VERIFICATION_RULE_VERSION = "2026-10-29.3";
 type Candidate = Observation["candidates"][number];
 type Anchor = { objectId: string; firstFrame: number };
 type EvaluatedStep = StepCheck & { actionEndMs?: number };
@@ -27,7 +28,7 @@ function evaluateEntry(step: ProofStep, candidate: Candidate, check: StepCheck, 
   const first = check.firstFrame!;
   const last = check.lastFrame!;
   const base = check.finding;
-  const events: { subject: TrackBox[]; region: TrackBox[]; diagnostic: StepCheck["regionCandidates"][number] }[] = [];
+  const events: { subject: TrackBox[]; region: TrackBox[]; intervalEndMs?: number; diagnostic: StepCheck["regionCandidates"][number] }[] = [];
   const targetIds = targetAnchor ? [targetAnchor.objectId] : [...new Set(regionTrack?.boxes.map(box => box.objectId))];
   if (subjectTrack?.outcome === "completed" && regionTrack?.outcome === "completed") {
     for (const targetId of targetIds) {
@@ -86,19 +87,45 @@ function evaluateEntry(step: ProofStep, candidate: Candidate, check: StepCheck, 
   // The explicit action must share a sampled frame with the tracked transition;
   // a broad search window cannot attach it to an unrelated earlier entry.
   const actionFrame = candidate.action ? Math.round(candidate.action.timestampMs * ANALYSIS_FPS / 1000) : null;
-  const aligned = candidate.subject ? events.filter(event => actionFrame !== null
+  let aligned = candidate.subject ? events.filter(event => actionFrame !== null
     && actionFrame >= event.subject[0]!.frameIndex && actionFrame <= event.subject.at(-1)!.frameIndex) : events;
+  // Muse may mark placement/release just after geometric entry. Accept its
+  // interval only when the complete same-instance before/action/after evidence
+  // grounds exactly one transition; never attach a broad window to another event.
+  const interval = candidate.actionInterval;
+  if (!aligned.length && candidate.subject && interval?.boundariesVisible && candidate.before?.visible
+    && candidate.after?.visible && candidate.action?.visible && candidate.before.matchesRequirement
+    && candidate.after.matchesRequirement && candidate.action.matchesRequirement
+    && interval.startMs < interval.endMs && candidate.startMs !== null && candidate.endMs !== null
+    && candidate.startMs <= candidate.before.timestampMs && candidate.after.timestampMs <= candidate.endMs
+    && candidate.before.timestampMs <= interval.startMs && interval.endMs <= candidate.after.timestampMs
+    && candidate.action.timestampMs >= interval.startMs && candidate.action.timestampMs <= interval.endMs) {
+    const frameAt = (ms: number) => Math.round(ms * ANALYSIS_FPS / 1000);
+    const supported = events.flatMap(event => {
+      const outside = event.subject[0]!.frameIndex, inside = event.subject.at(-3)!.frameIndex;
+      if (outside < frameAt(interval.startMs) - 1 || inside > frameAt(interval.endMs)) return [];
+      const before = frameAt(candidate.before!.timestampMs), after = frameAt(candidate.after!.timestampMs);
+      if (before > outside || after < event.subject.at(-1)!.frameIndex) return [];
+      const subject = continuousTrack(subjectTrack, before, after, event.subject[0]!.objectId);
+      const region = continuousTrack(regionTrack, before, after, event.region[0]!.objectId);
+      if (!subject || !region || overlap(subject.at(-1)!, region.at(-1)!) < 0.95) return [];
+      return [{ ...event, subject, region, intervalEndMs: interval.endMs }];
+    });
+    if (supported.length === 1) aligned = supported;
+  }
   if (candidate.actionVisible && candidate.beforeMatches && candidate.afterMatches && pairs.size === 1 && aligned.length) {
     const event = aligned.sort((a, b) => a.subject.at(-1)!.frameIndex - b.subject.at(-1)!.frameIndex)[0]!;
     check.subject!.selectedObjectId = event.subject[0]!.objectId;
     check.target!.selectedObjectId = event.region[0]!.objectId;
     // The final two inside samples confirm persistence, not additional motion.
-    return { ...check, actionEndMs: Math.round(Math.max(event.subject.at(-3)!.frameIndex, actionFrame ?? 0) * 1000 / ANALYSIS_FPS),
+    return { ...check, actionEndMs: event.intervalEndMs ?? Math.round(Math.max(event.subject.at(-3)!.frameIndex, actionFrame ?? 0) * 1000 / ANALYSIS_FPS),
       decision: "entry_geometry", finding: { ...base, status: "observed",
       startMs: Math.round(event.subject[0]!.frameIndex * 1000 / ANALYSIS_FPS),
       endMs: Math.round(event.subject.at(-1)!.frameIndex * 1000 / ANALYSIS_FPS),
       evidence: [...refs(event.subject, step.subjectConcept), ...refs(event.region, step.targetConcept!)],
-      explanation: "Muse's visible entry proposal is grounded by one unique subject/target pairing, continuously tracked from outside to three consecutive inside samples. Inspect the clip; 2D geometry does not certify hidden contents." } };
+      explanation: event.intervalEndMs !== undefined
+        ? "One unique outside-to-inside transition falls within the proposed visible action interval, with the same objects continuously tracked through the before evidence, an outside sample, the action moment and inside after-state. Inspect the clip; 2D geometry does not certify hidden contents."
+        : "Muse's visible entry proposal is grounded by one unique subject/target pairing, continuously tracked from outside to three consecutive inside samples. Inspect the clip; 2D geometry does not certify hidden contents." } };
   }
   if (pairs.size > 1) return { ...check, decision: "entry_geometry", finding: { ...base,
     explanation: "More than one subject/target pairing supports entry. The intended objects remain ambiguous; review the video." } };
@@ -137,19 +164,37 @@ function evaluate(step: ProofStep, candidate: Candidate | undefined, tracks: Con
     : Math.min(frameCount - 1, Math.round((candidate.before?.timestampMs ?? candidate.startMs) * ANALYSIS_FPS / 1000));
   const identityLast = step.checkType === "object_present_at_end" ? frameCount - 1
     : Math.min(frameCount - 1, Math.round((candidate.after?.timestampMs ?? candidate.endMs) * ANALYSIS_FPS / 1000));
-  for (const ref of candidate.grounding ?? []) {
+  const originalSubjectTrack = tracks.find(track => canonical(track.concept) === canonical(step.subjectConcept));
+  check.subject = describeTrack(step.subjectConcept, originalSubjectTrack, first, last);
+  const assessedIdentity = assessedStateIdentity(step, candidate, originalSubjectTrack);
+  const stateInstances = (track: ConceptTrack | undefined) => assessedIdentity && track === originalSubjectTrack
+    ? [assessedIdentity] : visibleStateInstances(track, identityFirst, identityLast);
+  function identityProblem(track: ConceptTrack | undefined, ids: Set<string>): string {
+    const proposed = ids.size === 1 ? [...ids][0] : undefined;
+    const boxes = proposed ? continuousTrack(track, identityFirst, identityLast, proposed) : null;
+    if (proposed && !boxes) return "The proposed object has missing or duplicate tracking samples across the before/after evidence. Its identity remains uncertain.";
+    if (boxes && ![boxes[0]!, boxes.at(-1)!].every(fullyFramed)) return "The proposed object touches the image edge at the before/after evidence. Box-specific assessments must establish that the decisive state details remain visible and distinguish it from every competing object.";
+    return "Multiple tracked objects remain compatible with the proposed evidence. Timestamped visual details must distinguish the intended instance; selecting a SAM label alone is insufficient.";
+  }
+  for (const ref of [...candidate.grounding ?? [], ...candidate.objectAssessments ?? []]) {
     const matching = tracks.find(track => canonical(track.concept) === canonical(ref.concept));
     if (!matching || matching.outcome !== "completed" || !matching.boxes.some(box => box.objectId === ref.objectId
       && box.frameIndex === Math.round(ref.timestampMs * ANALYSIS_FPS / 1000))) {
       return finish("ambiguous_proposal", { ...base, explanation: "A proposed object reference does not match actual SAM geometry at its timestamp." });
     }
   }
+  if (step.checkType === "visible_state_change" && candidate.objectAssessments?.length && !assessedIdentity) {
+    const hidden = candidate.objectAssessments.some(item => !item.decisiveDetailsVisible);
+    return finish("subject_track", { ...base, explanation: hidden
+      ? "The box-specific assessment cannot see the decisive state or identity details. Cropped or obscured evidence remains uncertain."
+      : "Box-specific assessments do not uniquely distinguish the same intended object at all three evidence moments, or its continuous track is incomplete." });
+  }
   for (const concept of [step.subjectConcept, step.targetConcept].filter((value): value is string => value !== null)) {
     let ids = new Set((candidate.grounding ?? []).filter(ref => canonical(ref.concept) === canonical(concept)).map(ref => ref.objectId));
     if (ids.size > 1 && step.checkType !== "object_enters_region") {
       const track = tracks.find(track => canonical(track.concept) === canonical(concept));
-      ids = new Set(visibleStateInstances(track, identityFirst, identityLast).filter(id => ids.has(id)));
-      if (ids.size !== 1) return finish("subject_track", { ...base, explanation: "No unique continuous identity supports the timestamped state evidence. Competing objects remain uncertain." });
+      ids = new Set(stateInstances(track).filter(id => ids.has(id)));
+      if (ids.size !== 1) return finish("subject_track", { ...base, explanation: identityProblem(track, ids) });
     }
     if (ids.size > 1) return finish("ambiguous_proposal", { ...base, explanation: "The proposal references competing object identities for the same approved concept." });
     if (ids.size === 1) {
@@ -160,9 +205,9 @@ function evaluate(step: ProofStep, candidate: Candidate | undefined, tracks: Con
       if (established.length === 0) {
         if (step.checkType === "object_enters_region") continue;
         const track = tracks.find(track => canonical(track.concept) === canonical(concept));
-        const possible = visibleStateInstances(track, identityFirst, identityLast);
+        const possible = stateInstances(track);
         if (possible.length !== 1 || !ids.has(possible[0]!)) return finish("subject_track", { ...base,
-          explanation: "Several object identities remain plausible, or the proposed identity lacks continuous support. Selecting a SAM label cannot establish the intended object." });
+          explanation: identityProblem(track, ids) });
       }
       tracks = tracks.map(track => canonical(track.concept) === canonical(concept)
         ? { ...track, boxes: track.boxes.filter(box => ids.has(box.objectId)) } : track);
@@ -170,7 +215,7 @@ function evaluate(step: ProofStep, candidate: Candidate | undefined, tracks: Con
   }
   if (explicit && step.checkType === "visible_state_change" && anchors.length === 0) {
     const subjectTrack = tracks.find(track => canonical(track.concept) === canonical(step.subjectConcept));
-    const possible = visibleStateInstances(subjectTrack, identityFirst, identityLast);
+    const possible = stateInstances(subjectTrack);
     if (possible.length === 1) tracks = tracks.map(track => canonical(track.concept) === canonical(step.subjectConcept)
       ? { ...track, boxes: track.boxes.filter(box => box.objectId === possible[0]) } : track);
   }
@@ -244,8 +289,8 @@ function evaluate(step: ProofStep, candidate: Candidate | undefined, tracks: Con
   }
 
   if (step.checkType === "visible_state_change") {
-    if (supported && ![subject[0]!, subject.at(-1)!].every(fullyFramed)) {
-      return finish("subject_track", { ...base, explanation: "Only a frame-edge subject fragment supports the proposed before/after states. A visible state change remains uncertain." });
+    if (supported && !assessedIdentity && ![subject[0]!, subject.at(-1)!].every(fullyFramed)) {
+      return finish("subject_track", { ...base, explanation: "The subject touches the image edge, but there is no complete box-specific assessment of its visible state details and identity. Cropped evidence remains uncertain." });
     }
     const stateEvidence = !explicit || Boolean(candidate.before?.visible && candidate.before.matchesRequirement
       && candidate.after?.visible && candidate.after.matchesRequirement && candidate.action?.visible && candidate.action.matchesRequirement

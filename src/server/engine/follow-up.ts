@@ -15,7 +15,7 @@ export function followUpQuestions(plan: ApprovedPlan, observation: Observation, 
     const concepts = [step.subjectConcept, step.targetConcept].filter((value): value is string => value !== null);
     if (concepts.some(concept => !tracks.some(track => canonicalConcept(track.concept) === canonicalConcept(concept)
       && track.outcome === "completed" && track.boxes.length > 0))) return [];
-    return [{ stepId: step.id, question: `${check.finding.explanation} Unresolved relationships: ${JSON.stringify(unresolvedRelationship)}. For a temporal relationship supply visibly grounded action onset and completion; retain uncertainty if sampling cannot resolve them. Approved missing evidence: ${JSON.stringify(step.requirements?.filter(req => !candidate.requirementAssessments?.some(a => a.requirementId === req.id && a.visible && a.matchesRequirement && a.decisiveDetailsVisible)) ?? [])}. Do not change these requirements. Identify the intended SAM object IDs at the supplied timestamps and give explicit visible before/action/after evidence. Keep uncertainty if motion, state, or identity cannot be established.` }];
+    return [{ stepId: step.id, question: `${check.finding.explanation} Unresolved relationships: ${JSON.stringify(unresolvedRelationship)}. For a temporal relationship supply visibly grounded action onset and completion; retain uncertainty if sampling cannot resolve them. Approved missing evidence: ${JSON.stringify(step.requirements?.filter(req => !candidate.requirementAssessments?.some(a => a.requirementId === req.id && a.visible && a.matchesRequirement && a.decisiveDetailsVisible)) ?? [])}. Do not change these requirements. For state changes, assess every supplied subject instance in objectAssessments at each before/action/after timestamp, including alternatives and whether decisive state details remain visible despite cropping. Identify the intended SAM object IDs at the supplied timestamps and give explicit visible before/action/after evidence. Keep uncertainty if motion, state, or identity cannot be established.` }];
   });
 }
 
@@ -38,6 +38,13 @@ export function mergeFollowUp(initial: Observation, followUp: Observation, stepI
     for (const a of first.requirementAssessments ?? []) {
       const b = second.requirementAssessments?.find(item => item.requirementId === a.requirementId);
       if (b && a.matchesRequirement !== b.matchesRequirement) contradictions.push(`The passes disagree about requirement ${a.requirementId}.`);
+    }
+    for (const a of first.objectAssessments ?? []) {
+      const b = second.objectAssessments?.find(item => canonicalConcept(item.concept) === canonicalConcept(a.concept)
+        && item.objectId === a.objectId && Math.round(item.timestampMs * ANALYSIS_FPS / 1000) === Math.round(a.timestampMs * ANALYSIS_FPS / 1000));
+      if (b && (a.matchesIntendedObject !== b.matchesIntendedObject || a.decisiveDetailsVisible !== b.decisiveDetailsVisible)) {
+        contradictions.push("The passes disagree about box-specific identity or decisive state visibility.");
+      }
     }
     // Free-text caveats have no independently verifiable resolution signal.
     // A more confident second pass cannot silently erase missing visual evidence.

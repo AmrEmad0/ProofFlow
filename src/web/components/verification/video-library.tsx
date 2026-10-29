@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Film, LoaderCircle, Plus, RefreshCw } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, Film, LoaderCircle, RefreshCw, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DEMO_FEED_STOPPED } from "../../../shared/triggers";
@@ -25,6 +25,32 @@ export function VideoLibrary({ runs, selectedId, loading, error, uploading, refr
   uploading: boolean; refreshing: boolean; compact?: boolean;
   onSelect: (id: string) => void; onNew: () => void; onRefresh: () => void;
 }) {
+  const strip = useRef<HTMLElement>(null);
+  const [scroll, setScroll] = useState({ left: false, right: false });
+  useEffect(() => {
+    const element = strip.current;
+    if (!element || compact) return;
+    const update = () => setScroll({ left: element.scrollLeft > 1, right: element.scrollLeft + element.clientWidth < element.scrollWidth - 1 });
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    element.addEventListener("scroll", update, { passive: true });
+    update();
+    return () => { observer.disconnect(); element.removeEventListener("scroll", update); };
+  }, [compact, runs.length]);
+  useEffect(() => {
+    const element = strip.current;
+    const selected = element?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!element || !selected) return;
+    const viewport = element.getBoundingClientRect();
+    const card = selected.getBoundingClientRect();
+    if (card.left < viewport.left) element.scrollBy({ left: card.left - viewport.left });
+    else if (card.right > viewport.right) element.scrollBy({ left: card.right - viewport.right });
+  }, [compact, selectedId, runs.length]);
+  function scrollVideos(direction: number) {
+    const element = strip.current;
+    if (!element) return;
+    element.scrollBy({ left: direction * element.clientWidth * 0.8, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }
   if (compact) {
     const queued = runs.filter(run => run.state === "queued").length;
     const processing = runs.filter(run => isActiveRun(run.state) && run.state !== "queued").length;
@@ -40,27 +66,31 @@ export function VideoLibrary({ runs, selectedId, loading, error, uploading, refr
           </SelectContent>
         </Select>}
         <Button variant="ghost" size="icon" aria-label="Refresh plan videos" disabled={refreshing} onClick={onRefresh}><RefreshCw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} /></Button>
-        <Button variant="outline" className="h-9 gap-2 text-xs" disabled={uploading} onClick={onNew}><Plus className="size-3.5" />Check another video</Button>
+        <Button className="h-9 gap-2 text-xs" disabled={uploading} title={uploading ? "Wait for the current video check to finish" : "Choose a video file to upload and check"} onClick={onNew}><Upload className="size-3.5" />Upload video</Button>
       </div>
       {loading && <p role="status" className="mt-2 text-xs text-muted-foreground">Loading videos…</p>}
       {error && <p role="alert" className="mt-2 text-xs text-destructive">{error}</p>}
     </aside>;
   }
-  return <aside className="min-w-0 border-b sm:flex sm:items-center" aria-label="Plan video library">
-    <div className="flex shrink-0 items-center justify-between gap-2 px-3 py-2 sm:contents">
+  return <aside className="flex min-w-0 flex-col gap-2 border-b pb-2 sm:flex-row sm:items-center" aria-label="Plan video library">
+    <div className="flex shrink-0 items-center justify-between gap-2 sm:contents">
       <div className="flex shrink-0 items-center gap-1 sm:pr-3"><h2 className="text-[12px] font-medium text-muted-foreground">Videos <span className="text-muted-foreground">({runs.length})</span></h2><Button variant="ghost" size="icon" className="size-8" aria-label="Refresh plan videos" disabled={refreshing} onClick={onRefresh}><RefreshCw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} /></Button></div>
-      <Button variant="outline" className="h-9 gap-2 rounded-md px-3 text-[12px] sm:order-last sm:mb-2 sm:shrink-0" onClick={onNew} disabled={uploading}><Plus className="size-3.5" />{runs.length ? "Check another video" : "Add a video"}</Button>
+      <Button className="h-9 gap-2 rounded-md px-3 text-[12px] sm:order-last sm:shrink-0" onClick={onNew} disabled={uploading} title={uploading ? "Wait for the current video check to finish" : "Choose a video file to upload and check"}><Upload className="size-3.5" />Upload video</Button>
     </div>
     {loading && <p role="status" className="px-3 pb-3 text-sm text-muted-foreground">Loading videos…</p>}
     {error && <div role="alert" className="px-3 pb-3 text-sm text-destructive">{error}<button className="ml-2 underline" onClick={onRefresh}>Retry</button></div>}
-    {runs.length > 0 && <nav aria-label="Videos for this plan" className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-3 pt-1">{runs.map(run => {
+    {runs.length > 0 && <div className="flex min-w-0 flex-1 items-center gap-1">
+      {(scroll.left || scroll.right) && <Button variant="ghost" size="icon" className="size-7 shrink-0" aria-label="Scroll videos left" disabled={!scroll.left} onClick={() => scrollVideos(-1)}><ChevronLeft className="size-4" /></Button>}
+      <nav ref={strip} aria-label="Videos for this plan" className="flex min-w-0 flex-1 snap-x snap-proximity gap-2 overflow-x-auto overscroll-x-contain py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{runs.map(run => {
       const name = recordingName(runs, run.id);
       const active = selectedId === run.id;
-      return <button type="button" key={run.id} onClick={() => onSelect(run.id)} aria-current={active ? "page" : undefined} aria-label={`Open ${name}, ${videoStatusLabels[run.state]}`} className={`flex shrink-0 items-center gap-2 rounded-md border px-2.5 py-2 text-left focus-visible:outline-2 focus-visible:outline-primary ${active ? "border-primary/30 bg-card shadow-xs" : "border-transparent hover:bg-muted/40"}`}>
+      return <button type="button" key={run.id} onClick={() => onSelect(run.id)} aria-current={active ? "page" : undefined} aria-label={`Open ${name}, ${videoStatusLabels[run.state]}`} className={`flex max-w-full shrink-0 snap-start items-center gap-2 rounded-md border px-2.5 py-2 text-left focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-primary ${active ? "border-primary/30 bg-card shadow-xs" : "border-transparent hover:bg-muted/40"}`}>
         <VideoThumbnail run={run} />
-        <span><span className="block text-[12px] font-medium">{name} · v{run.planVersion}</span><span className={`flex items-center gap-1 text-[11px] ${run.state === "failed" ? "text-red-800" : run.state === "completed" ? "text-emerald-700" : "text-muted-foreground"}`}>{isActiveRun(run.state) && <LoaderCircle className="size-3 animate-spin" aria-hidden="true" />}{videoStatusLabels[run.state]}</span></span>
+        <span className="min-w-0"><span className="block truncate text-[12px] font-medium">{name} · v{run.planVersion}</span><span className={`flex items-center gap-1 text-[11px] ${run.state === "failed" ? "text-red-800" : run.state === "completed" ? "text-emerald-700" : "text-muted-foreground"}`}>{isActiveRun(run.state) && <LoaderCircle className="size-3 animate-spin" aria-hidden="true" />}{videoStatusLabels[run.state]}</span></span>
       </button>;
-    })}</nav>}
+    })}</nav>
+      {(scroll.left || scroll.right) && <Button variant="ghost" size="icon" className="size-7 shrink-0" aria-label="Scroll videos right" disabled={!scroll.right} onClick={() => scrollVideos(1)}><ChevronRight className="size-4" /></Button>}
+    </div>}
   </aside>;
 }
 

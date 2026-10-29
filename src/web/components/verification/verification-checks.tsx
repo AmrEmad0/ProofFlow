@@ -1,5 +1,6 @@
 import { Check, ChevronDown, CircleHelp, Clock3, Minus, Play } from "lucide-react";
 import { formatTime } from "@/lib/evidence-presentation";
+import { checkProgress } from "@/lib/verification-progress";
 import { EvidenceMoments } from "./evidence-moments";
 import { EvidenceRelationships } from "./evidence-relationships";
 import { isActiveRun } from "../../../shared/receipt";
@@ -25,6 +26,7 @@ export function VerificationChecks({ run, selectedId, currentIds, playing, onIns
       const hasWindow = finding?.startMs !== null && finding?.startMs !== undefined && finding.endMs !== null;
       const current = currentIds.includes(step.id);
       const selected = selectedId === step.id;
+      const stepActivity = active && !finding ? run.activity.filter(event => event.stepId === step.id).at(-1) : null;
       return <li key={step.id}><article aria-label={`Check ${index + 1}: ${step.label}`} aria-current={current ? "time" : undefined} data-status={finding?.status} className={`evidence-result-card relative px-4 py-3 transition-colors ${selected ? "bg-primary/[0.04]" : current ? "bg-muted/50" : "bg-card"}`}>
         {(selected || current) && <span className={`absolute inset-y-3 left-0 w-0.5 rounded-r ${selected ? "bg-primary" : "bg-emerald-600"}`} aria-hidden="true" />}
         <button type="button" className="group/cue flex w-full items-start gap-3 rounded-md py-1 text-left disabled:cursor-default" disabled={!finding || !run.media} title={current ? playing ? "Playing this evidence" : "At this evidence window" : finding ? "Play evidence" : undefined} aria-pressed={selected} aria-label={finding ? hasWindow ? `Watch evidence for check ${index + 1}, ${formatTime(finding.startMs!)}–${formatTime(finding.endMs!)}: ${step.label}` : `Review whole video for check ${index + 1}: ${step.label}` : `Check ${index + 1}: ${step.label}`} onClick={() => finding && onInspect(step.id, finding.startMs ?? 0)}>
@@ -32,12 +34,13 @@ export function VerificationChecks({ run, selectedId, currentIds, playing, onIns
           <span className="block min-w-0 flex-1">
             <span className="block break-words text-[14px] font-semibold leading-5 tracking-[-0.01em] group-enabled/cue:group-hover/cue:text-primary">{step.label}</span>
             <span className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
-              <span className="evidence-verdict inline-flex items-center gap-1 font-medium"><Icon className="size-3" aria-hidden="true" />{style ? active ? style.label + " · confirming" : style.label : active ? "Checking" : "Not checked"}</span>
+              <span className="evidence-verdict inline-flex items-center gap-1 font-medium"><Icon className="size-3" aria-hidden="true" />{style ? active ? style.label + " · confirming" : style.label : active ? checkProgress(run, step.id) : "Not checked"}</span>
               {hasWindow && <span className="ml-auto whitespace-nowrap tabular-nums text-muted-foreground">{formatTime(finding.startMs!)}–{formatTime(finding.endMs!)}</span>}
               {finding && !hasWindow && <span className="ml-auto text-muted-foreground">Whole video</span>}
             </span>
           </span>
         </button>
+        {stepActivity && <p className="mt-1 ml-10 text-[11px] leading-5 text-muted-foreground">{stepActivity.message}</p>}
         {finding && <div className="ml-10"><EvidenceMoments conditionLabel={step.visualCheck?.kind === "condition" ? ({ anytime: "Condition", start: "At the start", end: "At the end" }[step.visualCheck.timing]) : undefined} finding={finding} durationMs={run.durationMs} hasMedia={Boolean(run.media)} onInspect={onInspect} /></div>}
         {finding?.status === "uncertain" && <p className="mt-1 ml-10 text-[12px] leading-5 text-muted-foreground">{style?.hint}</p>}
         {finding && <>

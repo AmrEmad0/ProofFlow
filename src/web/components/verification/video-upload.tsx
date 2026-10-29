@@ -3,9 +3,9 @@ import { Check, LoaderCircle, Upload, Video, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LIMITS } from "../../../shared/proof-plan";
 
-export function VideoUpload({ file, localUrl, uploading, processing, available, retentionHours, version, onChoose, onClear, onInvalid, onUpload }: {
+export function VideoUpload({ file, localUrl, uploading, processing, available, version, onChoose, onClear, onInvalid, onUpload }: {
   file: File | null; localUrl: string | null;
-  uploading: boolean; processing: boolean; available: boolean; retentionHours: number; version: number | null;
+  uploading: boolean; processing: boolean; available: boolean; version: number | null;
   onChoose: (file: File | undefined) => void;
   onClear: () => void;
   onInvalid: (message: string) => void; onUpload: () => void;
@@ -41,6 +41,5 @@ export function VideoUpload({ file, localUrl, uploading, processing, available, 
       <div className="mt-4 flex flex-wrap items-center gap-3"><Button onClick={onUpload} disabled={!available || processing || uploading} aria-describedby={reason ? `${descriptionId}-status` : undefined} className="w-full gap-2 sm:w-auto">{uploading ? <><LoaderCircle className="size-4 animate-spin" />Uploading…</> : <><Upload className="size-4" />Check video</>}</Button>{reason && <p id={`${descriptionId}-status`} role="status" className="min-w-0 flex-1 basis-48 text-sm leading-6 text-muted-foreground">{reason}</p>}</div>
     </div>}
     {!file && reason && <p role="status" className="mt-3 text-sm leading-6 text-muted-foreground">{reason}</p>}
-    <p className="mt-3 text-sm leading-6 text-muted-foreground">Videos and evidence saved in this workspace expire after {retentionHours} hours.</p>
   </section>;
 }

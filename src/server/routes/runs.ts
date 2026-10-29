@@ -41,7 +41,7 @@ export function runRoutes(db: Database, config: Config, worker?: VerificationWor
       set.headers["cache-control"] = "no-store";
       if (request.method !== "GET" && request.method !== "HEAD") requireWorkspaceOrigin(request, config);
     })
-    .get("/api/verification/status", () => ({ available: Boolean(worker?.ready && config.modelConfigured), retentionHours: config.MEDIA_RETENTION_HOURS }))
+    .get("/api/verification/status", () => ({ available: Boolean(worker?.ready && config.modelConfigured) }))
     .get("/api/runs", ({ query, request }) => "planId" in query ? store.listForPlan(query.planId, sessionHash(request)) : store.list(query.approvedVersionId, sessionHash(request)), {
       query: t.Union([t.Object({ planId: t.String({ format: "uuid" }) }), t.Object({ approvedVersionId: t.String({ format: "uuid" }) })]),
     })
@@ -61,7 +61,7 @@ export function runRoutes(db: Database, config: Config, worker?: VerificationWor
         await mkdir(directory, { recursive: true, mode: 0o700 });
         const path = join(directory, "source.upload");
         await Bun.write(path, body.video, { mode: 0o600 });
-        const run = store.create(id, body.approvedVersionId, body.contractHash, hash, path, config.MEDIA_RETENTION_HOURS, body.taskSessionId);
+        const run = store.create(id, body.approvedVersionId, body.contractHash, hash, path, body.taskSessionId);
         saved = true;
         set.status = 202;
         worker.kick();

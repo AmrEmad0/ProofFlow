@@ -9,7 +9,7 @@ import { triggerStore } from "../triggers/store";
 export type RunRow = {
   id: string; plan_version_id: string; state: RunSummary["state"]; video_path: string;
   normalized_path: string | null; remote_file_id: string | null; video_sha256: string | null;
-  duration_ms: number | null; created_at: string; completed_at: string | null; expires_at: string | null;
+  duration_ms: number | null; created_at: string; completed_at: string | null;
   error_message: string | null; media_json: string | null; receipt_json: string | null;
   timings_json: string; warnings_json: string; activity_json: string; partial_findings_json: string;
 };
@@ -32,8 +32,8 @@ export function verificationStore(db: Database) {
   function row(id: string, sessionHash?: string): RunRow {
     const result = db.query<RunRow, [string, string | null, string | null]>(`SELECT r.* FROM runs r
       JOIN plan_versions v ON v.id = r.plan_version_id JOIN planner_owners o ON o.plan_id = v.plan_id JOIN plans p ON p.id = v.plan_id
-      WHERE r.id = ? AND p.deleted_at IS NULL AND (? IS NULL OR o.session_hash = ?) AND r.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`).get(id, sessionHash ?? null, sessionHash ?? null);
-    if (!result) throw new PlannerError(404, "This video run could not be found or has expired.");
+      WHERE r.id = ? AND p.deleted_at IS NULL AND (? IS NULL OR o.session_hash = ?)`).get(id, sessionHash ?? null, sessionHash ?? null);
+    if (!result) throw new PlannerError(404, "This video run could not be found.");
     return result;
   }
 
@@ -42,7 +42,7 @@ export function verificationStore(db: Database) {
     return runSummarySchema.parse({ recordingKind: task ? triggerSettingsSchema.parse(JSON.parse(task.settings_json)).recording?.kind ?? null : null, id: run.id, approvedVersionId: run.plan_version_id,
       taskSessionId: task?.id ?? null, taskReference: task?.reference ?? null,
       planVersion: db.query<{ version: number }, [string]>("SELECT version FROM plan_versions WHERE id = ?").get(run.plan_version_id)!.version, state: run.state,
-      createdAt: run.created_at, completedAt: run.completed_at, expiresAt: run.expires_at, error: run.error_message, durationMs: run.duration_ms });
+      createdAt: run.created_at, completedAt: run.completed_at, error: run.error_message, durationMs: run.duration_ms });
   }
 
   function details(id: string, sessionHash: string) {
@@ -63,17 +63,17 @@ export function verificationStore(db: Database) {
 
   function list(versionId: string, sessionHash: string) {
     approved(versionId, sessionHash);
-    return db.query<RunRow, [string]>("SELECT * FROM runs WHERE plan_version_id = ? AND expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now') ORDER BY created_at DESC, rowid DESC").all(versionId).map(summary);
+    return db.query<RunRow, [string]>("SELECT * FROM runs WHERE plan_version_id = ? ORDER BY created_at DESC, rowid DESC").all(versionId).map(summary);
   }
 
   function listForPlan(planId: string, sessionHash: string) {
     plannerStore(db).read(planId, sessionHash);
     return db.query<RunRow, [string]>(`SELECT r.* FROM runs r JOIN plan_versions v ON v.id = r.plan_version_id
-      WHERE v.plan_id = ? AND r.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE v.plan_id = ?
       ORDER BY r.created_at DESC, r.rowid DESC`).all(planId).map(summary);
   }
 
-  function create(id: string, versionId: string, hash: string, sessionHash: string, path: string, retentionHours: number, taskSessionId?: string) {
+  function create(id: string, versionId: string, hash: string, sessionHash: string, path: string, taskSessionId?: string) {
     db.transaction(() => {
       const plan = approved(versionId, sessionHash);
       if (plan.contractHash !== hash) throw new PlannerError(409, "The approved plan does not match the version you reviewed.");
@@ -86,8 +86,8 @@ export function verificationStore(db: Database) {
         JOIN planner_owners o ON o.plan_id = v.plan_id WHERE o.session_hash = ? AND r.created_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 day')`).get(sessionHash)?.count ?? 0;
       if (queued >= 6 || recent >= 20) throw new PlannerError(429, "The video queue or daily workspace limit is full. Please try again later.");
       const now = new Date().toISOString();
-      db.query("INSERT INTO runs (id, plan_version_id, state, video_path, consent_at, expires_at) VALUES (?, ?, 'queued', ?, ?, ?)")
-        .run(id, versionId, path, now, new Date(Date.now() + retentionHours * 3_600_000).toISOString());
+      db.query("INSERT INTO runs (id, plan_version_id, state, video_path, consent_at) VALUES (?, ?, 'queued', ?, ?)")
+        .run(id, versionId, path, now);
       if (taskSessionId) db.query("UPDATE task_sessions SET run_id = ? WHERE id = ?").run(id, taskSessionId);
     })();
     return summary(row(id, sessionHash));

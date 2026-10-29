@@ -30,6 +30,8 @@ export type VerificationAdapters = {
 export type VerificationWorker = ReturnType<typeof createVerificationWorker>;
 class WorkerLeaseError extends Error {}
 
+const TEMPORARY_FILE_MAX_AGE_MS = 24 * 3_600_000;
+
 export function createVerificationWorker(db: Database, config: Config, adapters?: VerificationAdapters) {
   const store = verificationStore(db);
   const owner = crypto.randomUUID();
@@ -90,14 +92,12 @@ export function createVerificationWorker(db: Database, config: Config, adapters?
     }
     const pending = db.query<RunRow, []>("SELECT * FROM runs WHERE state IN ('completed', 'failed') AND remote_file_id IS NOT NULL").all();
     for (const run of pending) await remoteCleanup(run);
-    const expired = db.query<RunRow, []>("SELECT * FROM runs WHERE expires_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now') AND state IN ('completed', 'failed')").all();
-    for (const run of expired) await removeRun(run);
     const referenceRoot = join(config.STORAGE_PATH, "planner-temporary");
     const temporaryReferences = await readdir(referenceRoot, { withFileTypes: true }).catch(() => []);
     for (const entry of temporaryReferences) {
       if (!entry.isDirectory() || !entry.name.startsWith("reference-")) continue;
       const directory = join(referenceRoot, entry.name);
-      if (Date.now() - (await stat(directory)).mtimeMs > config.MEDIA_RETENTION_HOURS * 3_600_000) await rm(directory, { recursive: true, force: true });
+      if (Date.now() - (await stat(directory)).mtimeMs > TEMPORARY_FILE_MAX_AGE_MS) await rm(directory, { recursive: true, force: true });
     }
     const entries = await readdir(join(config.STORAGE_PATH, "runs"), { withFileTypes: true }).catch((error: unknown) => {
       if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return [];
@@ -107,7 +107,7 @@ export function createVerificationWorker(db: Database, config: Config, adapters?
       if (!entry.isDirectory() || !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(entry.name)) continue;
       if (db.query("SELECT 1 FROM runs WHERE id = ?").get(entry.name)) continue;
       const directory = runDirectory(config, entry.name);
-      if (Date.now() - (await stat(directory)).mtimeMs > config.MEDIA_RETENTION_HOURS * 3_600_000) await rm(directory, { recursive: true, force: true });
+      if (Date.now() - (await stat(directory)).mtimeMs > TEMPORARY_FILE_MAX_AGE_MS) await rm(directory, { recursive: true, force: true });
     }
   }
 
@@ -128,15 +128,17 @@ export function createVerificationWorker(db: Database, config: Config, adapters?
       finally { entry.latencyMs = Math.round(performance.now() - started); if (model === "muse") recordUsage = undefined; }
     }
     let phase: RunState = "preprocessing";
+    let stage: VerificationActivity["stage"] = "preparing";
     function activity(message: string, kind: VerificationActivity["kind"] = "progress", stepId?: string) {
       if (!hasLease()) throw new Error("Verification worker lease lost.");
-      store.addActivity(run.id, { message, kind, ...(stepId ? { stepId } : {}) });
+      store.addActivity(run.id, { message, kind, stage, ...(stepId ? { stepId } : {}) });
     }
     const totalStarted = performance.now();
     const directory = runDirectory(config, run.id);
     function state(next: RunState) {
       if (!hasLease()) throw new Error("Verification worker lease lost.");
       phase = next;
+      stage = next === "analyzing" ? "visual" : next === "verifying" ? "confirming" : "preparing";
       const updated = db.query("UPDATE runs SET state = ?, timings_json = ? WHERE id = ? AND state NOT IN ('completed', 'failed')")
         .run(next, JSON.stringify(timings), run.id);
       if (updated.changes !== 1) throw new Error("Verification run is no longer active.");
@@ -219,6 +221,7 @@ export function createVerificationWorker(db: Database, config: Config, adapters?
           track.outcome === "failed" || !track.boxes.length ? "warning" : "progress");
       }
       let observation = observationSchema.parse(await request("muse", "muse", () => models.observe(uploaded.id, plan, normalized.durationMs)));
+      stage = "tracking";
       activity("Visual analysis returned. These proposals still need evidence checks.");
       for (const step of plan.steps) {
         const proposed = observation.candidates.some(candidate => candidate.stepId === step.id);
@@ -226,10 +229,8 @@ export function createVerificationWorker(db: Database, config: Config, adapters?
           : `No visual proposal returned for “${step.label}”. The outcome is still unresolved.`, "progress", step.id);
       }
       await Bun.write(join(directory, "muse-initial.json"), JSON.stringify(observation), { mode: 0o600 });
-      for (let index = 0; index < concepts.length; index += 2) {
-        const batch = await Promise.allSettled([trackConcept(concepts[index]!, index), ...(concepts[index + 1] ? [trackConcept(concepts[index + 1]!, index + 1)] : [])]);
-        if (batch.some(result => result.status === "rejected")) throw new Error("Track artifacts could not be saved.");
-      }
+      const tracking = await Promise.allSettled(concepts.map(trackConcept));
+      if (tracking.some(result => result.status === "rejected")) throw new Error("Track artifacts could not be saved.");
       state("verifying");
       activity("Object tracking finished. Evaluating the evidence for each check.");
       const started = performance.now();
@@ -287,8 +288,6 @@ export function createVerificationWorker(db: Database, config: Config, adapters?
   }
 
   async function drain() {
-    db.query("UPDATE runs SET state = 'failed', error_message = 'This queued recording expired before processing.', completed_at = ? WHERE state = 'queued' AND expires_at <= ?")
-      .run(new Date().toISOString(), new Date().toISOString());
     while (accepting && hasLease()) {
       const queued = db.query<RunRow, []>("SELECT * FROM runs WHERE state = 'queued' ORDER BY created_at, rowid LIMIT 1").get();
       if (!queued) break;

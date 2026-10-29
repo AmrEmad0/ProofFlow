@@ -29,7 +29,6 @@ export function WorkspaceSettings({ open, onOpenChange }: { open: boolean; onOpe
         <div className="flex flex-wrap justify-between gap-2"><dt className="text-muted-foreground">Planning model</dt><dd className="break-all text-right">{planner.data?.model ?? "—"}</dd></div>
         <div className="flex justify-between gap-2"><dt className="text-muted-foreground">Object tracking</dt><dd>SAM 3.1</dd></div>
         <div className="flex justify-between gap-2"><dt className="text-muted-foreground">Video limits</dt><dd>{LIMITS.durationMs / 1000} sec · {LIMITS.uploadBytes / 1024 / 1024} MB</dd></div>
-        <div className="flex justify-between gap-2"><dt className="text-muted-foreground">Evidence retention</dt><dd>{video.data ? `${video.data.retentionHours} hours` : "—"}</dd></div>
       </dl>
       <p className="border-t pt-4 text-xs leading-5 text-muted-foreground">Managed in the server’s environment configuration. API keys stay on the server.</p>
       <Button variant="outline" disabled={refreshing} onClick={() => { void withFeedback(Promise.all([health.refetch({ throwOnError: true }), planner.refetch({ throwOnError: true }), video.refetch({ throwOnError: true })]), { loading: "Refreshing status…", success: "Status refreshed", error: "Couldn’t refresh status" }).catch(() => {}); }} className="h-10 gap-2">{refreshing ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}Refresh status</Button>

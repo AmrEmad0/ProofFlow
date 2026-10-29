@@ -3,6 +3,16 @@ import { workspaceEventSchema } from "../../shared/workspace-events";
 
 let connected = false;
 export const workspaceStreamConnected = () => connected;
+const connectionListeners = new Set<() => void>();
+export function subscribeWorkspaceConnection(listener: () => void) {
+  connectionListeners.add(listener);
+  return () => { connectionListeners.delete(listener); };
+}
+function setConnected(value: boolean) {
+  if (connected === value) return;
+  connected = value;
+  for (const listener of connectionListeners) listener();
+}
 const liveKeys = new Set(["triggers", "runs", "run", "verification-status"]);
 
 export function connectWorkspaceEvents(client: QueryClient) {
@@ -15,7 +25,7 @@ export function connectWorkspaceEvents(client: QueryClient) {
   };
   const disconnect = () => {
     if (!connected) return;
-    connected = false;
+    setConnected(false);
     resync();
   };
   const start = () => {
@@ -34,8 +44,8 @@ export function connectWorkspaceEvents(client: QueryClient) {
       if (watchdog) clearTimeout(watchdog);
       watchdog = setTimeout(disconnect, 45_000);
       if (event.type === "ready" || event.type === "heartbeat") {
-        client.setQueryData(["verification-status"], { available: event.available, retentionHours: event.retentionHours });
-        if (!connected) { connected = true; resync(); }
+        client.setQueryData(["verification-status"], { available: event.available });
+        if (!connected) { setConnected(true); resync(); }
       } else if (event.type === "run.updated") {
         void client.invalidateQueries({ queryKey: ["runs", event.planId], exact: true });
         void client.invalidateQueries({ queryKey: ["run", event.runId], exact: true });
@@ -62,6 +72,6 @@ export function connectWorkspaceEvents(client: QueryClient) {
     source?.close();
     if (watchdog) clearTimeout(watchdog);
     if (reconnect) clearTimeout(reconnect);
-    connected = false;
+    setConnected(false);
   };
 }

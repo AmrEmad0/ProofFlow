@@ -34,7 +34,7 @@ export function eventRoutes(db: Database, config: Config, worker?: VerificationW
           if ((controller.desiredSize ?? 0) <= 0) { close(); return; }
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
         };
-        const readiness = () => ({ available: Boolean(worker?.ready && config.modelConfigured), retentionHours: config.MEDIA_RETENTION_HOURS });
+        const readiness = () => ({ available: Boolean(worker?.ready && config.modelConfigured) });
         unsubscribe = hub.subscribe(owner, send, close);
         request.signal.addEventListener("abort", onAbort, { once: true });
         if (request.signal.aborted) { close(); return; }

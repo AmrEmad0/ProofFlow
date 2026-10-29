@@ -165,7 +165,7 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
       requestController.current = controller;
       try {
         const { data, error: failure } = action.media
-          ? await endpoint.reference.post({ media: action.media, message: action.message, revision: String(target.revision), consent: "true" }, { query: { stream: "true" }, fetch: { signal: controller.signal } })
+          ? await endpoint.reference.post({ media: action.media, message: action.message, revision: String(target.revision) }, { query: { stream: "true" }, fetch: { signal: controller.signal } })
           : await endpoint.messages.post({ message: action.message, revision: target.revision }, { query: { stream: "true" }, fetch: { signal: controller.signal } });
         if (failure) throw apiError(failure.value, "Your message could not be sent. Please try again.");
         if (!data || !(Symbol.asyncIterator in data)) throw new Error("The chat stream could not be opened. Please try again.");
@@ -288,7 +288,7 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
 
   const pageHeading = <div className="min-w-0">
     <h1 ref={heading} tabIndex={-1} className={`font-semibold tracking-tight outline-none ${videoView ? "text-2xl" : "text-2xl sm:text-3xl"}`}>{openingVideos ? "Opening your plan" : videoView ? "Videos & evidence" : manualEditing ? "Build your own plan" : editingApproved ? "Edit your checks" : approved ? "Your plan is ready" : hasPlan ? "Review your checks" : "Create your proof plan"}</h1>
-    <p className={videoView ? "sr-only" : "mt-2 text-base leading-7 text-muted-foreground"}>{openingVideos ? "Loading your videos and saved checks." : videoView ? "Inspect each check alongside its video evidence." : manualEditing ? "Choose visible actions, name the objects, and watch your plan take shape. Save a draft, then review and approve it." : editingApproved ? "Save your changes, then use the updated checks for a video." : approved ? "Ask a question, revise your plan, or check a video." : hasPlan ? "Adjust the checks here, then choose Check a video when you’re ready." : "Describe your process or add a reference. Review and approve the suggested checks before verifying a video."}</p>
+    <p className={videoView || (!hasPlan && !manualEditing && !loading) ? "sr-only" : "mt-2 text-base leading-7 text-muted-foreground"}>{openingVideos ? "Loading your videos and saved checks." : videoView ? "Inspect each check alongside its video evidence." : manualEditing ? "Choose visible actions, name the objects, and watch your plan take shape. Save a draft, then review and approve it." : editingApproved ? "Save your changes, then use the updated checks for a video." : approved ? "Ask a question, revise your plan, or check a video." : hasPlan ? "Adjust the checks here, then choose Check a video when you’re ready." : "Describe your process or add a reference. Review and approve the suggested checks before verifying a video."}</p>
   </div>;
 
   return (
@@ -320,7 +320,7 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
             {!videoView && <div className="mb-6 grid gap-6 lg:grid-cols-[230px_minmax(0,1fr)]"><div className={`min-w-0 flex flex-wrap items-start justify-between gap-4 lg:col-start-2 ${!hasPlan ? "planner-intro" : ""}`}>{pageHeading}{Boolean(previousRuns.data?.length) && <Button variant="outline" onClick={() => { setEditingApproved(false); setView("video"); }}>Videos & evidence ({previousRuns.data!.length})</Button>}</div></div>}
             {undo && saved?.id === undo.planId && saved.revision === undo.revision && <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-primary/5 p-4"><p role="status" className="text-base">{undo.message}</p><Button variant="outline" disabled={pending} onClick={() => act({ type: "restore", versionId: undo.versionId })}><RotateCcw />Undo change</Button></div>}
             {displayedError && (videoView || loading) && <p role="alert" className="mb-4 rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">{displayedError}</p>}
-            <div className={loading ? "" : "grid items-start gap-6 lg:grid-cols-[230px_minmax(0,1fr)]"}>
+            <div className={loading ? "" : `grid items-start gap-6 lg:grid-cols-[230px_minmax(0,1fr)] ${!hasPlan ? "planner-layout-start" : ""}`}>
             {!loading && <PlanTriggers key={saved?.id ?? "new"} setup={!videoView} saved={saved} disabled={pending} onEnsurePlan={ensureTriggerPlan} onAttach={task => { setTask(task); setEditingApproved(false); setView("video"); }} />}
             <div className="min-w-0">
             {!loading && saved && (approved || videoView || Boolean(previousRuns.data?.length)) && <div hidden={!videoView}><VerificationWorkspace key={saved.id} saved={saved} heading={videoView ? pageHeading : null} visible={Boolean(videoView)} startNewUpload={view === "upload"} task={task} onClearTask={() => setTask(null)} onReviewPlan={() => setView("plan")} /></div>}
