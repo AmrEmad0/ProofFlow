@@ -2,6 +2,10 @@ import type { Database } from "bun:sqlite";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { Elysia, t } from "elysia";
+import { evidenceChatRequestSchema } from "../../shared/evidence-chat";
+import { createMetaClient } from "../meta/client";
+import { evidenceChatEvents } from "../verification/chat-stream";
+import { explainEvidence } from "../verification/chat";
 import { conceptTrackSchema } from "../../shared/verification";
 import { LIMITS } from "../../shared/proof-plan";
 import type { Config } from "../config";
@@ -34,6 +38,8 @@ export function videoResponse(file: ReturnType<typeof Bun.file>, range: string |
 export function runRoutes(db: Database, config: Config, worker?: VerificationWorker) {
   const store = verificationStore(db);
   const receiving = new Set<string>();
+  const chatting = new Set<string>();
+  const recentChats = new Map<string, number>();
   const thumbnails = new Map<string, Promise<void>>();
   const videoExports = new Map<string, Promise<void>>();
   return new Elysia()
@@ -87,6 +93,37 @@ export function runRoutes(db: Database, config: Config, worker?: VerificationWor
       }
       return details;
     }, { params: idParams })
+    .post("/api/runs/:id/messages", async ({ params, request, body, query, set }) => {
+      const hash = sessionHash(request);
+      const details = store.details(params.id, hash);
+      if (!config.modelConfigured) throw new PlannerError(503, "The evidence assistant is unavailable right now.");
+      if (chatting.has(hash) || chatting.size >= 2 || Date.now() - (recentChats.get(hash) ?? 0) < 5000) throw new PlannerError(429, "Please wait before asking another evidence question.");
+      for (const [key, time] of recentChats) if (Date.now() - time >= 5000) recentChats.delete(key);
+      chatting.add(hash);
+      recentChats.set(hash, Date.now());
+      const complete = async (onReplyText?: (text: string) => void, signal = request.signal) => {
+        const started = performance.now();
+        let outcome = "failed";
+        try {
+          const result = await explainEvidence(createMetaClient(config), details, body.messages, signal, onReplyText);
+          signal.throwIfAborted();
+          store.row(params.id, hash);
+          outcome = "completed";
+          return result;
+        } catch (error) {
+          if (error instanceof PlannerError) throw error;
+          throw new PlannerError(502, "The evidence explanation could not be completed. Please try again.");
+        } finally {
+          chatting.delete(hash);
+          console.info("Evidence chat request", { runId: params.id, outcome, elapsedMs: Math.round(performance.now() - started) });
+        }
+      };
+      if (query.stream === "true") {
+        set.headers["x-accel-buffering"] = "no";
+        return evidenceChatEvents(complete, request.signal);
+      }
+      return complete();
+    }, { params: idParams, query: t.Object({ stream: t.Optional(t.Literal("true")) }), body: evidenceChatRequestSchema })
     .get("/api/runs/:id/diagnostics", async ({ params, request }) => {
       const details = store.details(params.id, sessionHash(request));
       const artifacts = db.query<{ artifact_path: string }, [string]>("SELECT artifact_path FROM track_artifacts WHERE run_id = ? ORDER BY concept").all(params.id);

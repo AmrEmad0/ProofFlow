@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { ArrowDownToLine, LoaderCircle, ScanLine } from "lucide-react";
+import { ArrowDownToLine, ListChecks, LoaderCircle, MessageCircle, ScanLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { apiError } from "@/lib/queries";
 import { withFeedback } from "@/lib/feedback";
 import { ANALYSIS_FPS, TRACK_COLORS as colors, type RunDetails } from "../../../shared/verification";
 import { isActiveRun } from "../../../shared/receipt";
+import { EvidenceChat } from "./evidence-chat";
 import { FrameInspector } from "./frame-inspector";
 import { ModelDiagnostics } from "./model-diagnostics";
 import { formatTime, VerificationChecks } from "./verification-checks";
@@ -24,6 +25,9 @@ async function downloadVideo(id: string, variant: "tracked" | "analysis") {
 }
 
 export function EvidencePlayer({ run, autoPlay = true }: { run: RunDetails; autoPlay?: boolean }) {
+  const panelId = useId();
+  const [panel, setPanel] = useState<"checks" | "chat">("checks");
+  const chatAvailable = !isActiveRun(run.state);
   const video = useRef<HTMLVideoElement>(null);
   const playerHeading = useRef<HTMLHeadingElement>(null);
   const pendingPosition = useRef<{ seconds: number; play: boolean } | null>(null);
@@ -108,9 +112,28 @@ export function EvidencePlayer({ run, autoPlay = true }: { run: RunDetails; auto
 
   return <section className="@container overflow-hidden rounded-xl border bg-card" aria-label="Video evidence and findings">
     <div className="grid min-w-0 @3xl:grid-cols-[minmax(0,1fr)_20rem] @5xl:grid-cols-[minmax(0,1fr)_22rem]">
-      <div className="order-last min-w-0 border-t @3xl:border-t-0 @3xl:border-l">
-        <VerificationChecks run={run} selectedId={selected} currentIds={currentSteps.map((step) => step.id)} playing={playing} onInspect={seek} />
-      </div>
+      <aside className={`order-last min-w-0 border-t @3xl:border-t-0 @3xl:border-l ${chatAvailable ? "relative h-[min(38rem,80dvh)] min-h-96 @3xl:h-auto" : ""}`} aria-label="Results and video assistant">
+        <div className={chatAvailable ? "flex h-full min-h-0 flex-col @3xl:absolute @3xl:inset-0" : ""}>
+        {chatAvailable && <div role="tablist" aria-label="Video review" className="flex shrink-0 gap-1 border-b px-3 pt-2">
+          {(["checks", "chat"] as const).map(value => <button key={value} id={`${panelId}-${value}-tab`} type="button" role="tab" aria-selected={panel === value} aria-controls={`${panelId}-${value}`} tabIndex={panel === value ? 0 : -1} onClick={() => setPanel(value)} onKeyDown={event => {
+            if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+              event.preventDefault();
+              const next = event.key === "Home" ? "checks" : event.key === "End" ? "chat" : value === "checks" ? "chat" : "checks";
+              setPanel(next);
+              document.getElementById(`${panelId}-${next}-tab`)?.focus();
+            }
+          }} className={`-mb-px flex min-h-11 items-center gap-2 border-b-2 px-3 text-[13px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${panel === value ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+            {value === "checks" ? <><ListChecks className="size-3.5" />Checks<span className="rounded bg-muted px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground">{run.approvedPlan.steps.length}</span></> : <><MessageCircle className="size-3.5" />Ask about video</>}
+          </button>)}
+        </div>}
+        <div id={`${panelId}-checks`} role={chatAvailable ? "tabpanel" : undefined} aria-labelledby={chatAvailable ? `${panelId}-checks-tab` : undefined} tabIndex={chatAvailable ? 0 : undefined} className={chatAvailable ? `${panel === "checks" ? "block" : "hidden"} min-h-0 flex-1 overflow-y-auto overscroll-contain outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary` : ""}>
+          <VerificationChecks run={run} compactHeader={chatAvailable} selectedId={selected} currentIds={currentSteps.map((step) => step.id)} playing={playing} onInspect={seek} onAsk={chatAvailable ? id => { setSelected(id); setPanel("chat"); } : undefined} />
+        </div>
+        {chatAvailable && <div id={`${panelId}-chat`} role="tabpanel" aria-labelledby={`${panelId}-chat-tab`} className={`${panel === "chat" ? "flex" : "hidden"} min-h-0 flex-1 flex-col`}>
+          <EvidenceChat key={run.id} run={run} selectedId={selected} visible={panel === "chat"} onInspect={seek} />
+        </div>}
+        </div>
+      </aside>
       <div className="min-w-0 self-start @3xl:sticky @3xl:top-0">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-5"><h3 ref={playerHeading} tabIndex={-1} className="flex items-center gap-2 text-[15px] font-semibold tracking-tight outline-none">Video evidence</h3>{run.media && run.state === "completed" && <div className="flex flex-wrap gap-1">
           <Button variant="ghost" className="h-8 gap-2 px-2 text-[12px] text-muted-foreground" onClick={() => download.mutate("analysis")} disabled={download.isPending} aria-busy={download.isPending && download.variables === "analysis"} title="Download the analysis MP4 matching the exported evidence hash">{download.isPending && download.variables === "analysis" ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : <ArrowDownToLine className="size-4" aria-hidden="true" />}Download analysis</Button>

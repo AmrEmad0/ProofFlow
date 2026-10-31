@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Package, PencilLine, Workflow, Coffee, PanelTop, Paperclip, X, ImageIcon, Film, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { ChatMarkdown } from "./chat-markdown";
 import { LIMITS } from "../../../shared/proof-plan";
@@ -20,12 +21,15 @@ type Props = {
   input: string;
   onInputChange: (value: string) => void;
   onSend: (message: string, media?: File) => Promise<void>;
+  onApprove: () => Promise<void>;
   onStarter: () => void;
   onManual: () => void;
   onReload: () => void;
 };
 
-export function PlannerChat({ saved, starter, pending, sending, referenceSending, pendingMessage, partialReply, planPreview, configured, error, input, onInputChange: setInput, onSend, onStarter, onManual, onReload }: Props) {
+export function PlannerChat({ saved, starter, pending, sending, referenceSending, pendingMessage, partialReply, planPreview, configured, error, input, onInputChange: setInput, onSend, onApprove, onStarter, onManual, onReload }: Props) {
+  const [approvalOpen, setApprovalOpen] = useState(false);
+  const [videoConsent, setVideoConsent] = useState(false);
   const [media, setMedia] = useState<File | null>(null);
   const [localUrl, setLocalUrl] = useState<string | null>(null);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
@@ -114,6 +118,21 @@ export function PlannerChat({ saved, starter, pending, sending, referenceSending
       {showLatest && <div className="flex justify-center border-t py-2"><Button variant="outline" className="h-9 rounded-full text-xs" onClick={scrollToLatest}><ArrowDown className="size-3.5" />Latest message</Button></div>}
       <p className="sr-only" role="status">{sending ? "Assistant is responding." : error ? "Message failed. Your draft is preserved." : messages.length ? "Assistant response complete." : ""}</p>
       <div className="chat-composer-area p-4 sm:p-5">
+        {saved?.plan && saved.status !== "approved" && <div className="mb-3 rounded-xl border bg-primary/5 p-3">
+          <p className="mb-2 text-xs leading-5 text-muted-foreground">Happy with these checks? You can accept the current plan without answering optional questions.</p>
+          <Dialog open={approvalOpen} onOpenChange={setApprovalOpen}>
+            <DialogTrigger render={<Button variant="outline" disabled={pending || Boolean(saved.plan.unresolvedGoals?.length)} />}>Use this plan</DialogTrigger>
+            <DialogContent className="p-6 sm:max-w-md">
+              <DialogTitle className="text-lg font-semibold">Use this plan?</DialogTitle>
+              <DialogDescription className="text-sm leading-6">Approve version {saved.version} of “{saved.plan.title}” with {saved.plan.steps.length} checks. Your video will be verified against this saved version.</DialogDescription>
+              {!saved.videoConsentAt && <label className="flex items-start gap-2 text-sm leading-6"><input type="checkbox" checked={videoConsent} onChange={event => setVideoConsent(event.target.checked)} className="mt-1 size-4 accent-primary" />I have permission to share videos with Meta. Meta may use videos to improve its models.</label>}
+              <Button disabled={pending || (!saved.videoConsentAt && !videoConsent)} onClick={async () => { try { await onApprove(); setApprovalOpen(false); } catch { /* The workspace displays approval errors. */ } }}>Approve plan & continue</Button>
+              {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+            </DialogContent>
+          </Dialog>
+          {Boolean(saved.plan.unresolvedGoals?.length) && <p className="mt-2 text-xs leading-5 text-muted-foreground">Resolve or explicitly exclude the unresolved goals in the plan before approval.</p>}
+        </div>}
+
         {error && <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/5 p-3" role="alert"><p className="text-sm leading-5 text-destructive">{error}</p>{saved && <button onClick={onReload} disabled={pending} className="mt-2 text-xs font-medium underline underline-offset-4">Reload saved draft</button>}</div>}
         {!configured && <p className="mb-4 text-sm leading-6 text-muted-foreground">The assistant is unavailable right now. {hasPlan ? "You can still change your checks directly." : "You can build your plan manually or use an example."}</p>}
         {hasPlan && messages.length === 0 && !input.trim() && <div className="mb-3 flex flex-wrap gap-2" role="group" aria-label="Suggestions for your assistant">{[
