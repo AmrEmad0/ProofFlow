@@ -64,7 +64,8 @@ export const observationSchema = legacyObservationSchema.extend({
     actionInterval: actionIntervalSchema.nullable().optional(),
     before: momentSchema.nullable().optional(), action: momentSchema.nullable().optional(), after: momentSchema.nullable().optional(),
     subject: objectSchema.optional(), target: objectSchema.nullable().optional(),
-    objectAssessments: z.array(objectAssessmentSchema).max(48).optional(),
+    objectAssessments: z.array(objectAssessmentSchema).max(96).optional(),
+    identityAmbiguities: z.array(z.string().max(600)).max(10).optional(),
     contradictions: z.array(z.string()).optional(), grounding: z.array(groundingSchema).optional(),
   })).max(LIMITS.steps),
 });

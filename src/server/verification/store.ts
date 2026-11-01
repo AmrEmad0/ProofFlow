@@ -76,6 +76,7 @@ export function verificationStore(db: Database) {
   function create(id: string, versionId: string, hash: string, sessionHash: string, path: string, taskSessionId?: string) {
     db.transaction(() => {
       const plan = approved(versionId, sessionHash);
+      if (plan.steps.some(step => step.subjectSelection || step.targetSelection)) throw new PlannerError(409, "This archived plan uses retired object-selection rules. Review and approve the restored draft before checking another video.");
       if (plan.contractHash !== hash) throw new PlannerError(409, "The approved plan does not match the version you reviewed.");
       if (taskSessionId) triggerStore(db).attachment(taskSessionId, sessionHash, versionId);
       const active = db.query<{ count: number }, [string]>(`SELECT count(*) AS count FROM runs r JOIN plan_versions v ON v.id = r.plan_version_id

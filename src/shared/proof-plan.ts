@@ -34,11 +34,19 @@ export const relationshipSchema = z.strictObject({
   from: z.string().min(1), to: z.string().min(1),
 });
 
+// Read archived plans without rewriting their approved contracts. New model
+// plans omit these retired fields and new runs reject contracts using them.
+const archivedObjectSelectionSchema = z.strictObject({
+  id: z.string().trim().min(1).max(80), scope: z.enum(["specific", "any"]), description: z.string().trim().min(1).max(240),
+});
+
 export const proofStepSchema = z.strictObject({
   id: z.string().trim().min(1).max(80),
   label: z.string().trim().min(1).max(240),
   checkType: checkTypeSchema,
   visualCheck: visualCheckSchema.nullable().optional(),
+  subjectSelection: archivedObjectSelectionSchema.optional(),
+  targetSelection: archivedObjectSelectionSchema.nullable().optional(),
   subjectConcept: z.string().trim().min(1).max(120),
   targetConcept: z.string().trim().min(1).max(120).nullable(),
   beforeState: z.string().trim().min(1).max(240).nullable(),
@@ -137,7 +145,7 @@ export function trackedConcepts(plan: { steps: ProofStep[] }): string[] {
 
 export const planningPlanShape = proofPlanShape.extend({
   schemaVersion: z.literal(2),
-  steps: z.array(proofStepSchema.safeExtend({ visualCheck: visualCheckSchema.nullable(), goalSource: z.string().min(1).max(1000), requirements: z.array(evidenceRequirementSchema).min(1).max(3) })).min(1).max(LIMITS.steps),
+  steps: z.array(z.strictObject(proofStepSchema.shape).omit({ subjectSelection: true, targetSelection: true }).extend({ visualCheck: visualCheckSchema.nullable(), goalSource: z.string().min(1).max(1000), requirements: z.array(evidenceRequirementSchema).min(1).max(3) })).min(1).max(LIMITS.steps),
   relationships: z.array(relationshipSchema).max(20),
   unresolvedGoals: proofPlanShape.shape.unresolvedGoals.unwrap(),
 });

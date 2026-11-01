@@ -41,6 +41,8 @@ export const receiptSchema = z.strictObject({
   runId: z.uuid(),
   approvedVersionId: z.uuid(),
   contractHash: z.string().regex(/^[a-f0-9]{64}$/),
+  selectionRevision: z.number().int().nonnegative().optional(),
+  objectSelections: z.array(z.unknown()).max(10).optional(),
   findings: z.array(findingSchema).min(1).max(LIMITS.steps),
   provenance: z.strictObject({
     museModel: z.literal("muse-spark-1.3"),

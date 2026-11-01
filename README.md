@@ -36,3 +36,5 @@ Muse proposes events; SAM supplies geometry; conservative application rules clas
 The configured Muse model is `muse-spark-1.3`: submitted content may be used to train future Meta models. See [Meta model modes](https://dev.meta.ai/docs/models). API keys remain server-side. Exported receipts contain model/rule provenance and the analysis video hash; inspect their video evidence while the private run is retained.
 
 Built with Meta Model API (Muse Spark and SAM 3.1), React, TanStack, Elysia, Bun SQLite, and shadcn/ui. Native media processing uses FFmpeg and FFprobe.
+
+Homepage demo media: [cottonbro studio on Pexels](https://www.pexels.com/video/a-person-pouring-coffee-into-a-glass-4796418/), used under the [Pexels License](https://www.pexels.com/license/). The clip is cropped, resized, shortened to 24 seconds, and has no audio. Reference and evidence images are extracted frames. Homepage conversation, boxes, and findings are authored illustrations grounded in this clip, not live model outputs or a performance benchmark.
