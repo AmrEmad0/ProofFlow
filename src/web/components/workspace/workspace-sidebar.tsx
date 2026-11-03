@@ -1,78 +1,95 @@
-import { Link } from "@tanstack/react-router";
-import { useId, useState } from "react";
-import { BookOpen, FileText, LockKeyhole, Package, Plus, ScanLine, Search, Moon, Sun, Settings2, SlidersHorizontal, Trash2 } from "lucide-react";
-import {
-  Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
-  SidebarGroupLabel, SidebarHeader, SidebarInput, SidebarMenu, SidebarMenuButton,
-  SidebarMenuAction, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem, SidebarTrigger, useSidebar,
-} from "@/components/ui/sidebar";
+import { Menu } from "@base-ui/react/menu";
+import { Link, useRouterState } from "@tanstack/react-router";
+import { useEffect, useId, useRef, useState } from "react";
+import { BookOpen, ChartColumnIncreasing, ChevronDown, ClipboardCheck, FileCheck2, FilePenLine, FolderOpen, HelpCircle, Info, Moon, Package, Plus, ScanLine, Search, Settings2, Sun, X } from "lucide-react";
+import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarHeader, SidebarInput, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { SidebarPlanActions, sidebarMenuItemClass, sidebarMenuPopupClass } from "./sidebar-plan-actions";
 import type { SavedPlan } from "../../../shared/planner";
 
 type Props = {
   plans: { id: string; title: string; status: SavedPlan["status"] }[];
-  activeId: string | null;
-  pending: boolean;
-  loading: boolean;
-  error: string | null;
-  canInspect: boolean;
-  onSelect: (id: string) => void;
-  onNew: () => void;
-  onExample: () => void;
-  onProperties: () => void;
-  onDelete: (plan: { id: string; title: string }) => void;
-  onSettings: () => void;
-  onRetry: () => void;
+  activeId: string | null; pending: boolean; loading: boolean; error: string | null; canInspect: boolean;
+  onSelect: (id: string) => void; onNew: () => void; onExample: () => void; onProperties: () => void;
+  onDelete: (plan: { id: string; title: string }) => void; onSettings: () => void; onRetry: () => void;
 };
+type PlanFilter = "all" | "approved" | "draft";
 
 export function WorkspaceSidebar({ plans, activeId, pending, loading, error, canInspect, onSelect, onNew, onExample, onProperties, onDelete, onSettings, onRetry }: Props) {
-  const { setOpenMobile, state, isMobile } = useSidebar();
+  const reporting = useRouterState({ select: state => state.location.pathname === "/reports" });
+  const reviewing = useRouterState({ select: state => state.location.pathname === "/review" });
+  const { setOpenMobile, setOpen, state, isMobile } = useSidebar();
   const searchId = useId();
+  const searchInput = useRef<HTMLInputElement>(null);
+  const planList = useRef<HTMLDivElement>(null);
+  const [focusSearch, setFocusSearch] = useState(false);
   const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<PlanFilter>("all");
   const [darkMode, setDarkMode] = useState(() => document.documentElement.classList.contains("dark"));
+  const collapsed = state === "collapsed" && !isMobile;
   const themeAction = darkMode ? "Switch to light mode" : "Switch to dark mode";
+  useEffect(() => {
+    if (focusSearch && !collapsed) { searchInput.current?.focus(); setFocusSearch(false); }
+  }, [focusSearch, collapsed]);
   function toggleTheme() {
     const next = !darkMode;
     document.documentElement.classList.toggle("dark", next);
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", next ? "#171717" : "#f9fafb");
-    try { localStorage.setItem("proofflow.theme", next ? "dark" : "light"); } catch { /* Keep the selected theme for this page when storage is unavailable. */ }
+    try { localStorage.setItem("proofflow.theme", next ? "dark" : "light"); } catch { /* Keep the selected theme when storage is unavailable. */ }
     setDarkMode(next);
   }
-  const collapsed = state === "collapsed" && !isMobile;
-  const query = collapsed ? "" : search.trim().toLocaleLowerCase();
-  const matches = plans.filter((plan) => plan.title.toLocaleLowerCase().includes(query));
+  const query = search.trim().toLocaleLowerCase();
+  const matches = plans.filter(plan => plan.title.toLocaleLowerCase().includes(query) && (filter === "all" || plan.status === filter));
+  const visiblePlans = collapsed ? plans.filter(plan => plan.id === activeId) : matches;
+  useEffect(() => {
+    if (collapsed) return;
+    const container = planList.current;
+    const selected = container?.querySelector<HTMLElement>('[aria-current="page"]')?.closest("li");
+    if (!container || !selected) return;
+    const viewport = container.getBoundingClientRect();
+    const bounds = selected.getBoundingClientRect();
+    if (bounds.top < viewport.top) container.scrollTop += bounds.top - viewport.top;
+    else if (bounds.bottom > viewport.bottom) container.scrollTop += bounds.bottom - viewport.bottom;
+  }, [activeId, query, filter, collapsed, plans]);
+  const approvedCount = plans.filter(plan => plan.status === "approved").length;
   function closeAfter(action: () => void) { setOpenMobile(false); action(); }
+  function resetLibrary() { setSearch(""); setFilter("all"); }
 
-  const menuButtonClass = "group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:size-11! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0! [&>svg]:size-5! group-has-data-[sidebar=menu-action]/menu-item:pr-12";
+  const menuClass = "h-11! gap-2.5 rounded-lg px-3 text-[13px] [&>svg]:size-[18px]! group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:size-11! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0!";
+  const activeClass = "data-active:bg-primary/10 data-active:text-foreground data-active:font-semibold";
 
-  return <Sidebar collapsible="icon">
-    <SidebarHeader className="gap-4 px-3 pt-5 pb-4 group-data-[collapsible=icon]:px-0">
-      <div className="flex items-center gap-2.5 overflow-hidden px-1 text-lg font-semibold tracking-tight group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"><span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground group-data-[collapsible=icon]:size-10"><ScanLine className="size-5" aria-hidden="true" /></span><span className="group-data-[collapsible=icon]:hidden">ProofFlow</span><SidebarTrigger aria-label="Close plans sidebar" className="ml-auto md:hidden" /></div>
-      <SidebarMenu><SidebarMenuItem><SidebarMenuButton onClick={() => closeAfter(() => { setSearch(""); onNew(); })} disabled={pending} aria-label="New plan" tooltip="New plan" className={`${menuButtonClass} h-10 bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground`}><Plus /><span className="group-data-[collapsible=icon]:hidden">New plan</span></SidebarMenuButton></SidebarMenuItem></SidebarMenu>
+  return <Sidebar collapsible="icon" aria-label="Workspace navigation">
+    <SidebarHeader className="gap-4 px-3 pt-4 pb-3 group-data-[collapsible=icon]:px-0">
+      <div className="flex items-center gap-2.5 px-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground"><ScanLine className="size-5" aria-hidden="true" /></span><span className="text-lg font-semibold tracking-tight group-data-[collapsible=icon]:hidden">ProofFlow</span><SidebarTrigger aria-label="Collapse navigation" title="Collapse navigation" className="ml-auto hidden group-data-[collapsible=icon]:hidden md:flex" /><Button variant="ghost" size="icon" aria-label="Close navigation" className="ml-auto md:hidden" onClick={() => setOpenMobile(false)}><X /></Button></div>
+      <SidebarMenu><SidebarMenuItem><SidebarMenuButton onClick={() => closeAfter(() => { resetLibrary(); onNew(); })} disabled={pending} aria-label="New plan" tooltip="New plan" className={`${menuClass} bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground`}><Plus aria-hidden="true" /><span className="group-data-[collapsible=icon]:hidden">New plan</span></SidebarMenuButton></SidebarMenuItem></SidebarMenu>
     </SidebarHeader>
-    <SidebarContent className="group-data-[collapsible=icon]:overflow-y-auto">
-      <SidebarGroup className="group-data-[collapsible=icon]:px-0">
-        <SidebarGroupLabel className="justify-between"><span>Plans</span><span>{plans.length}</span></SidebarGroupLabel>
-        {plans.length > 0 && <div className="relative mt-1 mb-3 group-data-[collapsible=icon]:hidden"><Search className="pointer-events-none absolute top-3.5 left-3 size-3.5 text-muted-foreground" aria-hidden="true" /><label htmlFor={searchId} className="sr-only">Search plans</label><SidebarInput id={searchId} type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find a plan…" className="h-9 pl-9" /></div>}
-        <SidebarGroupContent>
-          {loading && <p className="px-2 py-3 text-xs text-muted-foreground group-data-[collapsible=icon]:sr-only" role="status">Loading plans…</p>}
-          {error ? <div role="alert" className="px-2 py-3 text-xs leading-5 text-destructive group-data-[collapsible=icon]:sr-only">{error}<button onClick={onRetry} className="mt-2 block underline">Retry</button></div> : !loading && matches.length === 0 ? <p className="px-2 py-3 text-xs text-muted-foreground group-data-[collapsible=icon]:sr-only">{query ? "No matching plans." : "No saved plans yet."}</p> : <nav aria-label="Saved plans"><SidebarMenu className="gap-1 group-data-[collapsible=icon]:gap-2">{matches.map((plan) => <SidebarMenuItem key={plan.id}>
-            <SidebarMenuButton onClick={() => closeAfter(() => onSelect(plan.id))} disabled={pending} isActive={activeId === plan.id} aria-current={activeId === plan.id ? "page" : undefined} size="lg" title={plan.title} tooltip={plan.title} aria-label={collapsed ? plan.title : undefined} className={`${menuButtonClass} h-16 data-active:bg-primary/8 data-active:text-foreground`}>
-              {plan.status === "approved" ? <LockKeyhole aria-hidden="true" /> : <FileText className="text-muted-foreground" aria-hidden="true" />}
-              <span className="min-w-0 group-data-[collapsible=icon]:hidden"><span className="block truncate text-sm font-medium">{plan.title}</span><span className={`mt-0.5 block text-xs ${plan.status === "approved" ? "text-emerald-700" : "text-muted-foreground"}`}>{plan.status === "approved" ? "Approved" : "Draft"}</span></span>
-            </SidebarMenuButton>
-            <SidebarMenuAction showOnHover onClick={() => closeAfter(() => onDelete(plan))} disabled={pending} aria-label={`Delete ${plan.title}`} title="Delete plan" className="top-2.5! right-0.5 size-11 text-muted-foreground hover:bg-destructive/10 hover:text-destructive [@media(hover:none)]:opacity-100!"><Trash2 aria-hidden="true" /></SidebarMenuAction>
-            {activeId === plan.id && <SidebarMenuSub><SidebarMenuSubItem><SidebarMenuSubButton render={<button type="button" disabled={!canInspect || pending} />} onClick={() => closeAfter(onProperties)}><SlidersHorizontal aria-hidden="true" /><span>About this plan</span></SidebarMenuSubButton></SidebarMenuSubItem></SidebarMenuSub>}
-          </SidebarMenuItem>)}</SidebarMenu></nav>}
-        </SidebarGroupContent>
+    <SidebarGroup className="shrink-0 px-3 pt-0 pb-3 group-data-[collapsible=icon]:px-0"><SidebarGroupLabel className="px-3 text-[10px] font-semibold tracking-widest uppercase">Workspace</SidebarGroupLabel><nav aria-label="Workspace"><SidebarMenu className="gap-1">
+      <SidebarMenuItem><SidebarMenuButton render={<Link to="/review" />} isActive={reviewing} aria-current={reviewing ? "page" : undefined} onClick={() => setOpenMobile(false)} aria-label="Manual review" tooltip="Manual review" className={`${menuClass} ${activeClass}`}><ClipboardCheck className={reviewing ? "text-primary" : "text-muted-foreground"} aria-hidden="true" /><span className="group-data-[collapsible=icon]:hidden">Manual review</span></SidebarMenuButton></SidebarMenuItem>
+      <SidebarMenuItem><SidebarMenuButton render={<Link to="/reports" search={{}} />} isActive={reporting} aria-current={reporting ? "page" : undefined} onClick={() => setOpenMobile(false)} aria-label="Reports" tooltip="Reports" className={`${menuClass} ${activeClass}`}><ChartColumnIncreasing className={reporting ? "text-primary" : "text-muted-foreground"} aria-hidden="true" /><span className="group-data-[collapsible=icon]:hidden">Reports</span></SidebarMenuButton></SidebarMenuItem>
+    </SidebarMenu></nav></SidebarGroup>
+    <SidebarContent className="gap-0 overflow-hidden border-t group-data-[collapsible=icon]:overflow-hidden">
+      <SidebarGroup className="shrink-0 gap-2 px-3 pt-3 pb-2 group-data-[collapsible=icon]:px-0"><SidebarGroupLabel className="h-6 justify-between px-3"><span className="text-[10px] font-semibold tracking-widest uppercase">Plan library</span><span className="text-[11px] tabular-nums">{plans.length}</span></SidebarGroupLabel>
+        {collapsed ? <SidebarMenu><SidebarMenuItem><SidebarMenuButton aria-label="Find a plan" tooltip="Find a plan" onClick={() => { setOpen(true); setFocusSearch(true); }} className={menuClass}><FolderOpen aria-hidden="true" /></SidebarMenuButton></SidebarMenuItem></SidebarMenu> : <>
+          <div className="relative"><Search className="pointer-events-none absolute top-3.5 left-3 size-3.5 text-muted-foreground" aria-hidden="true" /><label htmlFor={searchId} className="sr-only">Search plans</label><SidebarInput ref={searchInput} id={searchId} type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Find a plan…" className="h-11 rounded-lg pr-10 pl-9 text-xs [&::-webkit-search-cancel-button]:hidden" />{search && <button type="button" aria-label="Clear plan search" className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary" onClick={() => { setSearch(""); searchInput.current?.focus(); }}><X className="size-3.5" /></button>}</div>
+          <div className="flex gap-1" aria-label="Plan status filters">{([{ value: "all", label: "All", count: plans.length }, { value: "approved", label: "Approved", count: approvedCount }, { value: "draft", label: "Drafts", count: plans.length - approvedCount }] as const).map(tab => <button key={tab.value} type="button" aria-label={`${tab.value === "draft" ? "Draft" : tab.label} plans (${tab.count})`} aria-pressed={filter === tab.value} onClick={() => setFilter(tab.value)} className={`flex min-h-9 flex-1 items-center justify-center gap-1 rounded-md px-1 text-[10px] font-medium focus-visible:outline-2 focus-visible:outline-primary ${filter === tab.value ? "bg-sidebar-accent text-foreground" : "text-muted-foreground hover:bg-muted"}`}>{tab.label}<span className="text-[9px] tabular-nums">{tab.count}</span></button>)}</div>
+        </>}
       </SidebarGroup>
+      <div ref={planList} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-3 group-data-[collapsible=icon]:px-0">
+        {loading && <p className="px-3 py-3 text-xs text-muted-foreground group-data-[collapsible=icon]:sr-only" role="status">Loading plans…</p>}
+        {error ? <div role="alert" className="px-3 py-3 text-xs leading-5 text-destructive group-data-[collapsible=icon]:sr-only">{error}<button onClick={onRetry} className="mt-2 block min-h-9 underline">Retry</button></div> : !loading && !collapsed && matches.length === 0 ? <div className="px-3 py-5 text-xs leading-5 text-muted-foreground"><p>{query || filter !== "all" ? "No plans match these filters." : "Your plans will appear here."}</p>{(query || filter !== "all") && <button onClick={resetLibrary} className="mt-2 min-h-9 font-medium text-foreground underline">Clear filters</button>}</div> : <nav aria-label="Saved plans"><SidebarMenu className="gap-0.5">{visiblePlans.map(plan => <SidebarMenuItem key={plan.id}>
+          <SidebarMenuButton onClick={() => closeAfter(() => onSelect(plan.id))} disabled={pending} isActive={activeId === plan.id} aria-current={activeId === plan.id ? "page" : undefined} aria-label={`${plan.title} ${plan.status === "approved" ? "Approved" : "Draft"}`} title={`${plan.title} · ${plan.status === "approved" ? "Approved" : "Draft"}`} tooltip={`${plan.title} · ${plan.status === "approved" ? "Approved" : "Draft"}`} className={`${menuClass} ${activeClass} pr-14! group-data-[collapsible=icon]:pr-0!`}>
+            {plan.status === "approved" ? <FileCheck2 className="text-muted-foreground" aria-hidden="true" /> : <FilePenLine className="text-muted-foreground" aria-hidden="true" />}<span className="min-w-0 flex-1 truncate text-xs font-medium group-data-[collapsible=icon]:hidden">{plan.title}</span><span title={plan.status === "approved" ? "Approved" : "Draft"} aria-hidden="true" className={`size-1.5 shrink-0 rounded-full group-data-[collapsible=icon]:hidden ${plan.status === "approved" ? "bg-emerald-700 dark:bg-emerald-400" : "bg-amber-600 dark:bg-amber-400"}`} />
+          </SidebarMenuButton>
+          <SidebarPlanActions plan={plan} active={activeId === plan.id} disabled={pending} canInspect={canInspect} mobile={isMobile} onOpen={() => closeAfter(() => onSelect(plan.id))} onProperties={() => closeAfter(onProperties)} onDelete={() => closeAfter(() => onDelete(plan))} onNavigate={() => setOpenMobile(false)} />
+          {activeId === plan.id && !collapsed && <SidebarMenuSub className="mr-1 ml-5 border-primary/20"><SidebarMenuSubItem><SidebarMenuSubButton render={<button type="button" disabled={!canInspect || pending} />} onClick={() => closeAfter(onProperties)} className="min-h-10 text-[11px]"><Info aria-hidden="true" /><span>About this plan</span></SidebarMenuSubButton></SidebarMenuSubItem><SidebarMenuSubItem><SidebarMenuSubButton render={<Link to="/reports" search={{ planId: plan.id }} />} onClick={() => setOpenMobile(false)} className="min-h-10 text-[11px]"><ChartColumnIncreasing aria-hidden="true" /><span>Plan report</span></SidebarMenuSubButton></SidebarMenuSubItem></SidebarMenuSub>}
+
+        </SidebarMenuItem>)}</SidebarMenu></nav>}
+      </div>
     </SidebarContent>
-    <SidebarFooter className="border-t p-3 group-data-[collapsible=icon]:px-0">
-      <SidebarMenu className="gap-2">
-        <SidebarMenuItem><SidebarMenuButton render={<Link to="/" />} onClick={() => setOpenMobile(false)} aria-label="Home & guide" tooltip="Home & guide" className={menuButtonClass}><BookOpen aria-hidden="true" /><span className="group-data-[collapsible=icon]:hidden">Home & guide</span></SidebarMenuButton></SidebarMenuItem>
-        <SidebarMenuItem><SidebarMenuButton onClick={() => closeAfter(() => { setSearch(""); onExample(); })} disabled={pending} aria-label="Box packing example" tooltip="Box packing example" className={menuButtonClass}><Package aria-hidden="true" /><span className="group-data-[collapsible=icon]:hidden">Box packing example</span></SidebarMenuButton></SidebarMenuItem>
-        <SidebarMenuItem><SidebarMenuButton onClick={toggleTheme} aria-label={themeAction} tooltip={themeAction} className={menuButtonClass}>{darkMode ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}<span className="group-data-[collapsible=icon]:hidden">{darkMode ? "Light mode" : "Dark mode"}</span></SidebarMenuButton></SidebarMenuItem>
-        <SidebarMenuItem><SidebarMenuButton onClick={() => closeAfter(onSettings)} aria-label="Settings" tooltip="Settings" className={menuButtonClass}><Settings2 aria-hidden="true" /><span className="group-data-[collapsible=icon]:hidden">Settings</span></SidebarMenuButton></SidebarMenuItem>
-      </SidebarMenu>
+    <SidebarFooter className="gap-1 border-t p-3 group-data-[collapsible=icon]:px-0" style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
+      <SidebarMenu><SidebarMenuItem><Menu.Root><Menu.Trigger render={<SidebarMenuButton tooltip="Help & examples" />} aria-label="Help & examples" className={`${menuClass} text-muted-foreground`}><HelpCircle aria-hidden="true" /><span className="group-data-[collapsible=icon]:hidden">Help & examples</span><ChevronDown className="ml-auto size-3! group-data-[collapsible=icon]:hidden" aria-hidden="true" /></Menu.Trigger><Menu.Portal><Menu.Positioner side={collapsed ? "right" : "top"} align="start" sideOffset={6} className="z-60"><Menu.Popup className={sidebarMenuPopupClass} aria-label="Help & examples"><Menu.LinkItem render={<Link to="/" />} closeOnClick onClick={() => setOpenMobile(false)} className={sidebarMenuItemClass}><BookOpen />Home & guide</Menu.LinkItem><Menu.Item disabled={pending} onClick={() => closeAfter(() => { resetLibrary(); onExample(); })} className={sidebarMenuItemClass}><Package />Box packing example</Menu.Item></Menu.Popup></Menu.Positioner></Menu.Portal></Menu.Root></SidebarMenuItem></SidebarMenu>
+      <div className="flex items-center gap-1 group-data-[collapsible=icon]:flex-col"><SidebarMenu className="min-w-0 flex-1 group-data-[collapsible=icon]:w-full"><SidebarMenuItem><SidebarMenuButton onClick={() => closeAfter(onSettings)} aria-label="Settings" tooltip="Settings" className={`${menuClass} text-muted-foreground`}><Settings2 aria-hidden="true" /><span className="group-data-[collapsible=icon]:hidden">Settings</span></SidebarMenuButton></SidebarMenuItem></SidebarMenu><Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon" />} onClick={toggleTheme} aria-label={themeAction} title={themeAction} className="size-11 shrink-0 text-muted-foreground">{darkMode ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}</TooltipTrigger><TooltipContent side={collapsed ? "right" : "top"}>{themeAction}</TooltipContent></Tooltip></div>
     </SidebarFooter>
   </Sidebar>;
 }

@@ -1,7 +1,9 @@
+import { Link } from "@tanstack/react-router";
+import { needsManualReview } from "../../../shared/manual-review";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
-import { ArrowDownToLine, LoaderCircle, Trash2 } from "lucide-react";
+import { ArrowDownToLine, ClipboardCheck, LoaderCircle, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/eden";
 import { apiError, planRunsQuery, planTriggersQuery, runDetailsQuery, verificationStatusQuery } from "@/lib/queries";
@@ -19,6 +21,8 @@ import { VerificationStatus } from "./verification-status";
 import { DEMO_FEED_ID } from "../../../shared/triggers";
 import type { TaskSession } from "../../../shared/triggers";
 
+import { ImprovePlanDialog } from "../planner/improve-plan-dialog";
+
 const selectionKey = (planId: string) => `proofflow.videoSelection.${planId}`;
 
 function rememberedVideo(planId: string): string | null {
@@ -28,7 +32,7 @@ function rememberedVideo(planId: string): string | null {
   } catch { return null; }
 }
 
-export function VerificationWorkspace({ saved, heading, visible, startNewUpload, task = null, onClearTask, onReviewPlan }: { saved: SavedPlan; heading: ReactNode; visible: boolean; startNewUpload: boolean; task?: TaskSession | null; onClearTask?: () => void; onReviewPlan: () => void }) {
+export function VerificationWorkspace({ saved, heading, visible, startNewUpload, task = null, onClearTask, onReviewPlan, onPlanImproved }: { saved: SavedPlan; heading: ReactNode; visible: boolean; startNewUpload: boolean; task?: TaskSession | null; onClearTask?: () => void; onReviewPlan: () => void; onPlanImproved: (value: SavedPlan) => void }) {
   const queryClient = useQueryClient();
   const watchRun = useVerificationFeedback();
   const container = useRef<HTMLDivElement>(null);
@@ -145,7 +149,7 @@ export function VerificationWorkspace({ saved, heading, visible, startNewUpload,
 
   function exportReceipt() {
     if (!run?.receipt) return;
-    downloadJson({ ...run.receipt, approvedPlan: run.approvedPlan, media: run.media, timings: run.timings, warnings: run.warnings }, `proofflow-evidence-${run.id}.json`, "Evidence");
+    downloadJson({ ...run.receipt, manualReviews: run.manualReviews, approvedPlan: run.approvedPlan, media: run.media, timings: run.timings, warnings: run.warnings }, `proofflow-evidence-${run.id}.json`, "Evidence");
   }
 
   function refreshRuns() {
@@ -155,11 +159,12 @@ export function VerificationWorkspace({ saved, heading, visible, startNewUpload,
   }
 
   const displayedError = error ?? (details.isError ? details.error.message : readiness.isError ? readiness.error.message : null);
+  const pendingReviews = run?.state === "completed" ? run.receipt?.findings.filter(finding => needsManualReview(finding) && !run.manualReviews.some(review => review.stepId === finding.stepId)).length ?? 0 : 0;
   const showLibrary = runs.isPending || runs.isError || recordings.length > 0;
   return <div ref={container} className="min-w-0">
     <input ref={chooser} type="file" accept=".mp4,.mov,.webm,video/mp4,video/quicktime,video/webm" aria-label="Upload another video" className="sr-only" tabIndex={-1} disabled={upload.isPending} onChange={event => { const selected = event.target.files?.[0]; if (choose(selected, false)) upload.mutate(selected); event.target.value = ""; }} />
     <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-      {heading}
+      <div className="min-w-0">{heading}<Link to="/reports" search={{ planId: saved.id }} className="mt-1 inline-flex min-h-9 items-center text-xs font-medium text-muted-foreground underline underline-offset-4">View plan report</Link></div>
       {runId && run && <div className="min-w-0 sm:text-right"><h2 className="text-[14px] font-semibold tracking-tight">{recordingName(recordings, run.id)}</h2><p className="mt-1 text-[12px] leading-5 text-muted-foreground">{new Date(run.createdAt).toLocaleString()}{run.durationMs ? ` · ${(run.durationMs / 1000).toFixed(1)} seconds` : ""} · Plan v{run.planVersion}</p></div>}
     </div>
     <div className="min-w-0 space-y-3">
@@ -171,7 +176,10 @@ export function VerificationWorkspace({ saved, heading, visible, startNewUpload,
         {runId ? run ? <>
           <VerificationStatus run={run} />
           {run.warnings.map((warning) => <p key={warning} className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900">{warning}</p>)}
-          <EvidencePlayer key={run.id} run={run} autoPlay={run.recordingKind !== "demo" || recordingSource?.id !== DEMO_FEED_ID || Boolean(triggers.data?.feed?.running)} />
+          <EvidencePlayer key={run.id} run={run} autoPlay={run.recordingKind !== "demo" || recordingSource?.id !== DEMO_FEED_ID || Boolean(triggers.data?.feed?.running)} actions={run.state === "completed" && run.receipt ? <>
+            {pendingReviews > 0 && <Link to="/review" className="inline-flex min-h-9 items-center gap-2 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"><ClipboardCheck className="size-4" aria-hidden="true" />Review checks<span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] tabular-nums text-amber-800 dark:text-amber-300" aria-label={`${pendingReviews} ${pendingReviews === 1 ? "check" : "checks"} awaiting review`}>{pendingReviews}</span></Link>}
+            <div className="ml-auto"><ImprovePlanDialog key={run.id} saved={saved} run={run} onSaved={onPlanImproved} /></div>
+          </> : undefined} />
           {!isActiveRun(run.state) && <div className="flex flex-wrap items-center justify-end gap-3 px-1 py-2"><div className="flex flex-wrap gap-2">{run.receipt && <Button variant="outline" className="h-8 gap-2 rounded-lg px-3" onClick={exportReceipt}><ArrowDownToLine />Export evidence</Button>}{confirmDelete ? <><Button variant="destructive" className="h-8 px-3" disabled={remove.isPending} onClick={() => remove.mutate(run.id)}>Delete video & evidence</Button><Button variant="ghost" disabled={remove.isPending} onClick={() => setConfirmDelete(false)}>Cancel</Button></> : <Button variant="ghost" className="h-8 gap-2 px-3" onClick={() => setConfirmDelete(true)}><Trash2 />Delete</Button>}</div></div>}
         </> : details.isPending ? <div role="status" className="flex min-h-64 items-center justify-center gap-2 rounded-2xl border bg-card p-6 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Loading video…</div> : <div className="rounded-2xl border bg-card p-6 text-sm text-muted-foreground">This video could not be opened. Select another recording or add a new video.</div> : runs.isPending && selection === null ? <p role="status" className="p-6 text-sm text-muted-foreground">Loading your video library…</p> : recordingSource && !task && !file && saved.status === "approved" && consent ? <section aria-label="Recording source status" className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-2xl border bg-card p-6 text-center">
           {triggers.data?.feed?.running || triggers.data?.sessions.some(item => item.captureState && ["queued", "capturing", "captured"].includes(item.captureState)) ? <LoaderCircle className="size-6 animate-spin text-primary" aria-hidden="true" /> : null}

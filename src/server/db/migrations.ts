@@ -220,6 +220,19 @@ const migrations = [{
 }, {
   version: 16,
   sql: `ALTER TABLE runs DROP COLUMN expires_at;`,
+}, {
+  version: 17,
+  sql: `CREATE TABLE manual_reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    step_id TEXT NOT NULL,
+    decision TEXT NOT NULL CHECK (decision IN ('observed', 'not_observed', 'uncertain')),
+    timestamp_ms INTEGER CHECK (timestamp_ms >= 0),
+    note TEXT NOT NULL,
+    reviewed_at TEXT NOT NULL,
+    CHECK (decision != 'observed' OR timestamp_ms IS NOT NULL)
+  );
+  CREATE INDEX manual_reviews_run_step ON manual_reviews(run_id, step_id, id);`,
 }];
 
 export function migrate(db: Database): void {

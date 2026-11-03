@@ -1,4 +1,4 @@
-// Expose only the top-level reply string, never plan fields or reasoning deltas.
+// Expose only the requested top-level display string, never nested fields or reasoning deltas.
 export class ReplyTextDecoder {
   private depth = 0;
   private inString = false;
@@ -10,6 +10,8 @@ export class ReplyTextDecoder {
   private unicode: string | null = null;
   private readingReply = false;
   private text = "";
+
+  constructor(private readonly field = "reply") {}
 
   push(chunk: string): string {
     for (const character of chunk) {
@@ -23,7 +25,7 @@ export class ReplyTextDecoder {
           this.inString = true;
           this.isKey = this.depth === 1 && this.nextIsKey;
           this.nextIsKey = false;
-          this.readingReply = !this.isKey && this.depth === 1 && this.key === "reply";
+          this.readingReply = !this.isKey && this.depth === 1 && this.key === this.field;
           this.token = "";
         }
         continue;

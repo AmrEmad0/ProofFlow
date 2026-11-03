@@ -32,6 +32,7 @@ function createHub(db: Database) {
   // Connection-local triggers cover API writes and both workers without a polling loop.
   const tables = [
     { table: "runs", plan: "(SELECT plan_id FROM plan_versions WHERE id = ROW.plan_version_id)", run: "ROW.id" },
+    { table: "manual_reviews", plan: "(SELECT v.plan_id FROM runs r JOIN plan_versions v ON v.id = r.plan_version_id WHERE r.id = ROW.run_id)", run: "ROW.run_id" },
     { table: "task_sessions", plan: "ROW.plan_id" },
     { table: "trigger_captures", plan: "(SELECT plan_id FROM task_sessions WHERE id = ROW.session_id)" },
     { table: "plan_triggers", plan: "ROW.plan_id" },

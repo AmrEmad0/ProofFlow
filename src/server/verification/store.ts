@@ -1,3 +1,4 @@
+import { manualReviewStore } from "./manual-review";
 import type { Database } from "bun:sqlite";
 import { approvedPlanSchema } from "../../shared/proof-plan";
 import { runDetailsSchema, runSummarySchema, verificationActivitySchema, type VerificationActivity, type RunSummary } from "../../shared/verification";
@@ -48,6 +49,7 @@ export function verificationStore(db: Database) {
   function details(id: string, sessionHash: string) {
     const run = row(id, sessionHash);
     return runDetailsSchema.parse({ ...summary(run), approvedPlan: approved(run.plan_version_id, sessionHash),
+      manualReviews: manualReviewStore(db).history(id),
       partialFindings: JSON.parse(run.partial_findings_json),
       receipt: run.receipt_json ? JSON.parse(run.receipt_json) : null,
       media: run.media_json ? JSON.parse(run.media_json) : null,

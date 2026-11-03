@@ -1,3 +1,4 @@
+import { reportRoutes } from "./routes/reports";
 import type { Database } from "bun:sqlite";
 import { cors } from "@elysia/cors";
 import { Elysia } from "elysia";
@@ -32,7 +33,8 @@ export function createApp(db: Database, config: Config, conversation?: PlanConve
     .use(eventRoutes(db, config, worker))
     .use(planRoutes(db, config, conversation, worker, analyzeReference))
     .use(triggerRoutes(db, config))
-    .use(runRoutes(db, config, worker));
+    .use(runRoutes(db, config, worker))
+    .use(reportRoutes(db));
 }
 
 export type App = ReturnType<typeof createApp>;

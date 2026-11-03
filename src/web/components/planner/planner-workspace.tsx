@@ -1,7 +1,9 @@
+import { ReportsPage } from "../reports/reports-page";
+import { ReviewQueue } from "../verification/review-queue";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, RotateCcw } from "lucide-react";
+import { Check, ChevronDown, RotateCcw, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toast";
@@ -51,7 +53,7 @@ function editableChecks(saved: SavedPlan): EditableCheck[] {
   return saved.plan!.steps.map(({ id, subjectConcept, targetConcept, beforeState, afterState, requirements, goalSource, visualCheck, label, observableEvidence }) => ({ id, subjectConcept, targetConcept, beforeState, afterState, requirements, goalSource, visualCheck, label, observableEvidence }));
 }
 
-export function PlannerWorkspace({ initialStarter = false, planId = null }: { initialStarter?: boolean; planId?: string | null }) {
+export function PlannerWorkspace({ reportsMode = false, reviewMode = false, initialStarter = false, planId = null }: { reportsMode?: boolean; reviewMode?: boolean; initialStarter?: boolean; planId?: string | null }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [activeId, setActiveId] = useState<string | null>(planId);
@@ -275,7 +277,7 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
   const approved = saved?.status === "approved";
   const hasPlan = Boolean(saved?.plan || starter);
   const videoView = Boolean(saved) && (view === "video" || (approved && (view === "upload" || (view === "auto" && (previousRuns.isError || Boolean(previousRuns.data?.length))))));
-  const step = videoView ? 1 : 0;
+  const step = videoView || approved ? 2 : hasPlan ? 1 : 0;
 
   useEffect(() => {
     if (approved && view === "auto" && (previousRuns.isError || previousRuns.data?.length)) setView("video");
@@ -287,13 +289,13 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
   }, []);
 
   const pageHeading = <div className="min-w-0">
-    <h1 ref={heading} tabIndex={-1} className={`font-semibold tracking-tight outline-none ${videoView ? "text-2xl" : "text-2xl sm:text-3xl"}`}>{openingVideos ? "Opening your plan" : videoView ? "Videos & evidence" : manualEditing ? "Build your own plan" : editingApproved ? "Edit your checks" : approved ? "Your plan is ready" : hasPlan ? "Review your checks" : "Create your proof plan"}</h1>
-    <p className={videoView || (!hasPlan && !manualEditing && !loading) ? "sr-only" : "mt-2 text-base leading-7 text-muted-foreground"}>{openingVideos ? "Loading your videos and saved checks." : videoView ? "Inspect each check alongside its video evidence." : manualEditing ? "Choose visible actions, name the objects, and watch your plan take shape. Save a draft, then review and approve it." : editingApproved ? "Save your changes, then use the updated checks for a video." : approved ? "Ask a question, revise your plan, or check a video." : hasPlan ? "Adjust the checks here, then choose Check a video when you’re ready." : "Describe your process or add a reference. Review and approve the suggested checks before verifying a video."}</p>
+    <h1 ref={heading} tabIndex={-1} className={`font-semibold tracking-tight outline-none ${videoView ? "text-2xl" : "text-2xl sm:text-3xl"}`}>{openingVideos ? "Opening your plan" : videoView ? "Videos & evidence" : manualEditing ? "Build your own plan" : editingApproved ? "Edit your checks" : approved ? "Your plan is ready" : hasPlan ? "Review your checks" : "What should the video show?"}</h1>
+    <p className={videoView ? "sr-only" : "mt-2 text-base leading-7 text-muted-foreground"}>{openingVideos ? "Loading your videos and saved checks." : videoView ? "Inspect each check alongside its video evidence." : manualEditing ? "Choose visible actions, name the objects, and watch your plan take shape. Save a draft, then review and approve it." : editingApproved ? "Save your changes, then use the updated checks for a video." : approved ? "Ask a question, revise your plan, or check a video." : hasPlan ? "Refine your checks with AI, then approve to add a video." : "Name the objects and actions. One sentence is enough."}</p>
   </div>;
 
   return (
-    <SidebarProvider style={{ "--sidebar-width-icon": "4rem" } as CSSProperties}>
-      <WorkspaceSidebar plans={templates.data ?? []} activeId={activeId} pending={pending} loading={templates.isPending} error={templates.error?.message ?? null} canInspect={Boolean(saved)} onSelect={(id) => {
+    <SidebarProvider style={{ "--sidebar-width": "18rem", "--sidebar-width-icon": "4rem" } as CSSProperties}>
+      <WorkspaceSidebar plans={templates.data ?? []} activeId={reviewMode || reportsMode ? null : activeId} pending={pending} loading={templates.isPending} error={templates.error?.message ?? null} canInspect={Boolean(saved)} onSelect={(id) => {
         select(id);
         void queryClient.fetchQuery(savedPlanQuery(id)).catch((error: unknown) => {
           toast.add({ type: "error", title: "Couldn’t open plan", description: error instanceof Error ? error.message : "Please try again.", timeout: 8000 });
@@ -305,28 +307,31 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
       <SidebarInset id="main-content" className="min-w-0">
         <header className="flex h-14 shrink-0 items-center gap-3 border-b px-4 sm:px-8">
           <SidebarTrigger aria-label="Toggle plans sidebar" />
-          <span className="min-w-0 flex-1 truncate text-sm font-medium">{saved?.plan?.title ?? (starter ? "Box packing example" : "New plan")}</span>
+          <span className="min-w-0 flex-1 truncate text-sm font-medium">{reportsMode ? "Reports" : reviewMode ? "Manual review" : saved?.plan?.title ?? (starter ? "Box packing example" : "New plan")}</span>
           <span className="shrink-0 text-xs text-muted-foreground" role="status">{sending ? "Replying…" : pending ? "Saving…" : saved ? "Saved" : ""}</span>
         </header>
-        <div className={videoView ? "px-4 pt-4 pb-6 sm:px-6" : "px-4 pt-6 pb-8 sm:px-8 sm:pt-7"}>
-          <div className={`workspace-enter mx-auto ${videoView || hasPlan ? "max-w-[1500px]" : "max-w-[1100px]"}`}>
-            <ol hidden={Boolean(videoView)} className={videoView ? "hidden" : `workflow-steps mb-6 ${!hasPlan ? "workflow-steps-start" : ""}`} aria-label="Verification progress">
-              {["Create plan", "Verify video"].map((label, index) => (
+        {reportsMode ? <div className="px-4 py-5 sm:px-6"><ReportsPage /></div> : reviewMode ? <div className="px-4 py-4 sm:px-6"><ReviewQueue /></div> : <div className={videoView ? "px-4 pt-4 pb-6 sm:px-6" : "px-4 pt-6 pb-8 sm:px-8 sm:pt-7"}>
+          <div className={`workspace-enter mx-auto ${videoView ? "max-w-[1500px]" : hasPlan ? "max-w-[1440px]" : "max-w-[760px]"}`}>
+            <ol hidden={Boolean(videoView)} className={videoView ? "hidden" : "workflow-steps workflow-steps-start mb-6"} aria-label="Verification progress">
+              {["Describe", "Review", "Add video"].map((label, index) => (
                 <li key={label} aria-current={step === index ? "step" : undefined} className={step === index ? "is-current" : step > index ? "is-complete" : ""}>
                   {videoView && index === 0 ? <button aria-label={label} disabled={pending} onClick={() => setView("plan")} className="flex items-center gap-2 rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"><span className="step-number"><Check className="size-3.5" aria-hidden="true" /></span>{label}</button> : <span className="flex items-center gap-2"><span className="step-number">{index + 1}</span>{label}</span>}
                 </li>
               ))}
             </ol>
-            {!videoView && <div className="mb-6 grid gap-6 lg:grid-cols-[230px_minmax(0,1fr)]"><div className={`min-w-0 flex flex-wrap items-start justify-between gap-4 lg:col-start-2 ${!hasPlan ? "planner-intro" : ""}`}>{pageHeading}{Boolean(previousRuns.data?.length) && <Button variant="outline" onClick={() => { setEditingApproved(false); setView("video"); }}>Videos & evidence ({previousRuns.data!.length})</Button>}</div></div>}
+            {!videoView && <div className="mb-6"><div className={`min-w-0 flex flex-wrap items-start ${hasPlan ? "justify-between" : "justify-center"} gap-4 ${!hasPlan ? "planner-intro" : ""}`}>{pageHeading}{Boolean(previousRuns.data?.length) && <Button variant="outline" onClick={() => { setEditingApproved(false); setView("video"); }}>Videos & evidence ({previousRuns.data!.length})</Button>}</div></div>}
             {undo && saved?.id === undo.planId && saved.revision === undo.revision && <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-primary/5 p-4"><p role="status" className="text-base">{undo.message}</p><Button variant="outline" disabled={pending} onClick={() => act({ type: "restore", versionId: undo.versionId })}><RotateCcw />Undo change</Button></div>}
             {displayedError && (videoView || loading) && <p role="alert" className="mb-4 rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">{displayedError}</p>}
-            <div className={loading ? "" : `grid items-start gap-6 lg:grid-cols-[230px_minmax(0,1fr)] ${!hasPlan ? "planner-layout-start" : ""}`}>
-            {!loading && <PlanTriggers key={saved?.id ?? "new"} setup={!videoView} saved={saved} disabled={pending} onEnsurePlan={ensureTriggerPlan} onAttach={task => { setTask(task); setEditingApproved(false); setView("video"); }} />}
+            <div className={loading ? "" : `grid items-start gap-6 ${videoView ? "lg:grid-cols-[230px_minmax(0,1fr)]" : ""} ${!hasPlan ? "planner-layout-start" : ""}`}>
+            {!loading && videoView && <PlanTriggers key={saved?.id ?? "new"} setup={!videoView} saved={saved} disabled={pending} onEnsurePlan={ensureTriggerPlan} onAttach={task => { setTask(task); setEditingApproved(false); setView("video"); }} />}
             <div className="min-w-0">
-            {!loading && saved && (approved || videoView || Boolean(previousRuns.data?.length)) && <div hidden={!videoView}><VerificationWorkspace key={saved.id} saved={saved} heading={videoView ? pageHeading : null} visible={Boolean(videoView)} startNewUpload={view === "upload"} task={task} onClearTask={() => setTask(null)} onReviewPlan={() => setView("plan")} /></div>}
-            {loading ? <Skeleton className="h-96 rounded-2xl" aria-label={openingVideos ? "Loading plan videos" : "Loading saved plan"} /> : videoView ? null : manualEditing ? <ManualPlanEditor saved={saved} pending={pending} onSave={async draft => { await mutation.mutateAsync({ type: "manual", draft }); }} onCancel={() => setManualEditing(false)} /> : <div className={hasPlan ? "grid items-start gap-5 2xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]" : "min-w-0"}>
-              <PlannerChat onApprove={async () => { await mutation.mutateAsync({ type: "approve" }); }} saved={saved} starter={starter} pending={pending} sending={sending} partialReply={partialReply} planPreview={planPreview} referenceSending={sending && mutation.variables?.type === "send" && Boolean(mutation.variables.media)} pendingMessage={(sending || partialReply) && mutation.variables?.type === "send" ? mutation.variables.message : null} configured={configured} error={displayedError} input={input} onInputChange={(message) => { setInput(message); rememberMessage(activeId, message); }} onSend={async (message, media) => { await mutation.mutateAsync({ type: "send", message, media }); }} onStarter={() => act({ type: "create", template: "packproof" })} onManual={() => setManualEditing(true)} onReload={() => { void reloadDraft().catch(() => {}); }} />
+            {!loading && saved && (approved || videoView || Boolean(previousRuns.data?.length)) && <div hidden={!videoView}><VerificationWorkspace key={saved.id} saved={saved} heading={videoView ? pageHeading : null} visible={Boolean(videoView)} startNewUpload={view === "upload"} task={task} onClearTask={() => setTask(null)} onReviewPlan={() => setView("plan")} onPlanImproved={value => { remember(value); setUndo(null); setEditingApproved(false); setView("plan"); }} /></div>}
+            {loading ? <Skeleton className="h-96 rounded-2xl" aria-label={openingVideos ? "Loading plan videos" : "Loading saved plan"} /> : videoView ? null : manualEditing ? <ManualPlanEditor saved={saved} pending={pending} onSave={async draft => { await mutation.mutateAsync({ type: "manual", draft }); }} onCancel={() => setManualEditing(false)} /> : <div className={hasPlan ? "review-ai-layout" : "min-w-0"}>
+
+              <PlannerChat saved={saved} starter={starter} pending={pending} sending={sending} partialReply={partialReply} planPreview={planPreview} referenceSending={sending && mutation.variables?.type === "send" && Boolean(mutation.variables.media)} pendingMessage={(sending || partialReply) && mutation.variables?.type === "send" ? mutation.variables.message : null} configured={configured} error={displayedError} input={input} onInputChange={(message) => { setInput(message); rememberMessage(activeId, message); }} onSend={async (message, media) => { await mutation.mutateAsync({ type: "send", message, media }); }} onStarter={() => act({ type: "create", template: "packproof" })} onManual={() => setManualEditing(true)} onReload={() => { void reloadDraft().catch(() => {}); }} />
               {hasPlan && <PlanPreview key={activeId ?? "preview"} saved={saved} starter={starter ? packproofTemplate : null} pending={pending || current.isError} editingApproved={editingApproved} onFinishEditing={() => setEditingApproved(false)} onRevise={openEditor} onCopy={() => act({ type: "copy" })} onEdit={editCheck} onRemove={removeCheck} onReload={reloadDraft} changedIds={undo?.planId === saved?.id ? undo?.changedIds ?? [] : []} onUseStarter={() => act({ type: "create", template: "packproof" })} onManual={() => setManualEditing(true)} onVerify={() => approved && saved?.videoConsentAt ? openUpload() : act({ type: "approve" })} />}
+              {hasPlan && <details className="review-optional review-automation"><summary><Zap className="size-4 text-muted-foreground" aria-hidden="true" /><span>Automate this plan</span><span className="text-xs font-normal text-muted-foreground">Optional</span><ChevronDown className="size-4" aria-hidden="true" /></summary><PlanTriggers key={saved?.id ?? "new"} setup={!videoView} saved={saved} disabled={pending} onEnsurePlan={ensureTriggerPlan} onAttach={task => { setTask(task); setEditingApproved(false); setView("video"); }} /></details>}
+
             </div>}
             </div>
             </div>
@@ -334,7 +339,7 @@ export function PlannerWorkspace({ initialStarter = false, planId = null }: { in
             <footer className="mt-8 pb-2 text-center text-xs text-muted-foreground">Powered by Meta Muse Spark & SAM 3.1</footer>
           </div>
         </div>
-      </SidebarInset>
+      }</SidebarInset>
       <PlanProperties saved={saved} open={propertiesOpen} onOpenChange={setPropertiesOpen} pending={pending} onRevise={openEditor} />
       <WorkspaceSettings open={settingsOpen} onOpenChange={setSettingsOpen} />
       <DeletePlanDialog target={deleteTarget} pending={removePlan.isPending} error={removePlan.error?.message ?? null} onClose={() => setDeleteTarget(null)} onConfirm={() => { if (deleteTarget) removePlan.mutate(deleteTarget.id); }} />

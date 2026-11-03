@@ -1,3 +1,5 @@
+import { reportSchema, type ReportFilters } from "../../shared/reports";
+import { reviewQueueSchema } from "../../shared/manual-review";
 import { queryOptions } from "@tanstack/react-query";
 import { z } from "zod";
 import { api } from "./eden";
@@ -143,5 +145,28 @@ export function runDetailsQuery(id: string | null) {
       if (query.state.data && !isActiveRun(query.state.data.state)) return false;
       return 15_000;
     },
+  });
+}
+
+export const reviewQueueQuery = queryOptions({
+  queryKey: ["reviews"],
+  queryFn: async () => {
+    const result = await api.api.reviews.get();
+    if (result.error) throw apiError(result.error.value, "The review queue could not be loaded.");
+    return reviewQueueSchema.parse(result.data);
+  },
+  refetchInterval: 30_000,
+});
+
+export function reportQuery(filters: ReportFilters) {
+  return queryOptions({
+    queryKey: ["reports", filters],
+    queryFn: async () => {
+      const result = await api.api.reports.get({ query: filters });
+      if (result.error) throw apiError(result.error.value, "Reports could not be loaded.");
+      return reportSchema.parse(result.data);
+    },
+    retry: false,
+    refetchInterval: 30_000,
   });
 }

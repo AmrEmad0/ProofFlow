@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { manualReviewSchema } from "./manual-review";
 import { LIMITS, approvedPlanSchema } from "./proof-plan";
 import { findingSchema, receiptSchema, runStateSchema } from "./receipt";
 
@@ -32,6 +33,7 @@ export type VerificationActivity = z.infer<typeof verificationActivitySchema>;
 
 export const runDetailsSchema = runSummarySchema.safeExtend({
   approvedPlan: approvedPlanSchema,
+  manualReviews: z.array(manualReviewSchema).default([]),
   receipt: receiptSchema.nullable(),
   partialFindings: z.array(findingSchema).max(LIMITS.steps).default([]),
   media: z.strictObject({

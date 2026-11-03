@@ -13,6 +13,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkspaceRouteImport } from './routes/_workspace'
 import { Route as WorkspaceNewRouteImport } from './routes/_workspace.new'
 import { Route as WorkspacePackproofRouteImport } from './routes/_workspace.packproof'
+import { Route as WorkspaceReportsRouteImport } from './routes/_workspace.reports'
+import { Route as WorkspaceReviewRouteImport } from './routes/_workspace.review'
 import { Route as WorkspacePlansPlanIdRouteImport } from './routes/_workspace.plans.$planId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -34,6 +36,16 @@ const WorkspacePackproofRoute = WorkspacePackproofRouteImport.update({
   path: '/packproof',
   getParentRoute: () => WorkspaceRoute,
 } as any)
+const WorkspaceReportsRoute = WorkspaceReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => WorkspaceRoute,
+} as any)
+const WorkspaceReviewRoute = WorkspaceReviewRouteImport.update({
+  id: '/review',
+  path: '/review',
+  getParentRoute: () => WorkspaceRoute,
+} as any)
 const WorkspacePlansPlanIdRoute = WorkspacePlansPlanIdRouteImport.update({
   id: '/plans/$planId',
   path: '/plans/$planId',
@@ -44,12 +56,16 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/new': typeof WorkspaceNewRoute
   '/packproof': typeof WorkspacePackproofRoute
+  '/reports': typeof WorkspaceReportsRoute
+  '/review': typeof WorkspaceReviewRoute
   '/plans/$planId': typeof WorkspacePlansPlanIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/new': typeof WorkspaceNewRoute
   '/packproof': typeof WorkspacePackproofRoute
+  '/reports': typeof WorkspaceReportsRoute
+  '/review': typeof WorkspaceReviewRoute
   '/plans/$planId': typeof WorkspacePlansPlanIdRoute
 }
 export interface FileRoutesById {
@@ -58,19 +74,24 @@ export interface FileRoutesById {
   '/_workspace': typeof WorkspaceRouteWithChildren
   '/_workspace/new': typeof WorkspaceNewRoute
   '/_workspace/packproof': typeof WorkspacePackproofRoute
+  '/_workspace/reports': typeof WorkspaceReportsRoute
+  '/_workspace/review': typeof WorkspaceReviewRoute
   '/_workspace/plans/$planId': typeof WorkspacePlansPlanIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/new' | '/packproof' | '/plans/$planId'
+  fullPaths:
+    '/' | '/new' | '/packproof' | '/reports' | '/review' | '/plans/$planId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/new' | '/packproof' | '/plans/$planId'
+  to: '/' | '/new' | '/packproof' | '/reports' | '/review' | '/plans/$planId'
   id:
     | '__root__'
     | '/'
     | '/_workspace'
     | '/_workspace/new'
     | '/_workspace/packproof'
+    | '/_workspace/reports'
+    | '/_workspace/review'
     | '/_workspace/plans/$planId'
   fileRoutesById: FileRoutesById
 }
@@ -109,6 +130,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WorkspacePackproofRouteImport
       parentRoute: typeof WorkspaceRoute
     }
+    '/_workspace/reports': {
+      id: '/_workspace/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof WorkspaceReportsRouteImport
+      parentRoute: typeof WorkspaceRoute
+    }
+    '/_workspace/review': {
+      id: '/_workspace/review'
+      path: '/review'
+      fullPath: '/review'
+      preLoaderRoute: typeof WorkspaceReviewRouteImport
+      parentRoute: typeof WorkspaceRoute
+    }
     '/_workspace/plans/$planId': {
       id: '/_workspace/plans/$planId'
       path: '/plans/$planId'
@@ -122,12 +157,16 @@ declare module '@tanstack/react-router' {
 interface WorkspaceRouteChildren {
   WorkspaceNewRoute: typeof WorkspaceNewRoute
   WorkspacePackproofRoute: typeof WorkspacePackproofRoute
+  WorkspaceReportsRoute: typeof WorkspaceReportsRoute
+  WorkspaceReviewRoute: typeof WorkspaceReviewRoute
   WorkspacePlansPlanIdRoute: typeof WorkspacePlansPlanIdRoute
 }
 
 const WorkspaceRouteChildren: WorkspaceRouteChildren = {
   WorkspaceNewRoute: WorkspaceNewRoute,
   WorkspacePackproofRoute: WorkspacePackproofRoute,
+  WorkspaceReportsRoute: WorkspaceReportsRoute,
+  WorkspaceReviewRoute: WorkspaceReviewRoute,
   WorkspacePlansPlanIdRoute: WorkspacePlansPlanIdRoute,
 }
 

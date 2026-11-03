@@ -1,3 +1,5 @@
+import { ManualReviewForm } from "./manual-review-form";
+import { needsManualReview } from "../../../shared/manual-review";
 import { Check, ChevronDown, CircleHelp, Clock3, MessageCircle, Minus, Play } from "lucide-react";
 import { formatTime } from "@/lib/evidence-presentation";
 import { checkProgress } from "@/lib/verification-progress";
@@ -14,12 +16,14 @@ const appearance = {
 
 export { formatTime } from "@/lib/evidence-presentation";
 
-export function VerificationChecks({ run, selectedId, currentIds, playing, onInspect, compactHeader = false, onAsk }: { compactHeader?: boolean; onAsk?: (stepId: string) => void; run: RunDetails; selectedId: string | null; currentIds: string[]; playing: boolean; onInspect: (id: string, startMs: number) => void }) {
+export function VerificationChecks({ run, selectedId, currentIds, playing, onInspect, compactHeader = false, onAsk, currentTimeMs = null, focusedStepId, onReviewSaved }: { currentTimeMs?: number | null; focusedStepId?: string; onReviewSaved?: () => void; compactHeader?: boolean; onAsk?: (stepId: string) => void; run: RunDetails; selectedId: string | null; currentIds: string[]; playing: boolean; onInspect: (id: string, startMs: number) => void }) {
   const active = isActiveRun(run.state);
   const findings = run.state === "completed" ? run.receipt?.findings ?? [] : active ? run.partialFindings : [];
   return <section className="min-w-0" aria-label="Check results">
     <div className={compactHeader ? "sr-only" : "flex items-center justify-between gap-3 border-b px-4 py-3"}><div className="flex items-center gap-2"><h3 className="text-[14px] font-semibold tracking-tight">Your checks</h3><span className="rounded bg-muted px-1.5 py-0.5 text-[11px] tabular-nums text-muted-foreground">{run.approvedPlan.steps.length}</span></div>{run.media && <span className="flex items-center gap-1 text-[11px] text-muted-foreground"><Play className="size-3" aria-hidden="true" />Select to play</span>}<p className="sr-only">{active ? "Checks update as evidence arrives. Early results are being confirmed." : run.state === "failed" || !run.receipt ? "No findings are available. Choose another video to try again." : "Select a check to inspect its video evidence."}</p></div>
     <ol className="divide-y" aria-live="polite">{run.approvedPlan.steps.map((step, index) => {
+      if (focusedStepId && step.id !== focusedStepId) return null;
+      const latestReview = run.manualReviews?.filter(item => item.stepId === step.id).at(-1);
       const finding = findings.find((item) => item.stepId === step.id);
       const style = finding ? appearance[finding.status] : null;
       const Icon = style?.Icon ?? Clock3;
@@ -43,6 +47,7 @@ export function VerificationChecks({ run, selectedId, currentIds, playing, onIns
         {stepActivity && <p className="mt-1 ml-10 text-[11px] leading-5 text-muted-foreground">{stepActivity.message}</p>}
         {finding && <div className="ml-10"><EvidenceMoments conditionLabel={step.visualCheck?.kind === "condition" ? ({ anytime: "Condition", start: "At the start", end: "At the end" }[step.visualCheck.timing]) : undefined} finding={finding} durationMs={run.durationMs} hasMedia={Boolean(run.media)} onInspect={onInspect} /></div>}
         {finding?.status === "uncertain" && <p className="mt-1 ml-10 text-[12px] leading-5 text-muted-foreground">{style?.hint}</p>}
+        {finding && !active && run.state === "completed" && (needsManualReview(finding) || latestReview) && <><p className="mt-2 text-xs leading-5 text-muted-foreground">Required evidence: {step.observableEvidence}</p>{run.media ? <ManualReviewForm key={`${step.id}-${latestReview?.id ?? 0}`} runId={run.id} stepId={step.id} latest={latestReview} currentTimeMs={currentTimeMs} onInspect={onInspect} onSaved={onReviewSaved} /> : <p className="text-xs text-muted-foreground">Footage is required to save a manual decision.</p>}</>}
         {finding && <>
           {!run.media && <p className="mt-1 ml-10 text-[12px] text-muted-foreground">The video evidence is unavailable.</p>}
           <details className="group/reason ml-10"><summary className="flex min-h-8 w-fit cursor-pointer list-none items-center gap-1 rounded-md py-1 text-[11px] text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">Why this result?<ChevronDown className="size-3 transition-transform group-open/reason:rotate-180" aria-hidden="true" /></summary><p className="mt-1 break-words text-sm leading-6 text-muted-foreground">{finding.explanation}</p>

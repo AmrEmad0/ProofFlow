@@ -13,7 +13,7 @@ function setConnected(value: boolean) {
   connected = value;
   for (const listener of connectionListeners) listener();
 }
-const liveKeys = new Set(["triggers", "runs", "run", "verification-status"]);
+const liveKeys = new Set(["triggers", "runs", "run", "reviews", "reports", "verification-status"]);
 
 export function connectWorkspaceEvents(client: QueryClient) {
   let source: EventSource | null = null;
@@ -47,6 +47,8 @@ export function connectWorkspaceEvents(client: QueryClient) {
         client.setQueryData(["verification-status"], { available: event.available });
         if (!connected) { setConnected(true); resync(); }
       } else if (event.type === "run.updated") {
+        void client.invalidateQueries({ queryKey: ["reviews"] });
+        void client.invalidateQueries({ queryKey: ["reports"] });
         void client.invalidateQueries({ queryKey: ["runs", event.planId], exact: true });
         void client.invalidateQueries({ queryKey: ["run", event.runId], exact: true });
       } else {

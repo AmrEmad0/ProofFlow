@@ -14,6 +14,7 @@ import { manualPlanInputSchema, editChecksSchema } from "../../shared/planner";
 import { LIMITS } from "../../shared/proof-plan";
 import { referenceAnalyzer, type ReferenceAnalysis } from "../planner/reference";
 import { plannerEvents } from "../planner/stream";
+import { planImprovementRoutes } from "./plan-improvements";
 
 const revisionBody = t.Object({ revision: t.Integer({ minimum: 0 }) }, { additionalProperties: false });
 const planParams = t.Object({ id: t.String({ format: "uuid" }) });
@@ -24,6 +25,7 @@ export function planRoutes(db: Database, config: Config, conversation?: PlanConv
   const converse: PlanConversation = conversation ?? ((messages, plan, options) => conversePlan(createMetaClient(config), messages, plan, options));
 
   return new Elysia()
+    .use(planImprovementRoutes(db, config, busySessions))
     .onBeforeHandle(({ request, set }) => {
       set.headers["cache-control"] = "no-store";
       if (request.method === "GET") return;

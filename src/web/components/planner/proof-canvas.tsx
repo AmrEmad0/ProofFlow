@@ -1,7 +1,7 @@
 import { useId, useState, type CSSProperties } from "react";
-import { ArrowRight, Camera, ChevronDown, CircleDashed, Layers2, MoveRight, PencilLine, ScanLine, Shapes, Shuffle, Trash2 } from "lucide-react";
+import { ArrowRight, Camera, ChevronDown, Box, Coffee, FileText, Layers2, Package, PackageOpen, PencilLine, ScanLine, Shapes, Shuffle, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { canvasObjects, canvasPhases, canvasRelationships, checkLabels } from "@/lib/proof-canvas";
+import { canvasObjects, canvasPhases, canvasRelationships } from "@/lib/proof-canvas";
 import type { ProofPlan, ProofStep } from "../../../shared/proof-plan";
 
 type Phase = ReturnType<typeof canvasPhases>[number];
@@ -13,31 +13,36 @@ type Props = {
   onRemove?: (id: string) => void;
 };
 
-function MovementGlyph({ phase }: { phase: Phase["phase"] }) {
+function MovementGlyph({ phase, subject }: { phase: Phase["phase"]; subject: string }) {
+  const SubjectIcon = /paper|receipt|slip|document/i.test(subject) ? FileText : /mug|cup/i.test(subject) ? Coffee : /product|item|package/i.test(subject) ? Package : Shapes;
   const x = phase === "before" ? 12 : phase === "action" ? 49 : 83;
   return <svg viewBox="0 0 140 72" className="proof-phase-art" fill="none" aria-hidden="true">
     <rect x="69" y="11" width="58" height="50" rx="10" stroke="currentColor" strokeDasharray="4 4" className="proof-region" />
     <path d="M10 64h120" stroke="currentColor" opacity=".12" />
     {phase === "action" && <path d="M12 35h27m-6-5 6 5-6 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />}
     <rect x={x} y="23" width="28" height="28" rx="7" fill="currentColor" fillOpacity=".1" stroke="currentColor" strokeWidth="1.8" />
-    <path d={`M${x + 9} 33h10m-10 7h6`} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    <SubjectIcon x={x + 6} y={29} width={16} height={16} strokeWidth={1.5} />
   </svg>;
 }
 
 function PhaseVisual({ step, phase }: { step: ProofStep; phase: Phase }) {
   if (step.checkType === "object_enters_region") return <>
-    <MovementGlyph phase={phase.phase} />
+    <MovementGlyph phase={phase.phase} subject={step.subjectConcept} />
     <span className="proof-phase-object">{step.subjectConcept}</span>
     <span className="proof-phase-caption">{phase.phase === "before" ? "Outside" : phase.phase === "action" ? "Crossing into" : "Inside"} <strong>{step.targetConcept}</strong></span>
   </>;
-  if (step.checkType === "visible_state_change") return <>
-    <span className="proof-state-art" aria-hidden="true">{phase.phase === "action" ? <Shuffle /> : <span className={`proof-state-dot ${phase.phase === "after" ? "proof-state-dot-after" : ""}`} />}</span>
+  if (step.checkType === "visible_state_change") {
+    const state = phase.phase === "before" ? step.beforeState : step.afterState;
+    const StateIcon = /box/i.test(step.subjectConcept) && /open|clos/i.test(state ?? "") ? /open/i.test(state ?? "") ? PackageOpen : Box : null;
+    return <>
+    <span className="proof-state-art" aria-hidden="true">{phase.phase === "action" ? <Shuffle /> : StateIcon ? <StateIcon /> : <span className={`proof-state-dot ${phase.phase === "after" ? "proof-state-dot-after" : ""}`} />}</span>
     <span className="proof-phase-object">{phase.phase === "action" ? step.subjectConcept : phase.phase === "before" ? step.beforeState : step.afterState}</span>
     <span className="proof-phase-caption">{phase.phase === "action" ? "Visible transition" : step.subjectConcept}</span>
   </>;
+  }
   if (step.checkType === "visual_check") return <>
     <span className="proof-state-art" aria-hidden="true"><Camera /></span>
-    <span className="proof-phase-object">{phase.description}</span>
+    <span className="proof-phase-object proof-phase-description">{phase.description}</span>
     <span className="proof-phase-caption">{step.subjectConcept}{step.targetConcept ? ` · ${step.targetConcept}` : ""}</span>
   </>;
   return <>
@@ -55,24 +60,25 @@ function CanvasCheck({ step, index, pending, changed, highlighted, onEdit, onRem
   const [selectedPhase, setSelectedPhase] = useState<Phase["phase"] | "all" | null>(null);
   const phases = canvasPhases(step);
   const visiblePhases = selectedPhase === "all" ? phases : phases.filter(phase => phase.phase === selectedPhase);
-  const Icon = step.checkType === "visual_check" ? Camera : step.checkType === "object_enters_region" ? MoveRight : step.checkType === "visible_state_change" ? Shuffle : ScanLine;
-  return <li className={`proof-canvas-check ${changed ? "proof-canvas-changed" : ""}`} data-highlighted={highlighted || undefined} style={{ "--check-index": index } as CSSProperties}>
+  const summaryPhases = phases.length === 3 ? phases.filter(phase => phase.phase !== "action") : phases;
+  return <li className={`proof-canvas-check ${changed ? "proof-canvas-changed" : ""}`} data-check-type={step.checkType} data-highlighted={highlighted || undefined} style={{ "--check-index": index } as CSSProperties}>
     <div className="proof-check-heading">
       <span className="proof-check-number">{index + 1}</span>
-      <div className="min-w-0 flex-1"><span className="proof-check-kind"><Icon className="size-3.5" aria-hidden="true" />{checkLabels[step.checkType]}</span><h3>{step.label}</h3>
+      <div className="min-w-0 flex-1"><h3>{step.label}</h3>
         {changed && <span className="proof-changed-label">Changed — please review</span>}
       </div>
+
     </div>
-    <div className={`proof-phase-grid ${phases.length === 1 ? "proof-phase-single" : ""}`}>
-      {phases.map(phase => <button type="button" className="proof-phase" key={phase.id} aria-label={`Inspect ${phase.phase} expectation for check ${index + 1}`} aria-expanded={selectedPhase === phase.phase || selectedPhase === "all"} aria-controls={`${id}-details`} onClick={() => setSelectedPhase(current => current === phase.phase ? null : phase.phase)}>
+    <div className={`proof-phase-grid proof-summary ${summaryPhases.length === 1 ? "proof-phase-single" : ""}`}>
+      {summaryPhases.map(phase => <button type="button" className="proof-phase" key={phase.id} aria-label={`Inspect ${phase.phase} expectation for check ${index + 1}`} aria-expanded={selectedPhase === phase.phase || selectedPhase === "all"} aria-controls={`${id}-details`} onClick={() => setSelectedPhase(current => current === phase.phase ? null : phase.phase)}>
         <span className="proof-phase-label">{step.checkType === "object_present_at_end" ? "At the end" : step.visualCheck?.kind === "condition" ? ({ anytime: "Visible condition", start: "At the start", end: "At the end" }[step.visualCheck.timing]) : phase.phase}<span aria-hidden="true">↗</span></span>
         <PhaseVisual step={step} phase={phase} />
       </button>)}
     </div>
     <div className="proof-check-toolbar">
-      <Button variant="ghost" className="h-11 px-2 text-sm" aria-label={`Filming details for check ${index + 1}`} aria-expanded={selectedPhase !== null} aria-controls={`${id}-details`} onClick={() => setSelectedPhase(current => current === "all" ? null : "all")}><Camera className="size-4" />Filming details<ChevronDown className={`size-3.5 ${selectedPhase ? "rotate-180" : ""}`} /></Button>
-      {onEdit && <Button variant="ghost" className="h-11 px-2 text-sm" disabled={pending} aria-label={`Change check ${index + 1}`} onClick={() => onEdit(step)}><PencilLine className="size-4" />Change</Button>}
-      {onRemove && <Button variant="ghost" className="ml-auto h-11 px-2 text-muted-foreground" disabled={pending} aria-label={`Remove check ${index + 1}`} onClick={() => onRemove(step.id)}><Trash2 className="size-4" /></Button>}
+      <Button variant="ghost" className="h-11 px-2 text-sm" aria-label={`Filming details for check ${index + 1}`} aria-expanded={selectedPhase !== null} aria-controls={`${id}-details`} onClick={() => setSelectedPhase(current => current === "all" ? null : "all")}><Camera className="size-4" />Film guide<ChevronDown className={`size-3.5 ${selectedPhase ? "rotate-180" : ""}`} /></Button>
+      <div className="proof-check-actions">{onEdit && <Button variant="ghost" className="h-11 px-2 text-sm" disabled={pending} title="Edit check" aria-label={`Change check ${index + 1}`} onClick={() => onEdit(step)}><PencilLine className="size-4" /></Button>}
+      {onRemove && <Button variant="ghost" className="ml-auto h-11 px-2 text-muted-foreground" disabled={pending} title="Remove check" aria-label={`Remove check ${index + 1}`} onClick={() => onRemove(step.id)}><Trash2 className="size-4" /></Button>}</div>
     </div>
     <div id={`${id}-details`} hidden={selectedPhase === null} className="proof-phase-details">
       {visiblePhases.map(phase => <div key={phase.id}><h4>{phase.phase === "after" && step.checkType === "object_present_at_end" ? "At the end" : step.visualCheck?.kind === "condition" ? ({ anytime: "Visible condition", start: "At the start", end: "At the end" }[step.visualCheck.timing]) : phase.phase}</h4><p>{phase.description}</p><div className="proof-detail-chips">{phase.decisiveDetails.map((detail, i) => <span key={i}>{detail}</span>)}</div></div>)}
@@ -88,7 +94,8 @@ export function ProofCanvas({ plan, pending, changedIds, onEdit, onRemove }: Pro
   const selected = objects.find(object => object.key === selectedObject);
   const relationships = canvasRelationships(plan);
   return <div className="proof-canvas">
-    <div className="proof-canvas-intro"><div><span className="eyebrow">YOUR PROOF CANVAS</span><h3>What we’ll look for</h3></div><span className="proof-canvas-key"><CircleDashed className="size-3.5" aria-hidden="true" />Planned evidence</span></div>
+    <ul className="proof-canvas-checks">{plan.steps.map((step, index) => <CanvasCheck key={step.id} step={step} index={index} pending={pending} changed={changedIds.includes(step.id)} highlighted={selected?.checkIds.includes(step.id) ?? false} onEdit={onEdit} onRemove={plan.steps.length > 1 ? onRemove : undefined} />)}</ul>
+    <details className="proof-plan-details"><summary>Objects & check order<ChevronDown className="size-4" aria-hidden="true" /></summary>
     <div className="proof-object-list" aria-label="Explore objects in this plan"><Shapes className="size-4 text-muted-foreground" aria-hidden="true" />{objects.map(object => <button type="button" className="proof-object-chip" key={object.key} aria-pressed={selected?.key === object.key} onClick={() => setSelectedObject(current => current === object.key ? null : object.key)}>{object.label}<span>{object.checkIds.length}</span></button>)}</div>
     <p className="proof-object-hint" role="status">{selected ? `${selected.checkIds.length} ${selected.checkIds.length === 1 ? "check uses" : "checks use"} ${selected.label}. Select it again to clear the highlight.` : "Explore an object, or select a scene for its exact evidence requirements."}</p>
     {plan.steps.length > 1 && <div className="proof-relationships">
@@ -103,7 +110,7 @@ export function ProofCanvas({ plan, pending, changedIds, onEdit, onRemove }: Pro
       })}
       {plan.steps.some(step => step.checkType === "object_present_at_end") && <span className="proof-end-note">Final presence is checked independently at the end.</span>}
     </div>}
-    <ul className="proof-canvas-checks">{plan.steps.map((step, index) => <CanvasCheck key={step.id} step={step} index={index} pending={pending} changed={changedIds.includes(step.id)} highlighted={selected?.checkIds.includes(step.id) ?? false} onEdit={onEdit} onRemove={plan.steps.length > 1 ? onRemove : undefined} />)}</ul>
-    <p className="proof-canvas-disclaimer">Diagrams describe the plan. Video evidence comes after approval.</p>
+    </details>
+    <p className="proof-canvas-disclaimer">Illustrations show expected actions, not verified evidence.</p>
   </div>;
 }

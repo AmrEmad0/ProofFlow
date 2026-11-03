@@ -9,7 +9,7 @@ import { explainEvidence } from "../verification/chat";
 import { conceptTrackSchema } from "../../shared/verification";
 import { LIMITS } from "../../shared/proof-plan";
 import type { Config } from "../config";
-import { requireWorkspaceOrigin, sessionHash } from "../http/session";
+import { requireWorkspaceOrigin, sessionHash, sessionToken } from "../http/session";
 import { PlannerError } from "../planner/store";
 import { runDirectory } from "../verification/storage";
 import { verificationStore } from "../verification/store";
@@ -17,6 +17,9 @@ import type { VerificationWorker } from "../verification/worker";
 import { readRunDiagnostics } from "../verification/diagnostics";
 import { createVideoThumbnail } from "../media/thumbnail";
 import { createAnnotatedVideo } from "../media/annotated-video";
+
+import { manualReviewInputSchema } from "../../shared/manual-review";
+import { manualReviewStore } from "../verification/manual-review";
 
 const idParams = t.Object({ id: t.String({ format: "uuid" }) });
 
@@ -47,6 +50,8 @@ export function runRoutes(db: Database, config: Config, worker?: VerificationWor
       set.headers["cache-control"] = "no-store";
       if (request.method !== "GET" && request.method !== "HEAD") requireWorkspaceOrigin(request, config);
     })
+    .get("/api/reviews", ({ request }) => sessionToken(request) ? manualReviewStore(db).queue(sessionHash(request)) : [])
+    .post("/api/runs/:id/reviews", ({ params, request, body }) => manualReviewStore(db).save(params.id, sessionHash(request), body), { params: idParams, body: manualReviewInputSchema })
     .get("/api/verification/status", () => ({ available: Boolean(worker?.ready && config.modelConfigured) }))
     .get("/api/runs", ({ query, request }) => "planId" in query ? store.listForPlan(query.planId, sessionHash(request)) : store.list(query.approvedVersionId, sessionHash(request)), {
       query: t.Union([t.Object({ planId: t.String({ format: "uuid" }) }), t.Object({ approvedVersionId: t.String({ format: "uuid" }) })]),

@@ -1,6 +1,6 @@
 # ProofFlow
 
-Turn a visible task into a reviewable Proof Plan through chat with Meta Muse Spark. Attach a reference image or video to suggest a draft, or start from PackProof (product in, packing slip in, box closed), refine up to five checks, and explicitly approve a frozen version. Upload a short recording, then inspect findings with timestamp links and SAM object boxes.
+Create visual checks for everyday procedures without training a task-specific model or preparing a labeled training dataset. Describe a visible task in chat; Meta Muse Spark helps turn it into a reviewable Proof Plan. Attach a reference image or video to suggest a draft, or start from PackProof (product in, packing slip in, box closed), refine up to five checks, and explicitly approve a frozen version. Upload a short recording, then inspect findings with timestamp links and SAM object boxes.
 
 Requires Bun 1.4.4+, FFmpeg with libx264 and the subtitles filter (libass), FFprobe, and a Meta Model API key with Muse Spark Contributor and SAM 3.1 access.
 
@@ -37,4 +37,4 @@ The configured Muse model is `muse-spark-1.3`: submitted content may be used to 
 
 Built with Meta Model API (Muse Spark and SAM 3.1), React, TanStack, Elysia, Bun SQLite, and shadcn/ui. Native media processing uses FFmpeg and FFprobe.
 
-Homepage demo media: [cottonbro studio on Pexels](https://www.pexels.com/video/a-person-pouring-coffee-into-a-glass-4796418/), used under the [Pexels License](https://www.pexels.com/license/). The clip is cropped, resized, shortened to 24 seconds, and has no audio. Reference and evidence images are extracted frames. Homepage conversation, boxes, and findings are authored illustrations grounded in this clip, not live model outputs or a performance benchmark.
+Homepage illustrations are AI-generated packing, electronics assembly, and workbench still images. The packing and manufacturing walkthroughs use scripted chat, authored annotations, and illustrative findings, not live model outputs or a performance benchmark. Real verification requires user-supplied video.
