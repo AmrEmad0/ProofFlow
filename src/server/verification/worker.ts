@@ -7,6 +7,7 @@ import { LIMITS, trackedConcepts, type ApprovedPlan } from "../../shared/proof-p
 import { receiptSchema, type RunState } from "../../shared/receipt";
 import type { Config } from "../config";
 import { createMetaClient, MODELS } from "../meta/client";
+import { verificationError, verificationFailureHint, type VerificationError } from "../meta/errors";
 import { uploadVideo, deleteVideo } from "../meta/files";
 import { observeVideo, observationSchema, VIDEO_PROMPT_VERSION, type ObservationContext, type ModelUsage } from "../meta/observe";
 import { followUpQuestions, mergeFollowUp } from "../engine/follow-up";
@@ -63,7 +64,7 @@ export function createVerificationWorker(db: Database, config: Config, adapters?
         db.query("UPDATE runs SET remote_file_id = NULL WHERE id = ?").run(run.id);
         return true;
       }
-      console.warn("Remote video cleanup deferred", { runId: run.id });
+      console.warn("Remote video cleanup deferred", { runId: run.id, error: verificationError(error, config.MODEL_API_KEY) });
       return false;
     }
   }
@@ -114,9 +115,10 @@ export function createVerificationWorker(db: Database, config: Config, adapters?
   async function processRun(run: RunRow) {
     const timings: Record<string, number> = {};
     const warnings: string[] = [];
-    const requests: { model: string; phase: string; latencyMs: number; status: string; usage?: ModelUsage }[] = [];
+    const requests: { model: string; phase: string; latencyMs: number; status: string; usage?: ModelUsage; error?: VerificationError }[] = [];
     let museCalls = 0;
     let samCalls = 0;
+    let failure: VerificationError | undefined;
     async function request<T>(model: "muse" | "sam", phase: string, operation: () => Promise<T>): Promise<T> {
       if (model === "muse" ? museCalls >= 2 : samCalls >= 4) throw new Error("Per-video model request budget exhausted.");
       if (model === "muse") museCalls++; else samCalls++;
@@ -125,6 +127,11 @@ export function createVerificationWorker(db: Database, config: Config, adapters?
       if (model === "muse") recordUsage = usage => { entry.usage = usage; };
       const started = performance.now();
       try { const result = await measure(phase, operation); entry.status = "completed"; return result; }
+      catch (error) {
+        entry.error = verificationError(error, config.MODEL_API_KEY);
+        console.warn("Verification model request failed", { runId: run.id, model: entry.model, phase, error: entry.error });
+        throw error;
+      }
       finally { entry.latencyMs = Math.round(performance.now() - started); if (model === "muse") recordUsage = undefined; }
     }
     let phase: RunState = "preprocessing";
@@ -200,7 +207,8 @@ export function createVerificationWorker(db: Database, config: Config, adapters?
           }) });
           diagnostic.retainedBoxes = track.boxes.length;
           diagnostic.issue = null;
-        } catch {
+        } catch (error) {
+          console.warn("Verification tracking unavailable", { runId: run.id, model: MODELS.sam, phase: `sam_${index + 1}`, error: verificationError(error, config.MODEL_API_KEY) });
           track = { concept, outcome: "failed", boxes: [] };
           warnings.push(`Tracking for “${concept}” could not be used. Dependent findings remain uncertain.`);
         }
@@ -220,7 +228,7 @@ export function createVerificationWorker(db: Database, config: Config, adapters?
           : `No usable track returned for “${concept}”. This alone does not mean an action was missed.`,
           track.outcome === "failed" || !track.boxes.length ? "warning" : "progress");
       }
-      let observation = observationSchema.parse(await request("muse", "muse", () => models.observe(uploaded.id, plan, normalized.durationMs)));
+      let observation = await request("muse", "muse", async () => observationSchema.parse(await models.observe(uploaded.id, plan, normalized.durationMs)));
       stage = "tracking";
       activity("Visual analysis returned. These proposals still need evidence checks.");
       for (const step of plan.steps) {
@@ -242,7 +250,7 @@ export function createVerificationWorker(db: Database, config: Config, adapters?
           const frames = await createFollowUpFrames(normalizedPath, directory, media, tracks, observation, questions, config);
           if (frames.length) {
             activity("Reviewing selected video frames to resolve unclear evidence.");
-            const second = observationSchema.parse(await request("muse", "muse_follow_up", () => models.followUp!(uploaded.id, plan, normalized.durationMs, { initial: observation, questions, frames })));
+            const second = await request("muse", "muse_follow_up", async () => observationSchema.parse(await models.followUp!(uploaded.id, plan, normalized.durationMs, { initial: observation, questions, frames })));
             await Bun.write(join(directory, "muse-follow-up.json"), JSON.stringify(second), { mode: 0o600 });
             const merged = mergeFollowUp(observation, second, new Set(questions.map(question => question.stepId)));
             const reevaluated = evaluateEvidence(plan, merged, tracks, media.frameCount);
@@ -250,7 +258,8 @@ export function createVerificationWorker(db: Database, config: Config, adapters?
             evaluated = reevaluated;
             activity("Follow-up analysis returned. Rechecking the grounded evidence.");
           }
-        } catch {
+        } catch (error) {
+          console.warn("Verification follow-up unavailable", { runId: run.id, model: MODELS.muse, error: verificationError(error, config.MODEL_API_KEY) });
           activity("The follow-up was unavailable. Unresolved findings retain their uncertainty.", "warning");
           warnings.push("The grounded follow-up was unavailable. Unresolved findings retain their initial uncertainty.");
         }
@@ -271,14 +280,15 @@ export function createVerificationWorker(db: Database, config: Config, adapters?
         db.query("UPDATE runs SET state = 'completed', completed_at = ?, receipt_json = ?, timings_json = ?, warnings_json = ? WHERE id = ?")
           .run(new Date().toISOString(), JSON.stringify(receipt), JSON.stringify(timings), JSON.stringify(warnings), run.id);
       })();
-    } catch {
+    } catch (error) {
+      failure = verificationError(error, config.MODEL_API_KEY);
       timings.total = Math.round(performance.now() - totalStarted);
       if (hasLease()) db.query("UPDATE runs SET state = 'failed', error_message = ?, completed_at = ?, timings_json = ?, warnings_json = ? WHERE id = ? AND state != 'completed'")
         .run(phase === "preprocessing" ? `The recording could not be read or normalized. Use a readable MP4, MOV, or WebM up to ${LIMITS.durationMs / 1000} seconds and ${LIMITS.uploadBytes / 1024 / 1024} MB.`
-          : `Video ${phase} failed. No verdict was produced. Check Meta model access and try a new run.`, new Date().toISOString(), JSON.stringify(timings), JSON.stringify(warnings), run.id);
-      console.warn("Video verification failed", { runId: run.id, phase });
+          : `Video ${phase} failed. No verdict was produced. ${verificationFailureHint(failure)}`, new Date().toISOString(), JSON.stringify(timings), JSON.stringify(warnings), run.id);
+      console.warn("Video verification failed", { runId: run.id, phase, error: failure });
     } finally {
-      await Bun.write(join(directory, "model-requests.json"), JSON.stringify({ museCalls, samCalls, transportRetries: 0, requests }), { mode: 0o600 }).catch(() => {
+      await Bun.write(join(directory, "model-requests.json"), JSON.stringify({ museCalls, samCalls, transportRetries: 0, requests, ...(failure ? { failure: { phase, error: failure } } : {}) }), { mode: 0o600 }).catch(() => {
         console.warn("Model request diagnostics unavailable", { runId: run.id });
       });
       const latest = db.query<RunRow, [string]>("SELECT * FROM runs WHERE id = ?").get(run.id);
@@ -299,7 +309,7 @@ export function createVerificationWorker(db: Database, config: Config, adapters?
 
   function kick() {
     if (!accepting || work) return;
-    work = drain().catch(() => { console.error("Verification worker encountered a storage error"); }).finally(() => { work = null; });
+    work = drain().catch((error: unknown) => { console.error("Verification worker encountered a storage error", { error: verificationError(error, config.MODEL_API_KEY) }); }).finally(() => { work = null; });
   }
 
   function start() {
