@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowDown, ArrowRight, Check, CircleHelp, Eye, FileCheck2, Film, Focus, Layers3, MessageSquareText, Minus, ScanLine } from "lucide-react";
 import { ProductWalkthrough } from "./product-walkthrough";
-import { DevelopmentStory, WorkflowExamples, WorkflowIllustration } from "./workflow-story";
+import { DevelopmentStory, WorkflowExamples } from "./workflow-story";
+import { TrackedVideo } from "./tracked-video";
 import { type DemoId } from "./demo-content";
 import "./home.css";
 
@@ -13,7 +14,7 @@ function Brand() {
 const questions = [
   { question: "Do I need to train an AI model?", answer: "No. ProofFlow uses existing Muse Spark and SAM 3.1 models. You define and approve a Proof Plan, rather than collecting a training dataset or fine-tuning a model. Hosting and Meta model usage can still incur costs." },
   { question: "Can I use a different workflow?", answer: "Yes. Create a plan for the visible actions and conditions that matter to you. Edit and approve a new version when your procedure changes. Exact counts, measurements, duration guarantees, and hidden outcomes are not supported." },
-  { question: "What do I need for a real run?", answer: "An approved Proof Plan and a clear MP4, MOV, or WebM recording, up to 30 seconds and 25 MB. Live features require configured server-side Meta model access. The homepage examples use AI-generated still images, scripted chat, and authored annotations; it is not live verification." },
+  { question: "What do I need for a real run?", answer: "An approved Proof Plan and a clear MP4, MOV, or WebM recording, up to 30 seconds and 25 MB. Live features require configured server-side Meta model access. The homepage plays a prerecorded tracked video. Interactive examples use AI-generated still images, scripted chat, and authored annotations. Neither performs live verification." },
   { question: "What if the camera doesn’t show enough?", answer: "A finding can be uncertain. Missing tracks and hidden actions do not prove something never happened. Each run uses the frozen plan you approved, with video evidence for you to inspect." },
 ];
 
@@ -24,7 +25,7 @@ export function HomePage() {
     <main id="main-content">
       <section className="home-hero home-container">
         <div className="home-hero-copy"><div className="hero-eyebrow"><span />VISUAL AI FOR EVERYDAY WORK</div><h1>Your workflow.<br />Your know-how.<br /><span>Now, checkable.</span></h1><p>Turn the procedures you know into visual checks. Describe the task, approve the plan, and review your video evidence.</p><div className="hero-actions"><Link to="/new" className="home-button home-button-primary">Create your Proof Plan<ArrowRight size={17} aria-hidden="true" /></Link><a href="#product-demo" className="home-button home-button-outline">Try the example<ArrowDown size={16} aria-hidden="true" /></a></div><div className="hero-footnote"><span><Check size={14} aria-hidden="true" />No custom model training</span><span><Check size={14} aria-hidden="true" />No examples to label</span></div></div>
-        <WorkflowIllustration demoId={demoId} onSelect={setDemoId} />
+        <TrackedVideo />
       </section>
       <div className="home-model-strip home-container"><span>POWERED BY META MODELS</span><div><span className="meta-mark" aria-hidden="true">∞</span><strong>Muse Spark</strong><span className="model-strip-plus">+</span><Focus size={19} aria-hidden="true" /><strong>SAM 3.1</strong></div><p>Existing models. Your procedure.</p></div>
       <DevelopmentStory />

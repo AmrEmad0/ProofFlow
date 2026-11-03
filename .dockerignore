@@ -19,3 +19,4 @@ docs/private
 **/*.mp4
 **/*.mov
 **/*.webm
+!public/videos/packing-tracked.mp4

@@ -13,7 +13,7 @@ RUN bun run check
 FROM base AS runtime
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile --production \
-    && mkdir -p /app/data/private \
+    && mkdir -p /app/data/private /app/data/demos \
     && chown -R bun:bun /app/data
 COPY --from=build --chown=bun:bun /app/dist ./dist
 COPY --from=build --chown=bun:bun /app/src ./src

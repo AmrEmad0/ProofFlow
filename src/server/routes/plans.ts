@@ -37,7 +37,8 @@ export function planRoutes(db: Database, config: Config, conversation?: PlanConv
       let token = sessionToken(request);
       if (!token) {
         token = randomBytes(32).toString("hex");
-        set.headers["set-cookie"] = `proofflow_session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000${new URL(request.url).protocol === "https:" ? "; Secure" : ""}`;
+        const secure = new URL(request.url).protocol === "https:" || (config.NODE_ENV === "production" && new URL(config.WEB_ORIGIN).protocol === "https:");
+        set.headers["set-cookie"] = `proofflow_session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000${secure ? "; Secure" : ""}`;
       }
       const hash = createHash("sha256").update(token).digest("hex");
       return store.create(hash, body.template);

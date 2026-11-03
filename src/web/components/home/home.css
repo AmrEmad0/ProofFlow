@@ -33,6 +33,52 @@
 .hero-footnote { display:flex; flex-wrap:wrap; gap:17px; margin-top:20px; color:#626b58; font-size:11px; }
 .hero-footnote > span { display:inline-flex; align-items:center; gap:5px; }
 .hero-footnote svg { color:#6e8460; }
+.home-tracked-video { min-width:0; margin:0; }
+.tracked-video-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:13px; color:var(--home-muted); font-size:9px; font-weight:550; letter-spacing:.07em; }
+.tracked-video-heading > span:first-child { display:flex; align-items:center; gap:7px; color:var(--home-orange); }
+.tracked-video-heading > span:last-child { white-space:nowrap; font-size:8px; letter-spacing:.09em; }
+.tracked-video-frame { overflow:hidden; border:1px solid #394138; border-radius:13px; background:#232b24; box-shadow:0 24px 55px -24px #29372850,0 3px 8px #29372810; }
+.tracked-video-toolbar { display:flex; align-items:center; gap:13px; min-height:45px; padding:10px 15px; color:#dee5d8; font-size:10px; }
+.tracked-video-dots { display:flex; gap:4px; }
+.tracked-video-dots i { width:5px; height:5px; border-radius:50%; background:#71806e; }
+.tracked-video-badge { margin-left:auto; padding:4px 7px; border:1px solid #ffffff1c; border-radius:4px; color:#c0d0b7; font-size:9px; }
+.tracked-video-screen { position:relative; aspect-ratio:16/9; background:#171d18; }
+.tracked-video-screen video { display:block; width:100%; height:100%; object-fit:contain; }
+.tracked-video-play { position:absolute; bottom:17px; left:17px; right:17px; display:flex; align-items:center; gap:12px; padding:12px 14px; border:1px solid #ffffff38; border-radius:9px; background:#202820ef; color:#fff; text-align:left; box-shadow:0 4px 18px #0002; transition:background 180ms; }
+.tracked-video-play:hover { background:#354333; }
+.tracked-video-play-icon { display:grid; place-items:center; width:39px; height:39px; flex-shrink:0; border-radius:50%; background:#e8eddd; color:#33432d; }
+.tracked-video-play-icon svg { margin-left:2px; }
+.tracked-video-play > span:nth-child(2) { display:flex; flex-direction:column; gap:4px; }
+.tracked-video-play strong { font-size:12px; font-weight:550; }
+.tracked-video-play small { font-size:10px; color:#c4ccbb; }
+.tracked-video-play > svg:last-child { margin-left:auto; color:#c4ccbb; }
+.tracked-video-legend { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:20px; padding:14px 12px; border-top:1px solid #ffffff0a; color:#c2cdbb; font-size:9px; }
+.tracked-video-legend > span { display:flex; align-items:center; gap:6px; }
+.tracked-video-legend i { display:block; width:7px; height:7px; border:1px solid currentColor; border-radius:2px; }
+.track-box { color:#53bfa1; }
+.track-container { color:#ed874a; }
+.track-slip { color:#54aed2; }
+.home-tracked-video figcaption { margin-top:18px; color:var(--home-ink); font-size:13px; font-weight:500; line-height:1.7; }
+.home-tracked-video figcaption > span { display:block; margin-top:4px; color:var(--home-muted); font-size:11px; font-weight:400; line-height:1.8; }
+.tracked-video-error { margin-top:10px; color:var(--home-muted); font-size:12px; line-height:1.8; }
+.tracked-video-error a { color:var(--home-orange); text-decoration:underline; }
+@media (max-width:850px) and (min-width:761px) {
+  .tracked-video-toolbar { gap:8px; padding-inline:10px; }
+  .tracked-video-dots { display:none; }
+  .tracked-video-play { bottom:10px; left:10px; right:10px; gap:8px; padding:10px; }
+  .tracked-video-play strong { font-size:10px; }
+  .tracked-video-play small { font-size:9px; }
+  .tracked-video-legend { gap:10px; font-size:8px; }
+}
+@media (max-width:760px) { .home-tracked-video { width:100%; max-width:600px; margin-inline:auto; } }
+@media (max-width:450px) {
+  .tracked-video-heading { font-size:8px; letter-spacing:.03em; }
+  .tracked-video-play { bottom:10px; left:10px; right:10px; gap:9px; padding:10px; }
+  .tracked-video-play-icon { width:32px; height:32px; }
+  .tracked-video-play strong { font-size:11px; }
+  .tracked-video-legend { gap:13px; font-size:8px; }
+}
+@media (prefers-reduced-motion:reduce) { .tracked-video-play { transition:none; } }
 .workflow-hero-visual { position:relative; padding-bottom:45px; }
 .workflow-photo { position:relative; height:430px; overflow:hidden; border:1px solid #ddd7c8; border-radius:16px; background:#e6dcc9; box-shadow:0 18px 45px -30px #443b2660; }
 .workflow-photo > img { width:100%; height:100%; object-fit:cover; object-position:center; }

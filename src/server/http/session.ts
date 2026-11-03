@@ -29,7 +29,8 @@ export function workspaceOrigins(config: Config): string[] {
 
 export function requireWorkspaceOrigin(request: Request, config: Config): void {
   const origin = request.headers.get("origin");
-  if (origin && origin !== new URL(request.url).origin && !(config.NODE_ENV === "development" && workspaceOrigins(config).includes(origin))) {
+  // TLS can terminate at a proxy; trust the configured origin, not forwarded headers.
+  if (origin && origin !== new URL(request.url).origin && !workspaceOrigins(config).includes(origin)) {
     throw new PlannerError(403, "This request must come from your ProofFlow workspace.");
   }
 }
