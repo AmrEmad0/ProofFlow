@@ -8,6 +8,7 @@ import { createMetaClient, MODELS, PROMPT_VERSION } from "../meta/client";
 import { conversePlan, type PlanConversation } from "../planner/chat";
 import { PlannerError, plannerStore } from "../planner/store";
 import { requireWorkspaceOrigin, sessionHash, sessionToken } from "../http/session";
+import { verificationError } from "../meta/errors";
 import type { VerificationWorker } from "../verification/worker";
 import type { RunRow } from "../verification/store";
 import { manualPlanInputSchema, editChecksSchema } from "../../shared/planner";
@@ -143,9 +144,10 @@ export function planRoutes(db: Database, config: Config, conversation?: PlanConv
         } catch (error) {
           if (error instanceof PlannerError) throw error;
           if (error instanceof OpenAI.APIError) {
-            console.warn("Meta planning request failed", { status: error.status, requestId: error.requestID });
+            console.warn("Meta planning request failed", { model: MODELS.muse, ...verificationError(error, config.MODEL_API_KEY) });
             if (error.status === 429) throw new PlannerError(429, "Meta AI is busy or its quota has been reached. Please try again shortly.");
             if (error.status === 401 || error.status === 403) throw new PlannerError(503, "Meta AI could not authenticate. Check the server API key and model access.");
+            if (error.status === 404) throw new PlannerError(503, "Meta AI could not find the configured model or API endpoint. Check META_API_BASE_URL and access to Muse Spark on the server. Your saved draft is unchanged.");
           }
           throw new PlannerError(502, "Meta AI could not return a valid proof plan. Your saved draft is unchanged. Please try again.");
         } finally {

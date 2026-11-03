@@ -17,6 +17,7 @@ RUN bun install --frozen-lockfile --production \
     && chown -R bun:bun /app/data
 COPY --from=build --chown=bun:bun /app/dist ./dist
 COPY --from=build --chown=bun:bun /app/src ./src
+COPY --from=build --chown=bun:bun /app/scripts/check-meta.ts ./scripts/check-meta.ts
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=3000 \
     DATABASE_PATH=/app/data/proofflow.sqlite STORAGE_PATH=/app/data/private
 USER bun

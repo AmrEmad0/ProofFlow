@@ -16,6 +16,7 @@
     "typecheck": "bun run routes:generate && bun check --no-script",
     "routes:generate": "bun scripts/generate-routes.ts",
     "db:migrate": "bun scripts/migrate.ts",
+    "meta:check": "bun scripts/check-meta.ts",
     "test": "bun test",
     "check": "bun run typecheck && bun test && bun run build"
   },
