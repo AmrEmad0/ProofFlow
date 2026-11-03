@@ -5,6 +5,7 @@ import { verificationError } from "../src/server/meta/errors";
 const config = loadConfig();
 console.info("Meta configuration", {
   defaultEndpoint: config.META_API_BASE_URL.replace(/\/+$/, "") === "https://api.meta.ai/v1",
+  proxyConfigured: new URL(config.META_API_BASE_URL).searchParams.has("url"),
   keyConfigured: config.modelConfigured,
   museModel: MODELS.muse,
   samModel: MODELS.sam,
