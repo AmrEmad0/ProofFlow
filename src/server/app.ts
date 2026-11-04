@@ -16,7 +16,7 @@ import { triggerRoutes } from "./routes/triggers";
 import { eventRoutes } from "./routes/events";
 
 export function createApp(db: Database, config: Config, conversation?: PlanConversation, worker?: VerificationWorker, analyzeReference?: ReferenceAnalysis) {
-  return new Elysia({ normalize: false, serve: { maxRequestBodySize: 26 * 1024 * 1024, idleTimeout: 60 } })
+  return new Elysia({ normalize: false, serve: { maxRequestBodySize: 26 * 1024 * 1024, idleTimeout: 255 } })
     .use(config.NODE_ENV === "development"
       ? cors({ origin: workspaceOrigins(config), methods: ["GET", "POST", "PATCH", "DELETE"], credentials: false })
       : new Elysia())

@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, useSyncExternalStore } from "react";
+import { useEffect, useId, useState, useSyncExternalStore, type ReactNode } from "react";
 import { CircleAlert, LoaderCircle, Check, ChevronDown } from "lucide-react";
 import { subscribeWorkspaceConnection, workspaceStreamConnected } from "@/lib/workspace-events";
 import { verificationStage, verificationStages } from "@/lib/verification-progress";
@@ -11,7 +11,7 @@ const headings: Record<RunState, string> = {
   analyzing: "Finding evidence", verifying: "Confirming findings", completed: "Ready for review", failed: "Video check failed",
 };
 
-export function VerificationStatus({ run }: { run: RunDetails }) {
+export function VerificationStatus({ run, actions }: { run: RunDetails; actions?: ReactNode }) {
   const active = isActiveRun(run.state);
   const activityId = useId();
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
@@ -48,9 +48,12 @@ export function VerificationStatus({ run }: { run: RunDetails }) {
         <span className="tabular-nums" aria-label="Elapsed time">Elapsed {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, "0")}</span>
         <span role="status" title={connected ? "Progress updates arrive automatically as analysis milestones finish." : "Reconnecting to live updates. Active recordings refresh every 15 seconds."} className="inline-flex items-center gap-1.5"><span aria-hidden="true" className={`size-1.5 rounded-full ${connected ? "bg-emerald-600" : "bg-amber-600"}`} />{connected ? "Live updates connected" : "Reconnecting · refreshing every 15s"}</span>
       </div>}
-      {run.activity.length > 0 && <button type="button" aria-expanded={activityOpen} aria-controls={activityId} onClick={() => setExpandedRunId(activityOpen ? null : run.id)} className={`inline-flex shrink-0 items-center gap-1 rounded py-1 text-[11px] text-muted-foreground hover:text-foreground ${active ? "" : "ml-auto"}`}>
+      {(run.activity.length > 0 || actions) && <div className="ml-auto flex shrink-0 items-center gap-3">
+      {run.activity.length > 0 && <button type="button" aria-expanded={activityOpen} aria-controls={activityId} onClick={() => setExpandedRunId(activityOpen ? null : run.id)} className="inline-flex shrink-0 items-center gap-1 rounded py-1 text-[11px] text-muted-foreground hover:text-foreground">
         Analysis activity<ChevronDown className={`size-3 transition-transform ${activityOpen ? "rotate-180" : ""}`} aria-hidden="true" />
       </button>}
+      {actions}
+      </div>}
     </div>
     {active && <p role="status" className={`text-[11px] leading-5 sm:pl-[26px] ${latest?.kind === "warning" ? "text-amber-800" : "text-muted-foreground"}`}>{latest?.message ?? (run.state === "queued" ? "Your video is queued. Analysis will start when the worker is available." : headings[run.state])}</p>}
     {active && <p className="sr-only">Preliminary results may change during confirmation.</p>}

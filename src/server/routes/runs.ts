@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { mkdir, rm } from "node:fs/promises";
+import { chmod, copyFile, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { Elysia, t } from "elysia";
 import { evidenceChatRequestSchema } from "../../shared/evidence-chat";
@@ -86,6 +86,39 @@ export function runRoutes(db: Database, config: Config, worker?: VerificationWor
       consent: t.Literal("true"), video: t.File({ minSize: 1, maxSize: LIMITS.uploadBytes }),
       taskSessionId: t.Optional(t.String({ format: "uuid" })),
     }, { additionalProperties: false }) })
+    .post("/api/runs/:id/recheck", async ({ params, body, request, set }) => {
+      const hash = sessionHash(request);
+      const source = store.row(params.id, hash);
+      if (source.state !== "completed" && source.state !== "failed") throw new PlannerError(409, "Wait for this run to finish before rechecking it.");
+      const approved = store.approved(source.plan_version_id, hash);
+      if (!worker?.ready || !config.modelConfigured) throw new PlannerError(503, "Video verification is not ready. Check the server worker and Meta API configuration.");
+      if (body.consent !== "true") throw new PlannerError(400, "Consent to send this recording to Meta is required.");
+      if (receiving.has(hash) || receiving.size >= 2) throw new PlannerError(429, "Another video is being received. Please wait.");
+      receiving.add(hash);
+      const id = crypto.randomUUID();
+      const directory = runDirectory(config, id);
+      let saved = false;
+      try {
+        await mkdir(directory, { recursive: true, mode: 0o700 });
+        const path = join(directory, "source.upload");
+        try {
+          await copyFile(source.video_path, path);
+        } catch (error) {
+          if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") throw new PlannerError(404, "The original video is no longer available. Upload it again to check it.");
+          throw error;
+        }
+        await chmod(path, 0o600);
+        store.row(params.id, hash);
+        const run = store.create(id, source.plan_version_id, approved.contractHash, hash, path);
+        saved = true;
+        set.status = 202;
+        worker.kick();
+        return run;
+      } finally {
+        receiving.delete(hash);
+        if (!saved) await rm(directory, { recursive: true, force: true });
+      }
+    }, { params: idParams, body: t.Object({ consent: t.Literal("true") }, { additionalProperties: false }) })
     .get("/api/runs/:id", async ({ params, request }) => {
       const details = store.details(params.id, sessionHash(request));
       {

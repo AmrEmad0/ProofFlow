@@ -11,13 +11,16 @@ export async function* plannerEvents(
     async start(controller) {
       const emit = (event: PlannerStreamEvent) => { if (!signal.aborted) controller.enqueue(event); };
       emit({ type: "start" });
+      const heartbeat = setInterval(() => emit({ type: "ping" }), 15_000);
       try {
         const saved = await complete((text) => emit({ type: "reply", text }), signal, preview => emit({ type: "preview", preview }));
+        signal.throwIfAborted();
         emit({ type: "done", saved });
       } catch (error) {
         emit({ type: "error", message: error instanceof Error ? error.message : "The reply was interrupted. Please try again." });
       } finally {
-        controller.close();
+        clearInterval(heartbeat);
+        if (!cancellation.signal.aborted) controller.close();
       }
     },
     cancel() { cancellation.abort(); },

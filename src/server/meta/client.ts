@@ -34,7 +34,7 @@ export function createMetaClient(config: Config): OpenAI {
     apiKey: config.MODEL_API_KEY,
     baseURL,
     ...(proxyFetch ? { fetch: proxyFetch } : {}),
-    timeout: 120_000,
+    timeout: config.META_REQUEST_TIMEOUT_MS,
     maxRetries: 1,
   });
 }

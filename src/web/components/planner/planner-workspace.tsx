@@ -71,7 +71,8 @@ export function PlannerWorkspace({ reportsMode = false, reviewMode = false, init
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [preparingTrigger, setPreparingTrigger] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
+  const [deleteTargets, setDeleteTargets] = useState<{ id: string; title: string }[]>([]);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const health = useQuery(plannerStatusQuery);
   const templates = useQuery(plansQuery);
@@ -224,18 +225,29 @@ export function PlannerWorkspace({ reportsMode = false, reviewMode = false, init
   }
 
   const removePlan = useMutation({
-    mutationFn: (id: string) => withFeedback(deletePlan(id), { loading: "Deleting plan…", success: "Plan deleted", error: "Couldn’t delete plan" }),
-    onSuccess: (_result, id) => {
-      if (id === activeId) select(null);
-      queryClient.removeQueries({ queryKey: savedPlanQuery(id).queryKey, exact: true });
-      queryClient.setQueryData(plansQuery.queryKey, (items) => items?.filter((item) => item.id !== id));
-      void queryClient.invalidateQueries({ queryKey: plansQuery.queryKey, exact: true });
-      setDeleteTarget(null);
+    mutationFn: async (targets: { id: string; title: string }[]) => {
+      const failures: { id: string; title: string; message: string }[] = [];
+      // The server serializes destructive plan changes within a workspace.
+      for (const target of targets) {
+        try {
+          await deletePlan(target.id);
+          if (target.id === activeId) select(null);
+          queryClient.removeQueries({ queryKey: savedPlanQuery(target.id).queryKey, exact: true });
+          queryClient.setQueryData(plansQuery.queryKey, (items) => items?.filter((item) => item.id !== target.id));
+        } catch (failure) {
+          failures.push({ ...target, message: failure instanceof Error ? failure.message : "The plan could not be deleted." });
+          void queryClient.invalidateQueries({ queryKey: savedPlanQuery(target.id).queryKey, exact: true });
+        }
+      }
+      return { failures, deleted: targets.length - failures.length };
     },
-    onError: (_error, id) => {
-      void queryClient.invalidateQueries({ queryKey: savedPlanQuery(id).queryKey, exact: true });
-      void queryClient.invalidateQueries({ queryKey: plansQuery.queryKey, exact: true });
+    onSuccess: ({ failures, deleted }) => {
+      setDeleteTargets(failures);
+      setDeleteError(failures.length ? failures.map(failure => `${failure.title}: ${failure.message}`).join("\n") : null);
+      if (deleted) toast.add({ type: "success", title: `${deleted} ${deleted === 1 ? "plan" : "plans"} deleted` });
+      if (failures.length) toast.add({ type: "error", title: `${failures.length} ${failures.length === 1 ? "plan couldn’t" : "plans couldn’t"} be deleted`, description: "Review the remaining plans and retry." });
     },
+    onSettled: () => { void queryClient.invalidateQueries({ queryKey: plansQuery.queryKey, exact: true }); },
     retry: false,
   });
 
@@ -303,7 +315,7 @@ export function PlannerWorkspace({ reportsMode = false, reviewMode = false, init
       }} onNew={() => {
         select(null);
         toast.add({ type: "info", title: "Ready for a new plan" });
-      }} onExample={() => act({ type: "create", template: "packproof" })} onProperties={() => setPropertiesOpen(true)} onDelete={(plan) => { removePlan.reset(); setDeleteTarget(plan); }} onSettings={() => setSettingsOpen(true)} onRetry={() => { void withFeedback(templates.refetch({ throwOnError: true }), { loading: "Reloading plans…", success: "Plans reloaded", error: "Couldn’t reload plans" }).catch(() => {}); }} />
+      }} onExample={() => act({ type: "create", template: "packproof" })} onProperties={() => setPropertiesOpen(true)} onDelete={(plan) => { setDeleteError(null); setDeleteTargets([plan]); }} onBulkDelete={(plans) => { setDeleteError(null); setDeleteTargets(plans); }} onSettings={() => setSettingsOpen(true)} onRetry={() => { void withFeedback(templates.refetch({ throwOnError: true }), { loading: "Reloading plans…", success: "Plans reloaded", error: "Couldn’t reload plans" }).catch(() => {}); }} />
       <SidebarInset id="main-content" className="min-w-0">
         <header className="flex h-14 shrink-0 items-center gap-3 border-b px-4 sm:px-8">
           <SidebarTrigger aria-label="Toggle plans sidebar" />
@@ -342,7 +354,7 @@ export function PlannerWorkspace({ reportsMode = false, reviewMode = false, init
       }</SidebarInset>
       <PlanProperties saved={saved} open={propertiesOpen} onOpenChange={setPropertiesOpen} pending={pending} onRevise={openEditor} />
       <WorkspaceSettings open={settingsOpen} onOpenChange={setSettingsOpen} />
-      <DeletePlanDialog target={deleteTarget} pending={removePlan.isPending} error={removePlan.error?.message ?? null} onClose={() => setDeleteTarget(null)} onConfirm={() => { if (deleteTarget) removePlan.mutate(deleteTarget.id); }} />
+      <DeletePlanDialog targets={deleteTargets} pending={removePlan.isPending} error={deleteError} onClose={() => setDeleteTargets([])} onConfirm={() => { if (deleteTargets.length) { setDeleteError(null); removePlan.mutate(deleteTargets); } }} />
     </SidebarProvider>
   );
 }

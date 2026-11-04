@@ -8,6 +8,7 @@ services:
     environment:
       MODEL_API_KEY: ${MODEL_API_KEY:-}
       META_API_BASE_URL: ${META_API_BASE_URL:-https://api.meta.ai/v1}
+      META_REQUEST_TIMEOUT_MS: ${META_REQUEST_TIMEOUT_MS:-600000}
       WEB_ORIGIN: ${WEB_ORIGIN:-https://proofflow.amremad.com}
       DEMO_VIDEO_PATH: /app/data/demos
       CAMERA_SOURCES: '${CAMERA_SOURCES:-{}}'

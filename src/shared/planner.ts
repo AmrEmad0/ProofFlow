@@ -105,6 +105,7 @@ export type PlannerPreview = z.infer<typeof plannerPreviewSchema>;
 
 export const plannerStreamEventSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("start") }),
+  z.strictObject({ type: z.literal("ping") }),
   z.strictObject({ type: z.literal("reply"), text: z.string().max(4000) }),
   z.strictObject({ type: z.literal("preview"), preview: plannerPreviewSchema }),
   z.strictObject({ type: z.literal("done"), saved: savedPlanSchema }),

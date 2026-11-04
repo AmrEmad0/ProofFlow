@@ -9,6 +9,7 @@ const envSchema = z.object({
   DATABASE_PATH: z.string().min(1).default("./data/proofflow.sqlite"),
   STORAGE_PATH: z.string().min(1).default("./data/private"),
   META_API_BASE_URL: z.url().default("https://api.meta.ai/v1"),
+  META_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1000).max(1_800_000).default(600_000),
   DEMO_VIDEO_PATH: z.string().min(1).default("./data/demos"),
   CAMERA_SOURCES: z.string().default("{}"),
   MODEL_API_KEY: z.string().optional(),

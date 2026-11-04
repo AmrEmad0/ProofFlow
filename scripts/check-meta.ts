@@ -7,12 +7,13 @@ console.info("Meta configuration", {
   defaultEndpoint: config.META_API_BASE_URL.replace(/\/+$/, "") === "https://api.meta.ai/v1",
   proxyConfigured: new URL(config.META_API_BASE_URL).searchParams.has("url"),
   keyConfigured: config.modelConfigured,
+  requestTimeoutMs: config.META_REQUEST_TIMEOUT_MS,
   museModel: MODELS.muse,
   samModel: MODELS.sam,
 });
 
 try {
-  const client = createMetaClient(config).withOptions({ timeout: 20_000, maxRetries: 0 });
+  const client = createMetaClient(config).withOptions({ maxRetries: 0 });
   const probes: Record<string, () => Promise<unknown>> = {
     models: async () => {
       const available = (await client.models.list()).data.map(model => model.id);
