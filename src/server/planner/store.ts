@@ -1,3 +1,5 @@
+import { PACK_DEMO } from "../../shared/demo";
+import { DEMO_OWNER } from "../demo/access";
 import type { Database } from "bun:sqlite";
 import { buildManualPlan, manualPlanInputSchema, describeEditedCheck, editChecksSchema, savedPlanSchema, type PlannerMessage, type PlannerReply, type SavedPlan, type ReferenceMedia } from "../../shared/planner";
 import { packproofTemplate } from "../../shared/packproof";
@@ -30,7 +32,8 @@ export function plannerStore(db: Database) {
     return savedPlanSchema.parse({
       id, revision: owner.revision, version: row?.version ?? null, versionId: row?.id ?? null,
       status: row?.status ?? "draft", contractHash: plan ? hashContract(plan) : null,
-      approvedAt: row?.approved_at ?? null, videoConsentAt: owner.video_consent_at, plan, messages, referenceMedia: owner.reference_media_json ? JSON.parse(owner.reference_media_json) : null,
+      approvedAt: row?.approved_at ?? null, videoConsentAt: id === PACK_DEMO.planId ? null : owner.video_consent_at, plan,
+      messages: id === PACK_DEMO.planId ? [] : messages, referenceMedia: id !== PACK_DEMO.planId && owner.reference_media_json ? JSON.parse(owner.reference_media_json) : null,
     });
   }
 
@@ -57,14 +60,17 @@ export function plannerStore(db: Database) {
   }
 
   function list(sessionHash: string) {
-    return db.query<{ id: string; title: string; status: "draft" | "approved" }, [string]>(`
+    return db.query<{ id: string; title: string; status: "draft" | "approved" }, [string, string, string]>(`
       SELECT p.id, p.title, COALESCE(v.status, 'draft') AS status FROM plans p
       JOIN planner_owners o ON o.plan_id = p.id
       LEFT JOIN plan_versions v ON v.plan_id = p.id AND v.version = (SELECT max(version) FROM plan_versions WHERE plan_id = p.id)
-      WHERE o.session_hash = ? AND p.deleted_at IS NULL ORDER BY p.created_at DESC, p.rowid DESC`).all(sessionHash);
+      WHERE (o.session_hash = ? OR p.id = ?) AND p.deleted_at IS NULL
+      ORDER BY (p.id = ?) DESC, p.created_at DESC, p.rowid DESC`).all(sessionHash, PACK_DEMO.planId, PACK_DEMO.planId)
+      .map(plan => plan.id === PACK_DEMO.planId ? { ...plan, title: PACK_DEMO.title } : plan);
   }
 
   function useStarter(id: string, sessionHash: string, revision: number) {
+    if (id === PACK_DEMO.planId) throw new PlannerError(403, "This demo is read-only. Copy it to make changes.");
     db.transaction(() => {
       const current = read(id, sessionHash);
       if (current.revision !== revision) throw new PlannerError(409, "This plan changed. Reload before choosing an example.");
@@ -76,6 +82,7 @@ export function plannerStore(db: Database) {
   }
 
   function saveManual(id: string, sessionHash: string, input: unknown) {
+    if (id === PACK_DEMO.planId) throw new PlannerError(403, "This demo is read-only. Copy it to make changes.");
     const parsed = manualPlanInputSchema.safeParse(input);
     if (!parsed.success) throw new PlannerError(400, "Add a plan name and fill in 1–5 checks.");
     db.transaction(() => {
@@ -106,6 +113,7 @@ export function plannerStore(db: Database) {
   }
 
   function saveReply(id: string, sessionHash: string, revision: number, message: string, reply: PlannerReply, reference?: ReferenceMedia) {
+    if (id === PACK_DEMO.planId) throw new PlannerError(403, "This demo is read-only. Copy it to make changes.");
     db.transaction(() => {
       const current = read(id, sessionHash);
       if (current.revision !== revision) throw new PlannerError(409, "This template changed. Reload it before sending again.");
@@ -120,6 +128,7 @@ export function plannerStore(db: Database) {
   }
 
   function approve(id: string, sessionHash: string, revision: number, contractHash: string, videoConsent = false) {
+    if (id === PACK_DEMO.planId) throw new PlannerError(403, "This demo is read-only. Copy it to make changes.");
     db.transaction(() => {
       const current = read(id, sessionHash);
       if (current.revision !== revision || current.contractHash !== contractHash) {
@@ -137,6 +146,7 @@ export function plannerStore(db: Database) {
   }
 
   function revise(id: string, sessionHash: string, revision: number) {
+    if (id === PACK_DEMO.planId) throw new PlannerError(403, "This demo is read-only. Copy it to make changes.");
     db.transaction(() => {
       const current = read(id, sessionHash);
       if (current.revision !== revision) throw new PlannerError(409, "The template changed. Reload it to continue.");
@@ -148,6 +158,7 @@ export function plannerStore(db: Database) {
   }
 
   function changeDraft(id: string, sessionHash: string, revision: number, change: (current: SavedPlan) => ProofPlan, allowApproved = false) {
+    if (id === PACK_DEMO.planId) throw new PlannerError(403, "This demo is read-only. Copy it to make changes.");
     db.transaction(() => {
       const current = read(id, sessionHash);
       if (current.revision !== revision) throw new PlannerError(409, "This plan changed. Reload the saved draft before trying again. Your edit is still here.");
@@ -196,7 +207,7 @@ export function plannerStore(db: Database) {
   function copy(id: string, sessionHash: string, revision: number) {
     let copiedId = "";
     db.transaction(() => {
-      const current = read(id, sessionHash);
+      const current = read(id, id === PACK_DEMO.planId ? DEMO_OWNER : sessionHash);
       if (current.revision !== revision) throw new PlannerError(409, "This plan changed. Reload it before making a copy.");
       if (!current.plan) throw new PlannerError(400, "Create some checks before making a copy.");
       copiedId = create(sessionHash, "blank").id;
@@ -206,6 +217,7 @@ export function plannerStore(db: Database) {
   }
 
   function markDeleted(id: string, sessionHash: string) {
+    if (id === PACK_DEMO.planId) throw new PlannerError(403, "This demo is read-only. Copy it to make changes.");
     db.transaction(() => {
       read(id, sessionHash);
       const active = db.query(`SELECT 1 FROM runs r JOIN plan_versions v ON v.id = r.plan_version_id
@@ -218,10 +230,12 @@ export function plannerStore(db: Database) {
   }
 
   function restoreDeleted(id: string) {
+    if (id === PACK_DEMO.planId) throw new PlannerError(403, "This demo is read-only. Copy it to make changes.");
     db.query("UPDATE plans SET deleted_at = NULL WHERE id = ?").run(id);
   }
 
   function finishDelete(id: string) {
+    if (id === PACK_DEMO.planId) throw new PlannerError(403, "This demo is read-only. Copy it to make changes.");
     db.transaction(() => {
       db.query("DELETE FROM trigger_events WHERE plan_id = ?").run(id);
       db.query("DELETE FROM task_sessions WHERE plan_id = ?").run(id);

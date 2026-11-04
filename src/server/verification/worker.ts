@@ -1,3 +1,4 @@
+import { demoVideo } from "../../shared/demo";
 import type { Database } from "bun:sqlite";
 import { readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -70,6 +71,7 @@ export function createVerificationWorker(db: Database, config: Config, adapters?
   }
 
   async function removeRun(run: RunRow) {
+    if (demoVideo(run.id)) return false;
     if (!await remoteCleanup(run)) return false;
     await rm(runDirectory(config, run.id), { recursive: true, force: true });
     db.transaction(() => {

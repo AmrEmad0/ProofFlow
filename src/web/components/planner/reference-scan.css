@@ -1,0 +1,44 @@
+.chat-panel .chat-history-reference { max-height: min(48rem, 70dvh); }
+.reference-scan { overflow: hidden; border: 1px solid var(--border); border-radius: 16px; background: var(--card); box-shadow: 0 4px 20px color-mix(in srgb, var(--foreground) 3%, transparent); }
+.reference-scan-heading { display: flex; align-items: center; gap: 10px; padding: 16px; }
+.reference-scan-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 11px; color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, transparent); }
+.reference-scan-eyebrow { font-size: 9px; letter-spacing: .14em; font-weight: 600; color: var(--muted-foreground); }
+.reference-scan-heading h3 { margin-top: 3px; font-size: 14px; font-weight: 600; letter-spacing: -.02em; }
+.reference-scan-live { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 10px; color: var(--muted-foreground); white-space: nowrap; }
+.reference-scan-pulse { width: 5px; height: 5px; border-radius: 50%; background: var(--primary); animation: reference-breathe .9s ease-in-out infinite; }
+.reference-scan-signal { display: flex; align-items: center; gap: 2px; height: 14px; }
+.reference-scan-signal > i { width: 2px; height: 10px; border-radius: 2px; background: var(--primary); animation: reference-signal 600ms ease-in-out infinite alternate; }
+.reference-scan-signal > i:nth-child(2) { animation-delay: -150ms; }
+.reference-scan-signal > i:nth-child(3) { animation-delay: -300ms; }
+.reference-scan-signal > i:nth-child(4) { animation-delay: -450ms; }
+.reference-scan-hud { position: absolute; inset: 17px 20px auto; display: flex; justify-content: space-between; gap: 10px; color: #ffe4cd; font: 9px ui-monospace, monospace; letter-spacing: .09em; }
+.reference-scan-hud > span { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border: 1px solid #ffd2ad26; border-radius: 4px; background: #141a17b3; }
+.reference-scan-view { position: relative; isolation: isolate; height: clamp(150px, 22vw, 240px); margin: 0 12px; overflow: hidden; border-radius: 10px; background: #181c1b; }
+.reference-scan-view > img { width: 100%; height: 100%; object-fit: contain; }
+.reference-scan-placeholder { display: flex; height: 100%; align-items: center; justify-content: center; flex-direction: column; gap: 10px; font-size: 11px; color: #a9b3ae; }
+.reference-scan-grid { position: absolute; inset: 0; pointer-events: none; background-image: linear-gradient(#ffffff07 1px, transparent 1px), linear-gradient(90deg, #ffffff07 1px, transparent 1px); background-size: 12.5% 25%; }
+.reference-scan-beam { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, transparent 0%, #f4a16d04 70%, #f4a16d35 99%, #ffd2ad 100%); height: 35%; box-shadow: 0 3px 12px #f4a16d25; animation: reference-sweep 720ms linear infinite; }
+.reference-scan-corner { position: absolute; width: 15px; height: 15px; border-color: #ffd2adbb; border-style: solid; border-width: 0; z-index: 1; }
+.reference-scan-corner-tl { top: 10px; left: 10px; border-top-width: 1px; border-left-width: 1px; }
+.reference-scan-corner-tr { top: 10px; right: 10px; border-top-width: 1px; border-right-width: 1px; }
+.reference-scan-corner-bl { bottom: 10px; left: 10px; border-bottom-width: 1px; border-left-width: 1px; }
+.reference-scan-corner-br { bottom: 10px; right: 10px; border-bottom-width: 1px; border-right-width: 1px; }
+.reference-scan-overlay { position: absolute; inset: auto 0 0; display: flex; justify-content: space-between; padding: 26px 20px 16px; background: linear-gradient(transparent, #0009); color: #fff; font-size: 10px; font-variant-numeric: tabular-nums; }
+.reference-scan-overlay > span:first-child { display: flex; align-items: center; gap: 6px; }
+.reference-scan-filmstrip { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 8px 12px 0; }
+.reference-scan-frame { position: relative; aspect-ratio: 2; overflow: hidden; border: 2px solid transparent; border-radius: 6px; background: var(--muted); opacity: .55; transition: opacity 120ms, border-color 120ms; }
+.reference-scan-frame.is-active { border-color: var(--primary); opacity: 1; }
+.reference-scan-frame > img { width: 100%; height: 100%; object-fit: cover; }
+.reference-scan-frame > span { position: absolute; bottom: 2px; right: 3px; padding: 1px 3px; border-radius: 3px; background: #0009; color: white; font-size: 8px; font-variant-numeric: tabular-nums; }
+.reference-scan-frame-placeholder { width: 100%; height: 100%; background: linear-gradient(110deg, transparent 20%, #ffffff35 45%, transparent 70%); background-size: 200% 100%; animation: reference-shimmer .8s linear infinite; }
+.reference-scan-footer { display: flex; align-items: center; gap: 8px; padding: 14px 16px 0; color: var(--primary); }
+.reference-scan-footer > svg { flex-shrink: 0; }
+.reference-scan-footer > p { flex: 1; font-size: 11px; line-height: 1.6; color: var(--muted-foreground); }
+.reference-scan-pulse { flex-shrink: 0; }
+.reference-scan-note { padding: 7px 16px 14px; font-size: 10px; line-height: 1.6; color: var(--muted-foreground); }
+@keyframes reference-sweep { 0% { transform: translateY(-105%); opacity: 0; } 10%, 80% { opacity: 1; } 100% { transform: translateY(290%); opacity: 0; } }
+@keyframes reference-signal { from { transform: scaleY(.3); opacity: .5; } to { transform: scaleY(1); opacity: 1; } }
+@keyframes reference-breathe { 50% { opacity: .3; } }
+@keyframes reference-shimmer { to { background-position: -200% 0; } }
+@media (max-width: 480px) { .reference-scan-view { height: auto; aspect-ratio: 1.65; } .reference-scan-live { font-size: 9px; } .reference-scan-heading { padding: 12px; gap: 8px; } .reference-scan-heading h3 { font-size: 12px; } .reference-scan-icon { width: 30px; height: 30px; } .reference-scan-frame { aspect-ratio: 1.4; } }
+@media (prefers-reduced-motion: reduce) { .reference-scan-beam { animation: none; transform: translateY(100%); opacity: .5; } .reference-scan-signal > i, .reference-scan-pulse, .reference-scan-frame-placeholder { animation: none; } .reference-scan-frame { transition: none; } }

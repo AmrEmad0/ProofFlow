@@ -20,6 +20,17 @@ import { planImprovementRoutes } from "./plan-improvements";
 const revisionBody = t.Object({ revision: t.Integer({ minimum: 0 }) }, { additionalProperties: false });
 const planParams = t.Object({ id: t.String({ format: "uuid" }) });
 
+function ensureSession(request: Request, config: Config, set: { headers: Record<string, string | number> }): string {
+  let token = sessionToken(request);
+  if (!token) {
+    token = randomBytes(32).toString("hex");
+    const secure = new URL(request.url).protocol === "https:" || (config.NODE_ENV === "production" && new URL(config.WEB_ORIGIN).protocol === "https:");
+    set.headers["set-cookie"] = `proofflow_session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000${secure ? "; Secure" : ""}`;
+  }
+  const hash = createHash("sha256").update(token).digest("hex");
+  return hash;
+}
+
 export function planRoutes(db: Database, config: Config, conversation?: PlanConversation, worker?: VerificationWorker, analyzeReference: ReferenceAnalysis = referenceAnalyzer(config, db)) {
   const store = plannerStore(db);
   const busySessions = new Set<string>();
@@ -33,16 +44,9 @@ export function planRoutes(db: Database, config: Config, conversation?: PlanConv
       requireWorkspaceOrigin(request, config);
     })
     .get("/api/planner/status", () => ({ configured: config.modelConfigured, model: MODELS.muse }))
-    .get("/api/plans", ({ request }) => sessionToken(request) ? store.list(sessionHash(request)) : [])
+    .get("/api/plans", ({ request }) => store.list(sessionToken(request) ? sessionHash(request) : "anonymous"))
     .post("/api/plans", ({ body, request, set }) => {
-      let token = sessionToken(request);
-      if (!token) {
-        token = randomBytes(32).toString("hex");
-        const secure = new URL(request.url).protocol === "https:" || (config.NODE_ENV === "production" && new URL(config.WEB_ORIGIN).protocol === "https:");
-        set.headers["set-cookie"] = `proofflow_session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000${secure ? "; Secure" : ""}`;
-      }
-      const hash = createHash("sha256").update(token).digest("hex");
-      return store.create(hash, body.template);
+      return store.create(ensureSession(request, config, set), body.template);
     }, { body: t.Object({ template: t.Union([t.Literal("blank"), t.Literal("packproof")]) }, { additionalProperties: false }) })
     .get("/api/plans/:id", ({ params, request }) => store.read(params.id, sessionHash(request)), { params: planParams })
     .post("/api/plans/:id/manual", ({ params, request, body }) => {
@@ -186,8 +190,8 @@ export function planRoutes(db: Database, config: Config, conversation?: PlanConv
       if (busySessions.has(hash)) throw new PlannerError(409, "Wait for the current change to finish before undoing it.");
       return store.restore(params.id, hash, body.revision, body.versionId);
     }, { params: planParams, body: t.Object({ revision: t.Integer({ minimum: 0 }), versionId: t.String({ format: "uuid" }) }, { additionalProperties: false }) })
-    .post("/api/plans/:id/copy", ({ params, body, request }) => {
-      const hash = sessionHash(request);
+    .post("/api/plans/:id/copy", ({ params, body, request, set }) => {
+      const hash = ensureSession(request, config, set);
       if (busySessions.has(hash)) throw new PlannerError(409, "Wait for the current change to finish before copying the plan.");
       return store.copy(params.id, hash, body.revision);
     }, { params: planParams, body: revisionBody });

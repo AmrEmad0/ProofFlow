@@ -1,0 +1,2653 @@
+{
+  "run": {
+    "recordingKind": null,
+    "taskSessionId": null,
+    "taskReference": null,
+    "id": "d44281b7-8c16-42ea-938b-b001de3fd086",
+    "approvedVersionId": "7bfb8473-88d5-42ad-8a06-7f5edb68854c",
+    "planVersion": 1,
+    "state": "completed",
+    "createdAt": "2026-11-04T11:20:30.016Z",
+    "completedAt": "2026-11-04T11:20:47.109Z",
+    "error": null,
+    "durationMs": 8000,
+    "approvedPlan": {
+      "schemaVersion": 2,
+      "title": "Pack product and receipt then close box",
+      "goal": "Put the product in the box, add the receipt, then close the box.",
+      "steps": [
+        {
+          "id": "step_put_product",
+          "label": "Place product in carton",
+          "checkType": "object_enters_region",
+          "visualCheck": null,
+          "subjectConcept": "product",
+          "targetConcept": "carton",
+          "beforeState": "outside",
+          "afterState": "inside",
+          "goalSource": "Put the product in the box",
+          "requirements": [
+            {
+              "id": "req_put_product_before",
+              "phase": "before",
+              "rule": "outside",
+              "description": "Product is visible outside the carton before placement.",
+              "subjectConcept": "product",
+              "targetConcept": "carton",
+              "decisiveDetails": [
+                "product fully outside carton footprint",
+                "carton open and visible"
+              ]
+            },
+            {
+              "id": "req_put_product_action",
+              "phase": "action",
+              "rule": "crossing",
+              "description": "Product is carried across the carton opening into the interior.",
+              "subjectConcept": "product",
+              "targetConcept": "carton",
+              "decisiveDetails": [
+                "hand carries product over carton opening",
+                "product crosses over carton walls"
+              ]
+            },
+            {
+              "id": "req_put_product_after",
+              "phase": "after",
+              "rule": "inside",
+              "description": "Product ends up resting inside the carton.",
+              "subjectConcept": "product",
+              "targetConcept": "carton",
+              "decisiveDetails": [
+                "product resting inside carton bottom",
+                "product released from hand"
+              ]
+            }
+          ],
+          "observableEvidence": "Show the product starting outside the carton, then being placed inside the open carton."
+        },
+        {
+          "id": "step_add_receipt",
+          "label": "Add receipt to carton",
+          "checkType": "object_enters_region",
+          "visualCheck": null,
+          "subjectConcept": "paper sheet",
+          "targetConcept": "carton",
+          "beforeState": "outside",
+          "afterState": "inside",
+          "goalSource": "add the receipt",
+          "requirements": [
+            {
+              "id": "req_add_receipt_before",
+              "phase": "before",
+              "rule": "outside",
+              "description": "Paper sheet is visible outside the carton before placement.",
+              "subjectConcept": "paper sheet",
+              "targetConcept": "carton",
+              "decisiveDetails": [
+                "paper sheet outside carton",
+                "product already inside carton"
+              ]
+            },
+            {
+              "id": "req_add_receipt_action",
+              "phase": "action",
+              "rule": "crossing",
+              "description": "Paper sheet is carried across the carton opening into the interior.",
+              "subjectConcept": "paper sheet",
+              "targetConcept": "carton",
+              "decisiveDetails": [
+                "hand carries paper over opening",
+                "paper crosses over carton walls"
+              ]
+            },
+            {
+              "id": "req_add_receipt_after",
+              "phase": "after",
+              "rule": "inside",
+              "description": "Paper sheet ends up inside the carton.",
+              "subjectConcept": "paper sheet",
+              "targetConcept": "carton",
+              "decisiveDetails": [
+                "paper inside carton over product"
+              ]
+            }
+          ],
+          "observableEvidence": "Show the paper sheet starting outside the carton, then being placed inside on top of the product."
+        },
+        {
+          "id": "step_close_carton",
+          "label": "Close carton",
+          "checkType": "visible_state_change",
+          "visualCheck": null,
+          "subjectConcept": "carton",
+          "targetConcept": null,
+          "beforeState": "open",
+          "afterState": "closed",
+          "goalSource": "then close the box",
+          "requirements": [
+            {
+              "id": "req_close_before",
+              "phase": "before",
+              "rule": "initial_state",
+              "description": "Carton starts open with flaps upright.",
+              "subjectConcept": "carton",
+              "targetConcept": null,
+              "decisiveDetails": [
+                "flaps open upright",
+                "contents inside"
+              ]
+            },
+            {
+              "id": "req_close_action",
+              "phase": "action",
+              "rule": "transition",
+              "description": "Hands visibly fold the carton flaps closed.",
+              "subjectConcept": "carton",
+              "targetConcept": null,
+              "decisiveDetails": [
+                "hands fold side and end flaps",
+                "flaps move from open to shut"
+              ]
+            },
+            {
+              "id": "req_close_after",
+              "phase": "after",
+              "rule": "resulting_state",
+              "description": "Carton ends fully closed with opening covered.",
+              "subjectConcept": "carton",
+              "targetConcept": null,
+              "decisiveDetails": [
+                "all flaps flat shut",
+                "opening covered"
+              ]
+            }
+          ],
+          "observableEvidence": "Show the open flaps being folded shut until the carton is fully closed."
+        }
+      ],
+      "relationships": [
+        {
+          "id": "rel1",
+          "type": "before",
+          "from": "step_put_product",
+          "to": "step_add_receipt"
+        },
+        {
+          "id": "rel2",
+          "type": "before",
+          "from": "step_add_receipt",
+          "to": "step_close_carton"
+        }
+      ],
+      "unresolvedGoals": [],
+      "limitations": [
+        "Sampling is 6 fps, so brief hand motions may be missed and exact flap-fold order may be unclear.",
+        "Do not require tape sealing; user only asked to close the box and reference shows folded flaps."
+      ],
+      "approvedVersionId": "7bfb8473-88d5-42ad-8a06-7f5edb68854c",
+      "contractHash": "500f29375399ee490269cce472214c2b9dc5e27f920285aaf93513c718227e72"
+    },
+    "manualReviews": [],
+    "receipt": {
+      "runId": "d44281b7-8c16-42ea-938b-b001de3fd086",
+      "approvedVersionId": "7bfb8473-88d5-42ad-8a06-7f5edb68854c",
+      "contractHash": "500f29375399ee490269cce472214c2b9dc5e27f920285aaf93513c718227e72",
+      "findings": [
+        {
+          "stepId": "step_put_product",
+          "status": "observed",
+          "startMs": 500,
+          "endMs": 2833,
+          "explanation": "Muse's visible entry proposal is grounded by one unique subject/target pairing, continuously tracked from outside to three consecutive inside samples. Inspect the clip; 2D geometry does not certify hidden contents.",
+          "satisfiedRequirementIds": [
+            "req_put_product_before",
+            "req_put_product_action",
+            "req_put_product_after"
+          ],
+          "relationships": [
+            {
+              "id": "rel1",
+              "description": "Place product in carton must finish before Add receipt to carton. Supported by grounded evidence.",
+              "status": "observed"
+            }
+          ],
+          "moments": [
+            {
+              "phase": "before",
+              "timestampMs": 500,
+              "description": "Blue product box sits on table fully outside to the left of the open empty carton."
+            },
+            {
+              "phase": "action",
+              "timestampMs": 2000,
+              "description": "Right hand carries blue product box over the carton wall and down into the open interior, releasing it."
+            },
+            {
+              "phase": "after",
+              "timestampMs": 2833,
+              "description": "Blue product box rests on the bottom inside the carton, hand released away."
+            }
+          ],
+          "evidence": [
+            {
+              "concept": "product",
+              "objectId": "0",
+              "frameIndex": 9
+            },
+            {
+              "concept": "product",
+              "objectId": "0",
+              "frameIndex": 13
+            },
+            {
+              "concept": "carton",
+              "objectId": "0",
+              "frameIndex": 9
+            },
+            {
+              "concept": "carton",
+              "objectId": "0",
+              "frameIndex": 13
+            },
+            {
+              "concept": "product",
+              "objectId": "0",
+              "frameIndex": 3
+            },
+            {
+              "concept": "carton",
+              "objectId": "0",
+              "frameIndex": 3
+            },
+            {
+              "concept": "product",
+              "objectId": "0",
+              "frameIndex": 12
+            },
+            {
+              "concept": "carton",
+              "objectId": "0",
+              "frameIndex": 12
+            },
+            {
+              "concept": "product",
+              "objectId": "0",
+              "frameIndex": 17
+            },
+            {
+              "concept": "carton",
+              "objectId": "0",
+              "frameIndex": 17
+            }
+          ]
+        },
+        {
+          "stepId": "step_add_receipt",
+          "status": "observed",
+          "startMs": 2667,
+          "endMs": 4833,
+          "explanation": "Muse's visible entry proposal is grounded by one unique subject/target pairing, continuously tracked from outside to three consecutive inside samples. Inspect the clip; 2D geometry does not certify hidden contents.",
+          "satisfiedRequirementIds": [
+            "req_add_receipt_before",
+            "req_add_receipt_action",
+            "req_add_receipt_after"
+          ],
+          "relationships": [
+            {
+              "id": "rel1",
+              "description": "Place product in carton must finish before Add receipt to carton. Supported by grounded evidence.",
+              "status": "observed"
+            },
+            {
+              "id": "rel2",
+              "description": "Add receipt to carton must finish before Close carton. Supported by grounded evidence.",
+              "status": "observed"
+            }
+          ],
+          "moments": [
+            {
+              "phase": "before",
+              "timestampMs": 3000,
+              "description": "White paper sheet lies on table outside to the right of carton while blue product is already inside."
+            },
+            {
+              "phase": "action",
+              "timestampMs": 4000,
+              "description": "Right hand lifts white paper sheet from table, carries it over the carton wall and releases it into the interior."
+            },
+            {
+              "phase": "after",
+              "timestampMs": 4833,
+              "description": "White paper sheet lies flat inside the carton covering the blue product below."
+            }
+          ],
+          "evidence": [
+            {
+              "concept": "paper sheet",
+              "objectId": "0",
+              "frameIndex": 16
+            },
+            {
+              "concept": "paper sheet",
+              "objectId": "0",
+              "frameIndex": 25
+            },
+            {
+              "concept": "carton",
+              "objectId": "0",
+              "frameIndex": 16
+            },
+            {
+              "concept": "carton",
+              "objectId": "0",
+              "frameIndex": 25
+            },
+            {
+              "concept": "paper sheet",
+              "objectId": "0",
+              "frameIndex": 18
+            },
+            {
+              "concept": "carton",
+              "objectId": "0",
+              "frameIndex": 18
+            },
+            {
+              "concept": "paper sheet",
+              "objectId": "0",
+              "frameIndex": 24
+            },
+            {
+              "concept": "carton",
+              "objectId": "0",
+              "frameIndex": 24
+            },
+            {
+              "concept": "paper sheet",
+              "objectId": "0",
+              "frameIndex": 29
+            },
+            {
+              "concept": "carton",
+              "objectId": "0",
+              "frameIndex": 29
+            }
+          ]
+        },
+        {
+          "stepId": "step_close_carton",
+          "status": "observed",
+          "startMs": 5333,
+          "endMs": 7333,
+          "explanation": "Muse proposes the required visible before/after change, grounded by one continuous SAM subject track. Inspect the clip to review those states.",
+          "satisfiedRequirementIds": [
+            "req_close_before",
+            "req_close_action",
+            "req_close_after"
+          ],
+          "relationships": [
+            {
+              "id": "rel2",
+              "description": "Add receipt to carton must finish before Close carton. Supported by grounded evidence.",
+              "status": "observed"
+            }
+          ],
+          "moments": [
+            {
+              "phase": "before",
+              "timestampMs": 5333,
+              "description": "Carton open with four flaps upright, paper sheet visible inside on top of contents."
+            },
+            {
+              "phase": "action",
+              "timestampMs": 6333,
+              "description": "Both hands fold side flaps inward then fold front and back flaps down to shut the top."
+            },
+            {
+              "phase": "after",
+              "timestampMs": 7333,
+              "description": "Carton top fully closed with all flaps flat, opening covered, hands pressing top."
+            }
+          ],
+          "evidence": [
+            {
+              "concept": "carton",
+              "objectId": "0",
+              "frameIndex": 32
+            },
+            {
+              "concept": "carton",
+              "objectId": "0",
+              "frameIndex": 44
+            },
+            {
+              "concept": "carton",
+              "objectId": "0",
+              "frameIndex": 32
+            },
+            {
+              "concept": "carton",
+              "objectId": "0",
+              "frameIndex": 38
+            },
+            {
+              "concept": "carton",
+              "objectId": "0",
+              "frameIndex": 44
+            }
+          ]
+        }
+      ],
+      "provenance": {
+        "museModel": "muse-spark-1.3",
+        "samModel": "sam-3.1",
+        "promptVersion": "2026-10-29.4",
+        "verificationRuleVersion": "2026-10-29.3",
+        "createdAt": "2026-11-04T11:20:47.105Z"
+      }
+    },
+    "partialFindings": [
+      {
+        "stepId": "step_put_product",
+        "status": "observed",
+        "startMs": 500,
+        "endMs": 2833,
+        "explanation": "Muse's visible entry proposal is grounded by one unique subject/target pairing, continuously tracked from outside to three consecutive inside samples. Inspect the clip; 2D geometry does not certify hidden contents.",
+        "satisfiedRequirementIds": [
+          "req_put_product_before",
+          "req_put_product_action",
+          "req_put_product_after"
+        ],
+        "relationships": [
+          {
+            "id": "rel1",
+            "description": "Place product in carton must finish before Add receipt to carton. Supported by grounded evidence.",
+            "status": "observed"
+          }
+        ],
+        "moments": [
+          {
+            "phase": "before",
+            "timestampMs": 500,
+            "description": "Blue product box sits on table fully outside to the left of the open empty carton."
+          },
+          {
+            "phase": "action",
+            "timestampMs": 2000,
+            "description": "Right hand carries blue product box over the carton wall and down into the open interior, releasing it."
+          },
+          {
+            "phase": "after",
+            "timestampMs": 2833,
+            "description": "Blue product box rests on the bottom inside the carton, hand released away."
+          }
+        ],
+        "evidence": [
+          {
+            "concept": "product",
+            "objectId": "0",
+            "frameIndex": 9
+          },
+          {
+            "concept": "product",
+            "objectId": "0",
+            "frameIndex": 13
+          },
+          {
+            "concept": "carton",
+            "objectId": "0",
+            "frameIndex": 9
+          },
+          {
+            "concept": "carton",
+            "objectId": "0",
+            "frameIndex": 13
+          },
+          {
+            "concept": "product",
+            "objectId": "0",
+            "frameIndex": 3
+          },
+          {
+            "concept": "carton",
+            "objectId": "0",
+            "frameIndex": 3
+          },
+          {
+            "concept": "product",
+            "objectId": "0",
+            "frameIndex": 12
+          },
+          {
+            "concept": "carton",
+            "objectId": "0",
+            "frameIndex": 12
+          },
+          {
+            "concept": "product",
+            "objectId": "0",
+            "frameIndex": 17
+          },
+          {
+            "concept": "carton",
+            "objectId": "0",
+            "frameIndex": 17
+          }
+        ]
+      },
+      {
+        "stepId": "step_add_receipt",
+        "status": "observed",
+        "startMs": 2667,
+        "endMs": 4833,
+        "explanation": "Muse's visible entry proposal is grounded by one unique subject/target pairing, continuously tracked from outside to three consecutive inside samples. Inspect the clip; 2D geometry does not certify hidden contents.",
+        "satisfiedRequirementIds": [
+          "req_add_receipt_before",
+          "req_add_receipt_action",
+          "req_add_receipt_after"
+        ],
+        "relationships": [
+          {
+            "id": "rel1",
+            "description": "Place product in carton must finish before Add receipt to carton. Supported by grounded evidence.",
+            "status": "observed"
+          },
+          {
+            "id": "rel2",
+            "description": "Add receipt to carton must finish before Close carton. Supported by grounded evidence.",
+            "status": "observed"
+          }
+        ],
+        "moments": [
+          {
+            "phase": "before",
+            "timestampMs": 3000,
+            "description": "White paper sheet lies on table outside to the right of carton while blue product is already inside."
+          },
+          {
+            "phase": "action",
+            "timestampMs": 4000,
+            "description": "Right hand lifts white paper sheet from table, carries it over the carton wall and releases it into the interior."
+          },
+          {
+            "phase": "after",
+            "timestampMs": 4833,
+            "description": "White paper sheet lies flat inside the carton covering the blue product below."
+          }
+        ],
+        "evidence": [
+          {
+            "concept": "paper sheet",
+            "objectId": "0",
+            "frameIndex": 16
+          },
+          {
+            "concept": "paper sheet",
+            "objectId": "0",
+            "frameIndex": 25
+          },
+          {
+            "concept": "carton",
+            "objectId": "0",
+            "frameIndex": 16
+          },
+          {
+            "concept": "carton",
+            "objectId": "0",
+            "frameIndex": 25
+          },
+          {
+            "concept": "paper sheet",
+            "objectId": "0",
+            "frameIndex": 18
+          },
+          {
+            "concept": "carton",
+            "objectId": "0",
+            "frameIndex": 18
+          },
+          {
+            "concept": "paper sheet",
+            "objectId": "0",
+            "frameIndex": 24
+          },
+          {
+            "concept": "carton",
+            "objectId": "0",
+            "frameIndex": 24
+          },
+          {
+            "concept": "paper sheet",
+            "objectId": "0",
+            "frameIndex": 29
+          },
+          {
+            "concept": "carton",
+            "objectId": "0",
+            "frameIndex": 29
+          }
+        ]
+      },
+      {
+        "stepId": "step_close_carton",
+        "status": "observed",
+        "startMs": 5333,
+        "endMs": 7333,
+        "explanation": "Muse proposes the required visible before/after change, grounded by one continuous SAM subject track. Inspect the clip to review those states.",
+        "satisfiedRequirementIds": [
+          "req_close_before",
+          "req_close_action",
+          "req_close_after"
+        ],
+        "relationships": [
+          {
+            "id": "rel2",
+            "description": "Add receipt to carton must finish before Close carton. Supported by grounded evidence.",
+            "status": "observed"
+          }
+        ],
+        "moments": [
+          {
+            "phase": "before",
+            "timestampMs": 5333,
+            "description": "Carton open with four flaps upright, paper sheet visible inside on top of contents."
+          },
+          {
+            "phase": "action",
+            "timestampMs": 6333,
+            "description": "Both hands fold side flaps inward then fold front and back flaps down to shut the top."
+          },
+          {
+            "phase": "after",
+            "timestampMs": 7333,
+            "description": "Carton top fully closed with all flaps flat, opening covered, hands pressing top."
+          }
+        ],
+        "evidence": [
+          {
+            "concept": "carton",
+            "objectId": "0",
+            "frameIndex": 32
+          },
+          {
+            "concept": "carton",
+            "objectId": "0",
+            "frameIndex": 44
+          },
+          {
+            "concept": "carton",
+            "objectId": "0",
+            "frameIndex": 32
+          },
+          {
+            "concept": "carton",
+            "objectId": "0",
+            "frameIndex": 38
+          },
+          {
+            "concept": "carton",
+            "objectId": "0",
+            "frameIndex": 44
+          }
+        ]
+      }
+    ],
+    "media": {
+      "width": 640,
+      "height": 360,
+      "frameCount": 48,
+      "fps": 6,
+      "sha256": "dae67ac86464fb7448cf52185a036289cfbeea7fd28919d95ccd6896485747dd"
+    },
+    "tracks": [
+      {
+        "concept": "carton",
+        "outcome": "completed",
+        "boxes": [
+          {
+            "objectId": "0",
+            "frameIndex": 0,
+            "confidence": 0.9726027250289917,
+            "left": 0.2578125,
+            "top": 0.16944444444444445,
+            "right": 0.7375,
+            "bottom": 0.7888888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 1,
+            "confidence": 0.9726027250289917,
+            "left": 0.2578125,
+            "top": 0.16944444444444445,
+            "right": 0.7375,
+            "bottom": 0.7888888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 2,
+            "confidence": 0.9726027250289917,
+            "left": 0.2578125,
+            "top": 0.16944444444444445,
+            "right": 0.7375,
+            "bottom": 0.7888888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 3,
+            "confidence": 0.9726027250289917,
+            "left": 0.2578125,
+            "top": 0.16944444444444445,
+            "right": 0.7375,
+            "bottom": 0.7888888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 4,
+            "confidence": 0.9726027250289917,
+            "left": 0.2578125,
+            "top": 0.16944444444444445,
+            "right": 0.7375,
+            "bottom": 0.7888888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 5,
+            "confidence": 0.9726027250289917,
+            "left": 0.2578125,
+            "top": 0.16944444444444445,
+            "right": 0.7375,
+            "bottom": 0.7888888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 6,
+            "confidence": 0.9726027250289917,
+            "left": 0.2578125,
+            "top": 0.16944444444444445,
+            "right": 0.7375,
+            "bottom": 0.7888888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 7,
+            "confidence": 0.9726027250289917,
+            "left": 0.2578125,
+            "top": 0.16944444444444445,
+            "right": 0.7375,
+            "bottom": 0.7888888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 8,
+            "confidence": 0.9726027250289917,
+            "left": 0.2578125,
+            "top": 0.16944444444444445,
+            "right": 0.7375,
+            "bottom": 0.7888888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 9,
+            "confidence": 0.9726027250289917,
+            "left": 0.259375,
+            "top": 0.16944444444444445,
+            "right": 0.7359375,
+            "bottom": 0.7888888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 10,
+            "confidence": 0.9726027250289917,
+            "left": 0.29375,
+            "top": 0.16944444444444445,
+            "right": 0.7375,
+            "bottom": 0.7888888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 11,
+            "confidence": 0.9726027250289917,
+            "left": 0.2578125,
+            "top": 0.16944444444444445,
+            "right": 0.7375,
+            "bottom": 0.7888888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 12,
+            "confidence": 0.9726027250289917,
+            "left": 0.2578125,
+            "top": 0.16944444444444445,
+            "right": 0.7375,
+            "bottom": 0.7916666666666666
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 13,
+            "confidence": 0.9726027250289917,
+            "left": 0.259375,
+            "top": 0.16944444444444445,
+            "right": 0.7375,
+            "bottom": 0.7916666666666666
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 14,
+            "confidence": 0.9726027250289917,
+            "left": 0.2484375,
+            "top": 0.16666666666666666,
+            "right": 0.7375,
+            "bottom": 0.7916666666666666
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 15,
+            "confidence": 0.9726027250289917,
+            "left": 0.259375,
+            "top": 0.16944444444444445,
+            "right": 0.7359375,
+            "bottom": 0.7916666666666666
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 16,
+            "confidence": 0.9726027250289917,
+            "left": 0.2578125,
+            "top": 0.16944444444444445,
+            "right": 0.7015625,
+            "bottom": 0.7916666666666666
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 17,
+            "confidence": 0.9726027250289917,
+            "left": 0.25625,
+            "top": 0.16944444444444445,
+            "right": 0.7359375,
+            "bottom": 0.7888888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 18,
+            "confidence": 0.9726027250289917,
+            "left": 0.25625,
+            "top": 0.16944444444444445,
+            "right": 0.7359375,
+            "bottom": 0.7888888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 19,
+            "confidence": 0.9726027250289917,
+            "left": 0.25625,
+            "top": 0.16944444444444445,
+            "right": 0.7359375,
+            "bottom": 0.7888888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 20,
+            "confidence": 0.9726027250289917,
+            "left": 0.25625,
+            "top": 0.16944444444444445,
+            "right": 0.7359375,
+            "bottom": 0.7888888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 21,
+            "confidence": 0.9726027250289917,
+            "left": 0.2578125,
+            "top": 0.16944444444444445,
+            "right": 0.734375,
+            "bottom": 0.7888888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 22,
+            "confidence": 0.9726027250289917,
+            "left": 0.26875,
+            "top": 0.16944444444444445,
+            "right": 0.7359375,
+            "bottom": 0.7888888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 23,
+            "confidence": 0.9726027250289917,
+            "left": 0.271875,
+            "top": 0.16944444444444445,
+            "right": 0.7109375,
+            "bottom": 0.7916666666666666
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 24,
+            "confidence": 0.9726027250289917,
+            "left": 0.26875,
+            "top": 0.16666666666666666,
+            "right": 0.7359375,
+            "bottom": 0.7916666666666666
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 25,
+            "confidence": 0.9726027250289917,
+            "left": 0.2640625,
+            "top": 0.16944444444444445,
+            "right": 0.715625,
+            "bottom": 0.7916666666666666
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 26,
+            "confidence": 0.9726027250289917,
+            "left": 0.2734375,
+            "top": 0.16944444444444445,
+            "right": 0.6984375,
+            "bottom": 0.7916666666666666
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 27,
+            "confidence": 0.9726027250289917,
+            "left": 0.25625,
+            "top": 0.16944444444444445,
+            "right": 0.7359375,
+            "bottom": 0.7888888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 28,
+            "confidence": 0.9726027250289917,
+            "left": 0.2546875,
+            "top": 0.16944444444444445,
+            "right": 0.7359375,
+            "bottom": 0.7888888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 29,
+            "confidence": 0.9726027250289917,
+            "left": 0.25625,
+            "top": 0.16944444444444445,
+            "right": 0.7359375,
+            "bottom": 0.7888888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 30,
+            "confidence": 0.9726027250289917,
+            "left": 0.25625,
+            "top": 0.16944444444444445,
+            "right": 0.734375,
+            "bottom": 0.7888888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 31,
+            "confidence": 0.9726027250289917,
+            "left": 0.25625,
+            "top": 0.16944444444444445,
+            "right": 0.734375,
+            "bottom": 0.7888888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 32,
+            "confidence": 0.9726027250289917,
+            "left": 0.25625,
+            "top": 0.16944444444444445,
+            "right": 0.734375,
+            "bottom": 0.7916666666666666
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 33,
+            "confidence": 0.9726027250289917,
+            "left": 0.259375,
+            "top": 0.16944444444444445,
+            "right": 0.73125,
+            "bottom": 0.7888888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 34,
+            "confidence": 0.9726027250289917,
+            "left": 0.30625,
+            "top": 0.16666666666666666,
+            "right": 0.6703125,
+            "bottom": 0.7916666666666666
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 35,
+            "confidence": 0.9726027250289917,
+            "left": 0.334375,
+            "top": 0.16666666666666666,
+            "right": 0.6421875,
+            "bottom": 0.7916666666666666
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 36,
+            "confidence": 0.9726027250289917,
+            "left": 0.3421875,
+            "top": 0.16666666666666666,
+            "right": 0.640625,
+            "bottom": 0.7916666666666666
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 37,
+            "confidence": 0.9726027250289917,
+            "left": 0.34375,
+            "top": 0.16666666666666666,
+            "right": 0.6390625,
+            "bottom": 0.7916666666666666
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 38,
+            "confidence": 0.9726027250289917,
+            "left": 0.340625,
+            "top": 0.16944444444444445,
+            "right": 0.6390625,
+            "bottom": 0.7916666666666666
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 39,
+            "confidence": 0.9726027250289917,
+            "left": 0.3390625,
+            "top": 0.17222222222222222,
+            "right": 0.6484375,
+            "bottom": 0.7916666666666666
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 40,
+            "confidence": 0.9726027250289917,
+            "left": 0.3296875,
+            "top": 0.20833333333333334,
+            "right": 0.6515625,
+            "bottom": 0.7916666666666666
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 41,
+            "confidence": 0.9726027250289917,
+            "left": 0.340625,
+            "top": 0.3055555555555556,
+            "right": 0.6484375,
+            "bottom": 0.7861111111111111
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 42,
+            "confidence": 0.9726027250289917,
+            "left": 0.340625,
+            "top": 0.3861111111111111,
+            "right": 0.640625,
+            "bottom": 0.7861111111111111
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 43,
+            "confidence": 0.9726027250289917,
+            "left": 0.346875,
+            "top": 0.3888888888888889,
+            "right": 0.6390625,
+            "bottom": 0.7888888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 44,
+            "confidence": 0.9726027250289917,
+            "left": 0.346875,
+            "top": 0.3888888888888889,
+            "right": 0.6390625,
+            "bottom": 0.7861111111111111
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 45,
+            "confidence": 0.9726027250289917,
+            "left": 0.346875,
+            "top": 0.3888888888888889,
+            "right": 0.6390625,
+            "bottom": 0.7861111111111111
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 46,
+            "confidence": 0.9726027250289917,
+            "left": 0.33125,
+            "top": 0.3888888888888889,
+            "right": 0.653125,
+            "bottom": 0.7861111111111111
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 47,
+            "confidence": 0.9726027250289917,
+            "left": 0.33125,
+            "top": 0.39166666666666666,
+            "right": 0.653125,
+            "bottom": 0.7861111111111111
+          }
+        ]
+      },
+      {
+        "concept": "paper sheet",
+        "outcome": "completed",
+        "boxes": [
+          {
+            "objectId": "0",
+            "frameIndex": 0,
+            "confidence": 0.976608157157898,
+            "left": 0.6953125,
+            "top": 0.55,
+            "right": 0.884375,
+            "bottom": 0.8333333333333334
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 1,
+            "confidence": 0.976608157157898,
+            "left": 0.6953125,
+            "top": 0.55,
+            "right": 0.884375,
+            "bottom": 0.8333333333333334
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 2,
+            "confidence": 0.976608157157898,
+            "left": 0.6953125,
+            "top": 0.55,
+            "right": 0.884375,
+            "bottom": 0.8333333333333334
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 3,
+            "confidence": 0.976608157157898,
+            "left": 0.6953125,
+            "top": 0.55,
+            "right": 0.884375,
+            "bottom": 0.8305555555555556
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 4,
+            "confidence": 0.976608157157898,
+            "left": 0.6953125,
+            "top": 0.55,
+            "right": 0.884375,
+            "bottom": 0.8305555555555556
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 5,
+            "confidence": 0.976608157157898,
+            "left": 0.6953125,
+            "top": 0.55,
+            "right": 0.884375,
+            "bottom": 0.8305555555555556
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 6,
+            "confidence": 0.976608157157898,
+            "left": 0.6953125,
+            "top": 0.55,
+            "right": 0.884375,
+            "bottom": 0.8305555555555556
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 7,
+            "confidence": 0.976608157157898,
+            "left": 0.6953125,
+            "top": 0.55,
+            "right": 0.884375,
+            "bottom": 0.8305555555555556
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 8,
+            "confidence": 0.976608157157898,
+            "left": 0.6953125,
+            "top": 0.55,
+            "right": 0.884375,
+            "bottom": 0.8305555555555556
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 9,
+            "confidence": 0.976608157157898,
+            "left": 0.6953125,
+            "top": 0.55,
+            "right": 0.884375,
+            "bottom": 0.8305555555555556
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 10,
+            "confidence": 0.976608157157898,
+            "left": 0.6953125,
+            "top": 0.55,
+            "right": 0.884375,
+            "bottom": 0.8305555555555556
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 11,
+            "confidence": 0.976608157157898,
+            "left": 0.6953125,
+            "top": 0.55,
+            "right": 0.8859375,
+            "bottom": 0.8333333333333334
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 12,
+            "confidence": 0.976608157157898,
+            "left": 0.7109375,
+            "top": 0.55,
+            "right": 0.8859375,
+            "bottom": 0.8333333333333334
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 13,
+            "confidence": 0.976608157157898,
+            "left": 0.6953125,
+            "top": 0.55,
+            "right": 0.8859375,
+            "bottom": 0.8333333333333334
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 14,
+            "confidence": 0.976608157157898,
+            "left": 0.696875,
+            "top": 0.55,
+            "right": 0.8859375,
+            "bottom": 0.8333333333333334
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 15,
+            "confidence": 0.976608157157898,
+            "left": 0.696875,
+            "top": 0.55,
+            "right": 0.8859375,
+            "bottom": 0.8333333333333334
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 16,
+            "confidence": 0.976608157157898,
+            "left": 0.6953125,
+            "top": 0.5555555555555556,
+            "right": 0.884375,
+            "bottom": 0.8333333333333334
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 17,
+            "confidence": 0.976608157157898,
+            "left": 0.6953125,
+            "top": 0.55,
+            "right": 0.88125,
+            "bottom": 0.8333333333333334
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 18,
+            "confidence": 0.976608157157898,
+            "left": 0.6953125,
+            "top": 0.55,
+            "right": 0.8796875,
+            "bottom": 0.8305555555555556
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 19,
+            "confidence": 0.976608157157898,
+            "left": 0.69375,
+            "top": 0.5277777777777778,
+            "right": 0.875,
+            "bottom": 0.8222222222222222
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 20,
+            "confidence": 0.976608157157898,
+            "left": 0.715625,
+            "top": 0.41388888888888886,
+            "right": 0.90625,
+            "bottom": 0.7222222222222222
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 21,
+            "confidence": 0.976608157157898,
+            "left": 0.6546875,
+            "top": 0.07777777777777778,
+            "right": 0.9515625,
+            "bottom": 0.525
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 22,
+            "confidence": 0.976608157157898,
+            "left": 0.465625,
+            "top": 0.09722222222222222,
+            "right": 0.7328125,
+            "bottom": 0.5194444444444445
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 23,
+            "confidence": 0.976608157157898,
+            "left": 0.3828125,
+            "top": 0.22777777777777777,
+            "right": 0.61875,
+            "bottom": 0.5888888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 24,
+            "confidence": 0.976608157157898,
+            "left": 0.371875,
+            "top": 0.30277777777777776,
+            "right": 0.5953125,
+            "bottom": 0.6333333333333333
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 25,
+            "confidence": 0.976608157157898,
+            "left": 0.3703125,
+            "top": 0.42777777777777776,
+            "right": 0.590625,
+            "bottom": 0.6555555555555556
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 26,
+            "confidence": 0.976608157157898,
+            "left": 0.3796875,
+            "top": 0.49166666666666664,
+            "right": 0.590625,
+            "bottom": 0.6527777777777778
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 27,
+            "confidence": 0.976608157157898,
+            "left": 0.3796875,
+            "top": 0.49444444444444446,
+            "right": 0.590625,
+            "bottom": 0.6527777777777778
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 28,
+            "confidence": 0.976608157157898,
+            "left": 0.3796875,
+            "top": 0.49444444444444446,
+            "right": 0.590625,
+            "bottom": 0.6527777777777778
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 29,
+            "confidence": 0.976608157157898,
+            "left": 0.3796875,
+            "top": 0.49444444444444446,
+            "right": 0.590625,
+            "bottom": 0.6527777777777778
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 30,
+            "confidence": 0.976608157157898,
+            "left": 0.3796875,
+            "top": 0.49444444444444446,
+            "right": 0.590625,
+            "bottom": 0.65
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 31,
+            "confidence": 0.976608157157898,
+            "left": 0.3796875,
+            "top": 0.49444444444444446,
+            "right": 0.590625,
+            "bottom": 0.65
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 32,
+            "confidence": 0.976608157157898,
+            "left": 0.38125,
+            "top": 0.49444444444444446,
+            "right": 0.590625,
+            "bottom": 0.65
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 33,
+            "confidence": 0.976608157157898,
+            "left": 0.3796875,
+            "top": 0.49444444444444446,
+            "right": 0.5890625,
+            "bottom": 0.65
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 34,
+            "confidence": 0.976608157157898,
+            "left": 0.3796875,
+            "top": 0.49444444444444446,
+            "right": 0.5890625,
+            "bottom": 0.6527777777777778
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 35,
+            "confidence": 0.976608157157898,
+            "left": 0.3796875,
+            "top": 0.49444444444444446,
+            "right": 0.590625,
+            "bottom": 0.6555555555555556
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 36,
+            "confidence": 0.976608157157898,
+            "left": 0.4140625,
+            "top": 0.49444444444444446,
+            "right": 0.5890625,
+            "bottom": 0.6638888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 37,
+            "confidence": 0.976608157157898,
+            "left": 0.3796875,
+            "top": 0.49444444444444446,
+            "right": 0.5875,
+            "bottom": 0.6666666666666666
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 38,
+            "confidence": 0.976608157157898,
+            "left": 0.3828125,
+            "top": 0.49444444444444446,
+            "right": 0.5734375,
+            "bottom": 0.6694444444444444
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 39,
+            "confidence": 0.976608157157898,
+            "left": 0.45,
+            "top": 0.49722222222222223,
+            "right": 0.534375,
+            "bottom": 0.6083333333333333
+          }
+        ]
+      },
+      {
+        "concept": "product",
+        "outcome": "completed",
+        "boxes": [
+          {
+            "objectId": "0",
+            "frameIndex": 0,
+            "confidence": 0.9649122953414917,
+            "left": 0.175,
+            "top": 0.5305555555555556,
+            "right": 0.278125,
+            "bottom": 0.775
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 1,
+            "confidence": 0.9649122953414917,
+            "left": 0.1765625,
+            "top": 0.5305555555555556,
+            "right": 0.278125,
+            "bottom": 0.775
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 2,
+            "confidence": 0.9649122953414917,
+            "left": 0.1765625,
+            "top": 0.5277777777777778,
+            "right": 0.278125,
+            "bottom": 0.775
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 3,
+            "confidence": 0.9649122953414917,
+            "left": 0.175,
+            "top": 0.5277777777777778,
+            "right": 0.278125,
+            "bottom": 0.775
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 4,
+            "confidence": 0.9649122953414917,
+            "left": 0.175,
+            "top": 0.5277777777777778,
+            "right": 0.2796875,
+            "bottom": 0.7777777777777778
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 5,
+            "confidence": 0.9649122953414917,
+            "left": 0.175,
+            "top": 0.5277777777777778,
+            "right": 0.278125,
+            "bottom": 0.7666666666666667
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 6,
+            "confidence": 0.9649122953414917,
+            "left": 0.175,
+            "top": 0.5277777777777778,
+            "right": 0.2796875,
+            "bottom": 0.7583333333333333
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 7,
+            "confidence": 0.9649122953414917,
+            "left": 0.184375,
+            "top": 0.5277777777777778,
+            "right": 0.2546875,
+            "bottom": 0.75
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 8,
+            "confidence": 0.9649122953414917,
+            "left": 0.15,
+            "top": 0.5444444444444444,
+            "right": 0.228125,
+            "bottom": 0.7472222222222222
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 9,
+            "confidence": 0.9649122953414917,
+            "left": 0.0625,
+            "top": 0.44722222222222224,
+            "right": 0.203125,
+            "bottom": 0.7194444444444444
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 10,
+            "confidence": 0.9649122953414917,
+            "left": 0.1390625,
+            "top": 0.23055555555555557,
+            "right": 0.340625,
+            "bottom": 0.525
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 11,
+            "confidence": 0.9649122953414917,
+            "left": 0.3296875,
+            "top": 0.225,
+            "right": 0.4984375,
+            "bottom": 0.475
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 12,
+            "confidence": 0.9649122953414917,
+            "left": 0.4046875,
+            "top": 0.4305555555555556,
+            "right": 0.5359375,
+            "bottom": 0.5916666666666667
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 13,
+            "confidence": 0.9649122953414917,
+            "left": 0.409375,
+            "top": 0.5083333333333333,
+            "right": 0.5515625,
+            "bottom": 0.65
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 14,
+            "confidence": 0.9649122953414917,
+            "left": 0.4109375,
+            "top": 0.5333333333333333,
+            "right": 0.5515625,
+            "bottom": 0.6638888888888889
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 15,
+            "confidence": 0.9649122953414917,
+            "left": 0.4140625,
+            "top": 0.5472222222222223,
+            "right": 0.5546875,
+            "bottom": 0.65
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 16,
+            "confidence": 0.9649122953414917,
+            "left": 0.4140625,
+            "top": 0.5472222222222223,
+            "right": 0.553125,
+            "bottom": 0.6472222222222223
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 17,
+            "confidence": 0.9649122953414917,
+            "left": 0.4140625,
+            "top": 0.5472222222222223,
+            "right": 0.553125,
+            "bottom": 0.6472222222222223
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 18,
+            "confidence": 0.9649122953414917,
+            "left": 0.4140625,
+            "top": 0.5472222222222223,
+            "right": 0.553125,
+            "bottom": 0.6472222222222223
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 19,
+            "confidence": 0.9649122953414917,
+            "left": 0.4140625,
+            "top": 0.5472222222222223,
+            "right": 0.553125,
+            "bottom": 0.6472222222222223
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 20,
+            "confidence": 0.9649122953414917,
+            "left": 0.4140625,
+            "top": 0.5472222222222223,
+            "right": 0.553125,
+            "bottom": 0.6472222222222223
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 21,
+            "confidence": 0.9649122953414917,
+            "left": 0.4140625,
+            "top": 0.5472222222222223,
+            "right": 0.553125,
+            "bottom": 0.6472222222222223
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 22,
+            "confidence": 0.9649122953414917,
+            "left": 0.4140625,
+            "top": 0.5472222222222223,
+            "right": 0.553125,
+            "bottom": 0.6472222222222223
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 23,
+            "confidence": 0.9649122953414917,
+            "left": 0.4140625,
+            "top": 0.5805555555555556,
+            "right": 0.553125,
+            "bottom": 0.6472222222222223
+          },
+          {
+            "objectId": "0",
+            "frameIndex": 24,
+            "confidence": 0.9649122953414917,
+            "left": 0.415625,
+            "top": 0.625,
+            "right": 0.553125,
+            "bottom": 0.6472222222222223
+          }
+        ]
+      }
+    ],
+    "activity": [
+      {
+        "at": "2026-11-04T11:20:30.027Z",
+        "message": "Preparing your video for analysis.",
+        "kind": "progress",
+        "stage": "preparing"
+      },
+      {
+        "at": "2026-11-04T11:20:30.679Z",
+        "message": "Video prepared. Sending it for analysis.",
+        "kind": "progress",
+        "stage": "preparing"
+      },
+      {
+        "at": "2026-11-04T11:20:33.910Z",
+        "message": "Video sent. Looking for the actions in your plan.",
+        "kind": "progress",
+        "stage": "visual"
+      },
+      {
+        "at": "2026-11-04T11:20:42.870Z",
+        "message": "Visual analysis returned. These proposals still need evidence checks.",
+        "kind": "progress",
+        "stage": "tracking"
+      },
+      {
+        "at": "2026-11-04T11:20:42.887Z",
+        "message": "Visual proposal received for “Place product in carton”. Checking object tracks before a verdict.",
+        "kind": "progress",
+        "stage": "tracking",
+        "stepId": "step_put_product"
+      },
+      {
+        "at": "2026-11-04T11:20:42.890Z",
+        "message": "Visual proposal received for “Add receipt to carton”. Checking object tracks before a verdict.",
+        "kind": "progress",
+        "stage": "tracking",
+        "stepId": "step_add_receipt"
+      },
+      {
+        "at": "2026-11-04T11:20:42.893Z",
+        "message": "Visual proposal received for “Close carton”. Checking object tracks before a verdict.",
+        "kind": "progress",
+        "stage": "tracking",
+        "stepId": "step_close_carton"
+      },
+      {
+        "at": "2026-11-04T11:20:42.897Z",
+        "message": "Tracking “product” through the video.",
+        "kind": "progress",
+        "stage": "tracking"
+      },
+      {
+        "at": "2026-11-04T11:20:42.902Z",
+        "message": "Tracking “carton” through the video.",
+        "kind": "progress",
+        "stage": "tracking"
+      },
+      {
+        "at": "2026-11-04T11:20:42.905Z",
+        "message": "Tracking “paper sheet” through the video.",
+        "kind": "progress",
+        "stage": "tracking"
+      },
+      {
+        "at": "2026-11-04T11:20:46.787Z",
+        "message": "Tracking ready for “carton”. Checking it against the visual evidence.",
+        "kind": "progress",
+        "stage": "tracking"
+      },
+      {
+        "at": "2026-11-04T11:20:46.833Z",
+        "message": "Tracking ready for “paper sheet”. Checking it against the visual evidence.",
+        "kind": "progress",
+        "stage": "tracking"
+      },
+      {
+        "at": "2026-11-04T11:20:47.094Z",
+        "message": "Tracking ready for “product”. Checking it against the visual evidence.",
+        "kind": "progress",
+        "stage": "tracking"
+      },
+      {
+        "at": "2026-11-04T11:20:47.100Z",
+        "message": "Object tracking finished. Evaluating the evidence for each check.",
+        "kind": "progress",
+        "stage": "confirming"
+      },
+      {
+        "at": "2026-11-04T11:20:47.105Z",
+        "message": "Evidence checks finished. Preparing your findings and video links.",
+        "kind": "progress",
+        "stage": "confirming"
+      }
+    ],
+    "warnings": [],
+    "timings": {
+      "preprocessing": 501,
+      "upload": 3216,
+      "muse": 8956,
+      "sam_2": 3871,
+      "sam_3": 3916,
+      "sam_1": 4184,
+      "verification": 1,
+      "total": 17078
+    }
+  },
+  "diagnostics": {
+    "source": "saved",
+    "originalRuleVersion": "2026-10-29.3",
+    "observation": {
+      "candidates": [
+        {
+          "stepId": "step_put_product",
+          "startMs": 0,
+          "endMs": 3000,
+          "visibleBefore": "clearly visible outside carton",
+          "visibleAfter": "clearly visible resting inside carton",
+          "observation": "Hands pick up the blue product from left of the open carton, move it across the opening, and leave it resting on the carton bottom.",
+          "ambiguities": [],
+          "actionVisible": true,
+          "beforeMatches": true,
+          "afterMatches": true,
+          "visibility": "clear",
+          "nonOccurrenceVisible": false,
+          "searchComplete": true,
+          "requirementAssessments": [
+            {
+              "requirementId": "req_put_product_before",
+              "timestampMs": 500,
+              "visible": true,
+              "matchesRequirement": true,
+              "decisiveDetailsVisible": true,
+              "description": "Product is visible outside the carton before placement."
+            },
+            {
+              "requirementId": "req_put_product_action",
+              "timestampMs": 2000,
+              "visible": true,
+              "matchesRequirement": true,
+              "decisiveDetailsVisible": true,
+              "description": "Product is carried across the carton opening into the interior."
+            },
+            {
+              "requirementId": "req_put_product_after",
+              "timestampMs": 2833,
+              "visible": true,
+              "matchesRequirement": true,
+              "decisiveDetailsVisible": true,
+              "description": "Product ends up resting inside the carton."
+            }
+          ],
+          "actionInterval": {
+            "startMs": 1500,
+            "endMs": 2500,
+            "boundariesVisible": true
+          },
+          "before": {
+            "timestampMs": 500,
+            "description": "Blue product box sits on table fully outside to the left of the open empty carton.",
+            "visible": true,
+            "matchesRequirement": true
+          },
+          "action": {
+            "timestampMs": 2000,
+            "description": "Right hand carries blue product box over the carton wall and down into the open interior, releasing it.",
+            "visible": true,
+            "matchesRequirement": true
+          },
+          "after": {
+            "timestampMs": 2833,
+            "description": "Blue product box rests on the bottom inside the carton, hand released away.",
+            "visible": true,
+            "matchesRequirement": true
+          },
+          "subject": {
+            "concept": "product",
+            "description": "product blue box"
+          },
+          "target": {
+            "concept": "carton",
+            "description": "carton brown box"
+          },
+          "objectAssessments": [],
+          "contradictions": [],
+          "grounding": []
+        },
+        {
+          "stepId": "step_add_receipt",
+          "startMs": 2800,
+          "endMs": 5200,
+          "visibleBefore": "clearly visible outside carton",
+          "visibleAfter": "clearly visible inside carton",
+          "observation": "Hand picks up paper sheet from right side, moves it across the open top, and places it inside the carton on top of the product.",
+          "ambiguities": [],
+          "actionVisible": true,
+          "beforeMatches": true,
+          "afterMatches": true,
+          "visibility": "clear",
+          "nonOccurrenceVisible": false,
+          "searchComplete": true,
+          "requirementAssessments": [
+            {
+              "requirementId": "req_add_receipt_before",
+              "timestampMs": 3000,
+              "visible": true,
+              "matchesRequirement": true,
+              "decisiveDetailsVisible": true,
+              "description": "Paper sheet is visible outside the carton before placement."
+            },
+            {
+              "requirementId": "req_add_receipt_action",
+              "timestampMs": 4000,
+              "visible": true,
+              "matchesRequirement": true,
+              "decisiveDetailsVisible": true,
+              "description": "Paper sheet is carried across the carton opening into the interior."
+            },
+            {
+              "requirementId": "req_add_receipt_after",
+              "timestampMs": 4833,
+              "visible": true,
+              "matchesRequirement": true,
+              "decisiveDetailsVisible": true,
+              "description": "Paper sheet ends up inside the carton."
+            }
+          ],
+          "actionInterval": {
+            "startMs": 3500,
+            "endMs": 4500,
+            "boundariesVisible": true
+          },
+          "before": {
+            "timestampMs": 3000,
+            "description": "White paper sheet lies on table outside to the right of carton while blue product is already inside.",
+            "visible": true,
+            "matchesRequirement": true
+          },
+          "action": {
+            "timestampMs": 4000,
+            "description": "Right hand lifts white paper sheet from table, carries it over the carton wall and releases it into the interior.",
+            "visible": true,
+            "matchesRequirement": true
+          },
+          "after": {
+            "timestampMs": 4833,
+            "description": "White paper sheet lies flat inside the carton covering the blue product below.",
+            "visible": true,
+            "matchesRequirement": true
+          },
+          "subject": {
+            "concept": "paper sheet",
+            "description": "paper sheet white receipt"
+          },
+          "target": {
+            "concept": "carton",
+            "description": "carton brown box"
+          },
+          "objectAssessments": [],
+          "contradictions": [],
+          "grounding": []
+        },
+        {
+          "stepId": "step_close_carton",
+          "startMs": 5000,
+          "endMs": 8000,
+          "visibleBefore": "clearly visible open",
+          "visibleAfter": "clearly visible closed",
+          "observation": "Hands fold the small side flaps then the large flaps closed until the carton is fully shut.",
+          "ambiguities": [],
+          "actionVisible": true,
+          "beforeMatches": true,
+          "afterMatches": true,
+          "visibility": "clear",
+          "nonOccurrenceVisible": false,
+          "searchComplete": true,
+          "requirementAssessments": [
+            {
+              "requirementId": "req_close_before",
+              "timestampMs": 5333,
+              "visible": true,
+              "matchesRequirement": true,
+              "decisiveDetailsVisible": true,
+              "description": "Carton starts open with flaps upright."
+            },
+            {
+              "requirementId": "req_close_action",
+              "timestampMs": 6333,
+              "visible": true,
+              "matchesRequirement": true,
+              "decisiveDetailsVisible": true,
+              "description": "Hands visibly fold the carton flaps closed."
+            },
+            {
+              "requirementId": "req_close_after",
+              "timestampMs": 7333,
+              "visible": true,
+              "matchesRequirement": true,
+              "decisiveDetailsVisible": true,
+              "description": "Carton ends fully closed with opening covered."
+            }
+          ],
+          "actionInterval": {
+            "startMs": 5500,
+            "endMs": 7166,
+            "boundariesVisible": true
+          },
+          "before": {
+            "timestampMs": 5333,
+            "description": "Carton open with four flaps upright, paper sheet visible inside on top of contents.",
+            "visible": true,
+            "matchesRequirement": true
+          },
+          "action": {
+            "timestampMs": 6333,
+            "description": "Both hands fold side flaps inward then fold front and back flaps down to shut the top.",
+            "visible": true,
+            "matchesRequirement": true
+          },
+          "after": {
+            "timestampMs": 7333,
+            "description": "Carton top fully closed with all flaps flat, opening covered, hands pressing top.",
+            "visible": true,
+            "matchesRequirement": true
+          },
+          "subject": {
+            "concept": "carton",
+            "description": "carton brown box"
+          },
+          "target": null,
+          "objectAssessments": [],
+          "contradictions": [],
+          "grounding": []
+        }
+      ],
+      "omissions": [],
+      "schemaVersion": 2
+    },
+    "verification": {
+      "ruleVersion": "2026-10-29.3",
+      "checks": [
+        {
+          "stepId": "step_put_product",
+          "firstFrame": 0,
+          "lastFrame": 21,
+          "subject": {
+            "concept": "product",
+            "outcome": "completed",
+            "selectedObjectId": "0",
+            "missingFrames": [],
+            "multipleFrames": [],
+            "objects": [
+              {
+                "objectId": "0",
+                "frames": 22,
+                "firstFrame": 0,
+                "lastFrame": 21,
+                "missingFrames": [],
+                "duplicateFrames": []
+              }
+            ]
+          },
+          "target": {
+            "concept": "carton",
+            "outcome": "completed",
+            "selectedObjectId": "0",
+            "missingFrames": [],
+            "multipleFrames": [],
+            "objects": [
+              {
+                "objectId": "0",
+                "frames": 22,
+                "firstFrame": 0,
+                "lastFrame": 21,
+                "missingFrames": [],
+                "duplicateFrames": []
+              }
+            ]
+          },
+          "regionCandidates": [
+            {
+              "objectId": "0",
+              "outsideFrame": 9,
+              "qualifies": true,
+              "subjectObjectId": "0",
+              "endFrame": 13,
+              "containment": [
+                {
+                  "frameIndex": 0,
+                  "ratio": 0.19696969696969704
+                },
+                {
+                  "frameIndex": 1,
+                  "ratio": 0.20000000000000012
+                },
+                {
+                  "frameIndex": 2,
+                  "ratio": 0.2000000000000001
+                },
+                {
+                  "frameIndex": 3,
+                  "ratio": 0.19696969696969702
+                },
+                {
+                  "frameIndex": 4,
+                  "ratio": 0.2089552238805968
+                },
+                {
+                  "frameIndex": 5,
+                  "ratio": 0.19696969696969702
+                },
+                {
+                  "frameIndex": 6,
+                  "ratio": 0.2089552238805968
+                },
+                {
+                  "frameIndex": 7,
+                  "ratio": 0
+                },
+                {
+                  "frameIndex": 8,
+                  "ratio": 0
+                },
+                {
+                  "frameIndex": 9,
+                  "ratio": 0
+                },
+                {
+                  "frameIndex": 10,
+                  "ratio": 0.23255813953488372
+                },
+                {
+                  "frameIndex": 11,
+                  "ratio": 1
+                },
+                {
+                  "frameIndex": 12,
+                  "ratio": 1
+                },
+                {
+                  "frameIndex": 13,
+                  "ratio": 1
+                },
+                {
+                  "frameIndex": 14,
+                  "ratio": 1
+                },
+                {
+                  "frameIndex": 15,
+                  "ratio": 1
+                },
+                {
+                  "frameIndex": 16,
+                  "ratio": 1
+                },
+                {
+                  "frameIndex": 17,
+                  "ratio": 1
+                },
+                {
+                  "frameIndex": 18,
+                  "ratio": 1
+                },
+                {
+                  "frameIndex": 19,
+                  "ratio": 1
+                },
+                {
+                  "frameIndex": 20,
+                  "ratio": 1
+                },
+                {
+                  "frameIndex": 21,
+                  "ratio": 1
+                }
+              ]
+            }
+          ],
+          "decision": "entry_geometry",
+          "finding": {
+            "stepId": "step_put_product",
+            "status": "observed",
+            "startMs": 500,
+            "endMs": 2833,
+            "explanation": "Muse's visible entry proposal is grounded by one unique subject/target pairing, continuously tracked from outside to three consecutive inside samples. Inspect the clip; 2D geometry does not certify hidden contents.",
+            "satisfiedRequirementIds": [
+              "req_put_product_before",
+              "req_put_product_action",
+              "req_put_product_after"
+            ],
+            "relationships": [
+              {
+                "id": "rel1",
+                "description": "Place product in carton must finish before Add receipt to carton. Supported by grounded evidence.",
+                "status": "observed"
+              }
+            ],
+            "moments": [
+              {
+                "phase": "before",
+                "timestampMs": 500,
+                "description": "Blue product box sits on table fully outside to the left of the open empty carton."
+              },
+              {
+                "phase": "action",
+                "timestampMs": 2000,
+                "description": "Right hand carries blue product box over the carton wall and down into the open interior, releasing it."
+              },
+              {
+                "phase": "after",
+                "timestampMs": 2833,
+                "description": "Blue product box rests on the bottom inside the carton, hand released away."
+              }
+            ],
+            "evidence": [
+              {
+                "concept": "product",
+                "objectId": "0",
+                "frameIndex": 9
+              },
+              {
+                "concept": "product",
+                "objectId": "0",
+                "frameIndex": 13
+              },
+              {
+                "concept": "carton",
+                "objectId": "0",
+                "frameIndex": 9
+              },
+              {
+                "concept": "carton",
+                "objectId": "0",
+                "frameIndex": 13
+              },
+              {
+                "concept": "product",
+                "objectId": "0",
+                "frameIndex": 3
+              },
+              {
+                "concept": "carton",
+                "objectId": "0",
+                "frameIndex": 3
+              },
+              {
+                "concept": "product",
+                "objectId": "0",
+                "frameIndex": 12
+              },
+              {
+                "concept": "carton",
+                "objectId": "0",
+                "frameIndex": 12
+              },
+              {
+                "concept": "product",
+                "objectId": "0",
+                "frameIndex": 17
+              },
+              {
+                "concept": "carton",
+                "objectId": "0",
+                "frameIndex": 17
+              }
+            ]
+          }
+        },
+        {
+          "stepId": "step_add_receipt",
+          "firstFrame": 14,
+          "lastFrame": 34,
+          "subject": {
+            "concept": "paper sheet",
+            "outcome": "completed",
+            "selectedObjectId": "0",
+            "missingFrames": [],
+            "multipleFrames": [],
+            "objects": [
+              {
+                "objectId": "0",
+                "frames": 21,
+                "firstFrame": 14,
+                "lastFrame": 34,
+                "missingFrames": [],
+                "duplicateFrames": []
+              }
+            ]
+          },
+          "target": {
+            "concept": "carton",
+            "outcome": "completed",
+            "selectedObjectId": "0",
+            "missingFrames": [],
+            "multipleFrames": [],
+            "objects": [
+              {
+                "objectId": "0",
+                "frames": 21,
+                "firstFrame": 14,
+                "lastFrame": 34,
+                "missingFrames": [],
+                "duplicateFrames": []
+              }
+            ]
+          },
+          "regionCandidates": [
+            {
+              "objectId": "0",
+              "outsideFrame": 16,
+              "qualifies": true,
+              "subjectObjectId": "0",
+              "endFrame": 25,
+              "containment": [
+                {
+                  "frameIndex": 14,
+                  "ratio": 0.18327661643169665
+                },
+                {
+                  "frameIndex": 15,
+                  "ratio": 0.17622751579970825
+                },
+                {
+                  "frameIndex": 16,
+                  "ratio": 0.028099173553718895
+                },
+                {
+                  "frameIndex": 17,
+                  "ratio": 0.18421486241555454
+                },
+                {
+                  "frameIndex": 18,
+                  "ratio": 0.1876153717066623
+                },
+                {
+                  "frameIndex": 19,
+                  "ratio": 0.20640858815875102
+                },
+                {
+                  "frameIndex": 20,
+                  "ratio": 0.10655737704918065
+                },
+                {
+                  "frameIndex": 21,
+                  "ratio": 0.21340307289964047
+                },
+                {
+                  "frameIndex": 22,
+                  "ratio": 0.8289473684210525
+                },
+                {
+                  "frameIndex": 23,
+                  "ratio": 1
+                },
+                {
+                  "frameIndex": 24,
+                  "ratio": 1
+                },
+                {
+                  "frameIndex": 25,
+                  "ratio": 1
+                },
+                {
+                  "frameIndex": 26,
+                  "ratio": 1
+                },
+                {
+                  "frameIndex": 27,
+                  "ratio": 1
+                },
+                {
+                  "frameIndex": 28,
+                  "ratio": 1
+                },
+                {
+                  "frameIndex": 29,
+                  "ratio": 1
+                },
+                {
+                  "frameIndex": 30,
+                  "ratio": 1
+                },
+                {
+                  "frameIndex": 31,
+                  "ratio": 1
+                },
+                {
+                  "frameIndex": 32,
+                  "ratio": 1
+                },
+                {
+                  "frameIndex": 33,
+                  "ratio": 1
+                },
+                {
+                  "frameIndex": 34,
+                  "ratio": 1
+                }
+              ]
+            }
+          ],
+          "decision": "entry_geometry",
+          "finding": {
+            "stepId": "step_add_receipt",
+            "status": "observed",
+            "startMs": 2667,
+            "endMs": 4833,
+            "explanation": "Muse's visible entry proposal is grounded by one unique subject/target pairing, continuously tracked from outside to three consecutive inside samples. Inspect the clip; 2D geometry does not certify hidden contents.",
+            "satisfiedRequirementIds": [
+              "req_add_receipt_before",
+              "req_add_receipt_action",
+              "req_add_receipt_after"
+            ],
+            "relationships": [
+              {
+                "id": "rel1",
+                "description": "Place product in carton must finish before Add receipt to carton. Supported by grounded evidence.",
+                "status": "observed"
+              },
+              {
+                "id": "rel2",
+                "description": "Add receipt to carton must finish before Close carton. Supported by grounded evidence.",
+                "status": "observed"
+              }
+            ],
+            "moments": [
+              {
+                "phase": "before",
+                "timestampMs": 3000,
+                "description": "White paper sheet lies on table outside to the right of carton while blue product is already inside."
+              },
+              {
+                "phase": "action",
+                "timestampMs": 4000,
+                "description": "Right hand lifts white paper sheet from table, carries it over the carton wall and releases it into the interior."
+              },
+              {
+                "phase": "after",
+                "timestampMs": 4833,
+                "description": "White paper sheet lies flat inside the carton covering the blue product below."
+              }
+            ],
+            "evidence": [
+              {
+                "concept": "paper sheet",
+                "objectId": "0",
+                "frameIndex": 16
+              },
+              {
+                "concept": "paper sheet",
+                "objectId": "0",
+                "frameIndex": 25
+              },
+              {
+                "concept": "carton",
+                "objectId": "0",
+                "frameIndex": 16
+              },
+              {
+                "concept": "carton",
+                "objectId": "0",
+                "frameIndex": 25
+              },
+              {
+                "concept": "paper sheet",
+                "objectId": "0",
+                "frameIndex": 18
+              },
+              {
+                "concept": "carton",
+                "objectId": "0",
+                "frameIndex": 18
+              },
+              {
+                "concept": "paper sheet",
+                "objectId": "0",
+                "frameIndex": 24
+              },
+              {
+                "concept": "carton",
+                "objectId": "0",
+                "frameIndex": 24
+              },
+              {
+                "concept": "paper sheet",
+                "objectId": "0",
+                "frameIndex": 29
+              },
+              {
+                "concept": "carton",
+                "objectId": "0",
+                "frameIndex": 29
+              }
+            ]
+          }
+        },
+        {
+          "stepId": "step_close_carton",
+          "firstFrame": 27,
+          "lastFrame": 47,
+          "subject": {
+            "concept": "carton",
+            "outcome": "completed",
+            "selectedObjectId": "0",
+            "missingFrames": [],
+            "multipleFrames": [],
+            "objects": [
+              {
+                "objectId": "0",
+                "frames": 21,
+                "firstFrame": 27,
+                "lastFrame": 47,
+                "missingFrames": [],
+                "duplicateFrames": []
+              }
+            ]
+          },
+          "target": null,
+          "regionCandidates": [],
+          "decision": "state_change",
+          "finding": {
+            "stepId": "step_close_carton",
+            "status": "observed",
+            "startMs": 5333,
+            "endMs": 7333,
+            "explanation": "Muse proposes the required visible before/after change, grounded by one continuous SAM subject track. Inspect the clip to review those states.",
+            "satisfiedRequirementIds": [
+              "req_close_before",
+              "req_close_action",
+              "req_close_after"
+            ],
+            "relationships": [
+              {
+                "id": "rel2",
+                "description": "Add receipt to carton must finish before Close carton. Supported by grounded evidence.",
+                "status": "observed"
+              }
+            ],
+            "moments": [
+              {
+                "phase": "before",
+                "timestampMs": 5333,
+                "description": "Carton open with four flaps upright, paper sheet visible inside on top of contents."
+              },
+              {
+                "phase": "action",
+                "timestampMs": 6333,
+                "description": "Both hands fold side flaps inward then fold front and back flaps down to shut the top."
+              },
+              {
+                "phase": "after",
+                "timestampMs": 7333,
+                "description": "Carton top fully closed with all flaps flat, opening covered, hands pressing top."
+              }
+            ],
+            "evidence": [
+              {
+                "concept": "carton",
+                "objectId": "0",
+                "frameIndex": 32
+              },
+              {
+                "concept": "carton",
+                "objectId": "0",
+                "frameIndex": 44
+              },
+              {
+                "concept": "carton",
+                "objectId": "0",
+                "frameIndex": 32
+              },
+              {
+                "concept": "carton",
+                "objectId": "0",
+                "frameIndex": 38
+              },
+              {
+                "concept": "carton",
+                "objectId": "0",
+                "frameIndex": 44
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "tracking": [
+      {
+        "concept": "carton",
+        "receivedBoxes": 48,
+        "retainedBoxes": 48,
+        "lowConfidenceBoxes": 0,
+        "confidenceThreshold": 0.5,
+        "issue": null
+      },
+      {
+        "concept": "paper sheet",
+        "receivedBoxes": 40,
+        "retainedBoxes": 40,
+        "lowConfidenceBoxes": 0,
+        "confidenceThreshold": 0.5,
+        "issue": null
+      },
+      {
+        "concept": "product",
+        "receivedBoxes": 25,
+        "retainedBoxes": 25,
+        "lowConfidenceBoxes": 0,
+        "confidenceThreshold": 0.5,
+        "issue": null
+      }
+    ]
+  }
+}

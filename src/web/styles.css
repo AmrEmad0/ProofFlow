@@ -189,11 +189,44 @@
   .chat-panel-start .composer-toolbar { @apply gap-2 px-0 pb-0; }
   .composer-submit { @apply shadow-sm; }
   .process-examples { @apply mb-5; }
-  .process-example-grid { @apply grid gap-2 sm:grid-cols-3; }
-  .process-example { @apply flex min-w-0 flex-col items-start gap-2 rounded-xl border bg-background/50 p-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50; }
+  .process-examples-heading { @apply mb-3 flex flex-wrap items-center justify-between gap-1; }
+  .process-examples-heading h2 { @apply text-sm font-medium; }
+  .process-examples-heading > span { @apply text-[11px] text-muted-foreground; }
+  .process-example-grid { @apply grid gap-3 sm:grid-cols-3; }
+  .process-example { @apply flex min-w-0 flex-col items-start overflow-hidden rounded-xl border bg-background/50 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 disabled:opacity-50; }
+  .process-example[aria-pressed="true"] { @apply border-primary/60 bg-primary/5 ring-2 ring-primary/8; }
+  .process-example-art { @apply relative block w-full shrink-0 overflow-hidden; aspect-ratio: 1.15; background: #f2ece2; }
+  .process-example-art img { position: absolute; top: 50%; width: 300%; max-width: none; height: auto; transform: translateY(-50%); }
+  .process-example-copy { @apply flex w-full min-w-0 flex-1 flex-col gap-1 px-3.5 pt-3 pb-4; }
+  .process-example-category { @apply text-[10px] font-medium tracking-wide text-primary; }
+  .process-example-title { @apply flex items-center justify-between gap-2 text-sm font-semibold; }
+  .process-example-title > svg { @apply shrink-0 text-primary; }
+  .process-example-description { @apply text-[12px] leading-5 text-muted-foreground; }
+  .process-art-note { @apply mt-2 text-[10px] leading-4 text-muted-foreground; }
+  .process-example-preview { @apply mt-3 rounded-xl border border-primary/15 bg-primary/3 p-3.5; }
+  .process-example-preview ol { @apply my-3 grid gap-2 sm:grid-cols-3; }
+  .process-example-preview li { @apply flex items-start gap-2 text-[12px] leading-5; }
+  .process-example-preview li > span { @apply flex size-5 shrink-0 items-center justify-center rounded-full border border-primary/20 text-[10px] text-primary; }
+  .process-filming-tip { @apply flex items-start gap-2 border-t border-primary/10 pt-2.5 text-[12px] leading-5 text-muted-foreground; }
+  .planner-how { @apply mt-10; }
+  .planner-how-heading { @apply text-center; }
+  .planner-how-eyebrow { @apply text-[10px] font-semibold tracking-[0.16em] text-primary; }
+  .planner-how-heading h2 { @apply mt-2 text-xl font-semibold tracking-tight; }
+  .planner-how-heading > p { @apply mt-2 text-[13px] text-muted-foreground; }
+  .planner-how-grid { @apply mt-5 grid gap-3 sm:grid-cols-3; }
+  .planner-how-grid > li { @apply relative rounded-2xl border border-border/70 bg-card/60 p-4; }
+  .planner-how-icon { @apply mb-4 flex size-8 items-center justify-center rounded-lg border border-primary/10 bg-primary/5 text-primary; }
+  .planner-how-number { @apply absolute top-5 right-4 text-[11px] font-medium tabular-nums text-muted-foreground/60; }
+  .planner-how-grid h3 { @apply text-[13px] font-semibold; }
+  .planner-how-grid p { @apply mt-2 text-[12px] leading-5 text-muted-foreground; }
+  .planner-evidence-note { @apply mt-4 flex flex-col gap-2 rounded-xl border border-dashed bg-muted/20 p-4 sm:flex-row sm:gap-6; }
+  .planner-evidence-label { @apply shrink-0 text-[12px] font-medium; }
+  .planner-evidence-note p { @apply text-[12px] leading-5 text-muted-foreground; }
+  .planner-evidence-note strong { @apply font-medium text-foreground; }
   @media (width < 640px) {
-    .process-example { display: grid; grid-template-columns: 1.25rem 1fr; gap: 0.25rem 0.75rem; }
-    .process-example svg { grid-row: span 2; align-self: center; }
+    .process-example { flex-direction: row; align-items: center; }
+    .process-example-art { width: 96px; aspect-ratio: 1; align-self: stretch; }
+    .process-example-copy { padding: 0.625rem 0.75rem; }
   }
   .planner-alternatives { @apply mt-4 flex flex-wrap items-center justify-between gap-x-2 border-t border-border/60 pt-2; }
   .planner-alternatives button { @apply h-10 px-2 text-[12px]; }

@@ -1,3 +1,4 @@
+import { PACK_DEMO } from "../../shared/demo";
 import { manualReviewStore } from "./manual-review";
 import type { Database } from "bun:sqlite";
 import { approvedPlanSchema } from "../../shared/proof-plan";
@@ -76,6 +77,7 @@ export function verificationStore(db: Database) {
   }
 
   function create(id: string, versionId: string, hash: string, sessionHash: string, path: string, taskSessionId?: string) {
+    if (versionId === PACK_DEMO.versionId) throw new PlannerError(403, "Copy the demo plan before checking another video.");
     db.transaction(() => {
       const plan = approved(versionId, sessionHash);
       if (plan.steps.some(step => step.subjectSelection || step.targetSelection)) throw new PlannerError(409, "This archived plan uses retired object-selection rules. Review and approve the restored draft before checking another video.");

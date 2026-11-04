@@ -1,3 +1,4 @@
+import { PACK_DEMO, demoVideo } from "../../../shared/demo";
 import { Link } from "@tanstack/react-router";
 import { needsManualReview } from "../../../shared/manual-review";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -34,6 +35,7 @@ function rememberedVideo(planId: string): string | null {
 }
 
 export function VerificationWorkspace({ saved, heading, visible, startNewUpload, task = null, onClearTask, onReviewPlan, onPlanImproved }: { saved: SavedPlan; heading: ReactNode; visible: boolean; startNewUpload: boolean; task?: TaskSession | null; onClearTask?: () => void; onReviewPlan: () => void; onPlanImproved: (value: SavedPlan) => void }) {
+  const pinnedDemo = saved.id === PACK_DEMO.planId;
   const queryClient = useQueryClient();
   const watchRun = useVerificationFeedback();
   const container = useRef<HTMLDivElement>(null);
@@ -41,7 +43,7 @@ export function VerificationWorkspace({ saved, heading, visible, startNewUpload,
   const [file, setFile] = useState<File | null>(null);
   const consent = Boolean(saved.videoConsentAt);
   const chooser = useRef<HTMLInputElement>(null);
-  const [selection, setSelection] = useState<string | null>(() => rememberedVideo(saved.id));
+  const [selection, setSelection] = useState<string | null>(() => saved.id === PACK_DEMO.planId ? PACK_DEMO.runId : rememberedVideo(saved.id));
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [preview, setPreview] = useState<{ file: File; url: string } | null>(null);
@@ -178,7 +180,7 @@ export function VerificationWorkspace({ saved, heading, visible, startNewUpload,
     <input ref={chooser} type="file" accept=".mp4,.mov,.webm,video/mp4,video/quicktime,video/webm" aria-label="Upload another video" className="sr-only" tabIndex={-1} disabled={upload.isPending} onChange={event => { const selected = event.target.files?.[0]; if (choose(selected, false)) upload.mutate(selected); event.target.value = ""; }} />
     <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
       <div className="min-w-0">{heading}<Link to="/reports" search={{ planId: saved.id }} className="mt-1 inline-flex min-h-9 items-center text-xs font-medium text-muted-foreground underline underline-offset-4">View plan report</Link></div>
-      {runId && run && <div className="min-w-0 sm:text-right"><h2 className="text-[14px] font-semibold tracking-tight">{recordingName(recordings, run.id)}</h2><p className="mt-1 text-[12px] leading-5 text-muted-foreground">{new Date(run.createdAt).toLocaleString()}{run.durationMs ? ` · ${(run.durationMs / 1000).toFixed(1)} seconds` : ""} · Plan v{run.planVersion}</p>
+      {runId && run && <div className="min-w-0 sm:text-right"><h2 className="text-[14px] font-semibold tracking-tight">{recordingName(recordings, run.id)}</h2><p className="mt-1 text-[12px] leading-5 text-muted-foreground">{new Date(run.createdAt).toLocaleString()}{!demoVideo(run.id) && run.durationMs ? ` · ${(run.durationMs / 1000).toFixed(1)} seconds` : ""} · Plan v{run.planVersion}</p>{demoVideo(run.id) && <a href={`/api/runs/${run.id}/source`} download={demoVideo(run.id)!.filename} className="inline-flex min-h-9 items-center gap-1.5 text-xs underline underline-offset-4"><ArrowDownToLine className="size-3.5" />Download sample video</a>}
       </div>}
     </div>
     <div className="min-w-0 space-y-3">
@@ -188,7 +190,7 @@ export function VerificationWorkspace({ saved, heading, visible, startNewUpload,
       <div className="min-w-0 space-y-3">
         {displayedError && <div role="alert" className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm leading-6 text-destructive">{displayedError}{!error && <button className="ml-2 underline" onClick={refreshRuns}>Reload videos</button>}</div>}
         {runId ? run ? <>
-          <VerificationStatus run={run} actions={!isActiveRun(run.state) && <Tooltip>
+          <VerificationStatus run={run} actions={!pinnedDemo && !isActiveRun(run.state) && <Tooltip>
             <TooltipTrigger render={<Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground" />} aria-label="Recheck video" disabled={recheck.isPending || upload.isPending || remove.isPending || processing || !readiness.data?.available} onClick={() => { setError(null); setConfirmDelete(false); recheck.mutate(run.id); }}>
               {recheck.isPending ? <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" /> : <RotateCcw className="size-3.5" aria-hidden="true" />}{recheck.isPending ? "Starting…" : "Recheck"}
             </TooltipTrigger>
@@ -197,9 +199,9 @@ export function VerificationWorkspace({ saved, heading, visible, startNewUpload,
           {run.warnings.map((warning) => <p key={warning} className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900">{warning}</p>)}
           <EvidencePlayer key={run.id} run={run} autoPlay={run.recordingKind !== "demo" || recordingSource?.id !== DEMO_FEED_ID || Boolean(triggers.data?.feed?.running)} actions={run.state === "completed" && run.receipt ? <>
             {pendingReviews > 0 && <Link to="/review" className="inline-flex min-h-9 items-center gap-2 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"><ClipboardCheck className="size-4" aria-hidden="true" />Review checks<span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] tabular-nums text-amber-800 dark:text-amber-300" aria-label={`${pendingReviews} ${pendingReviews === 1 ? "check" : "checks"} awaiting review`}>{pendingReviews}</span></Link>}
-            <div className="ml-auto"><ImprovePlanDialog key={run.id} saved={saved} run={run} onSaved={onPlanImproved} /></div>
+            <div className="ml-auto">{!pinnedDemo && <ImprovePlanDialog key={run.id} saved={saved} run={run} onSaved={onPlanImproved} />}</div>
           </> : undefined} />
-          {!isActiveRun(run.state) && <div className="flex flex-wrap items-center justify-end gap-3 px-1 py-2"><div className="flex flex-wrap gap-2">{run.receipt && <Button variant="outline" className="h-8 gap-2 rounded-lg px-3" onClick={exportReceipt}><ArrowDownToLine />Export evidence</Button>}{confirmDelete ? <><Button variant="destructive" className="h-8 px-3" disabled={remove.isPending} onClick={() => remove.mutate(run.id)}>Delete video & evidence</Button><Button variant="ghost" disabled={remove.isPending} onClick={() => setConfirmDelete(false)}>Cancel</Button></> : <Button variant="ghost" className="h-8 gap-2 px-3" onClick={() => setConfirmDelete(true)}><Trash2 />Delete</Button>}</div></div>}
+          {!isActiveRun(run.state) && <div className="flex flex-wrap items-center justify-end gap-3 px-1 py-2"><div className="flex flex-wrap gap-2">{run.receipt && <Button variant="outline" className="h-8 gap-2 rounded-lg px-3" onClick={exportReceipt}><ArrowDownToLine />Export evidence</Button>}{!pinnedDemo && (confirmDelete ? <><Button variant="destructive" className="h-8 px-3" disabled={remove.isPending} onClick={() => remove.mutate(run.id)}>Delete video & evidence</Button><Button variant="ghost" disabled={remove.isPending} onClick={() => setConfirmDelete(false)}>Cancel</Button></> : <Button variant="ghost" className="h-8 gap-2 px-3" onClick={() => setConfirmDelete(true)}><Trash2 />Delete</Button>)}</div></div>}
         </> : details.isPending ? <div role="status" className="flex min-h-64 items-center justify-center gap-2 rounded-2xl border bg-card p-6 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Loading video…</div> : <div className="rounded-2xl border bg-card p-6 text-sm text-muted-foreground">This video could not be opened. Select another recording or add a new video.</div> : runs.isPending && selection === null ? <p role="status" className="p-6 text-sm text-muted-foreground">Loading your video library…</p> : recordingSource && !task && !file && saved.status === "approved" && consent ? <section aria-label="Recording source status" className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-2xl border bg-card p-6 text-center">
           {triggers.data?.feed?.running || triggers.data?.sessions.some(item => item.captureState && ["queued", "capturing", "captured"].includes(item.captureState)) ? <LoaderCircle className="size-6 animate-spin text-primary" aria-hidden="true" /> : null}
           <h2 className="text-lg font-semibold">{recordingSource.kind === "demo" ? "Waiting for demo video" : "Waiting for camera recording"}</h2>

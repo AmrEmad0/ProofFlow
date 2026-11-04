@@ -1,3 +1,4 @@
+import { seedPackDemo } from "./demo/seed";
 import { createCaptureWorker } from "./triggers/capture-worker";
 import { staticPlugin } from "@elysia/static";
 import { mkdir } from "node:fs/promises";
@@ -10,6 +11,7 @@ import { workspaceEvents } from "./http/workspace-events";
 const config = loadConfig();
 await mkdir(config.STORAGE_PATH, { recursive: true, mode: 0o700 });
 const db = openDatabase(config.DATABASE_PATH);
+seedPackDemo(db, config);
 const worker = createVerificationWorker(db, config);
 await worker.startWhenAvailable();
 const captures = createCaptureWorker(db, config, worker);

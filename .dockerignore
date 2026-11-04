@@ -20,3 +20,5 @@ docs/private
 **/*.mov
 **/*.webm
 !public/videos/packing-tracked.mp4
+
+!assets/demo/pack-order/**/*.mp4

@@ -1,4 +1,4 @@
-import { ArrowRight, Check, Cpu, Factory, FileCheck2, ImagePlus, MessageSquareText, Package, ScanLine, SlidersHorizontal, Tag, Wrench } from "lucide-react";
+import { ArrowRight, Check, Cpu, FileCheck2, ImagePlus, MessageSquareText, Package, ScanLine, SlidersHorizontal, Tag, Wrench } from "lucide-react";
 import { demoMedia, demoScenarios, type DemoId } from "./demo-content";
 import { DemoSelector } from "./demo-selector";
 
@@ -14,7 +14,7 @@ export function WorkflowIllustration({ demoId, onSelect }: { demoId: DemoId; onS
   return <div className="workflow-hero-examples">
     <DemoSelector selected={demoId} onSelect={onSelect} label="Hero example" />
     <div className="workflow-hero-visual">
-      <div className="workflow-photo"><img src={scenario.image} alt={scenario.imageAlt} width={1536} height={1024} fetchPriority="high" /><span className="workflow-photo-label"><ScanLine size={13} aria-hidden="true" />{demoId === "packing" ? "A WORKFLOW YOU ALREADY KNOW" : "ON THE ASSEMBLY BENCH"}</span><span className="workflow-photo-credit">AI-generated illustration</span></div>
+      <div className="workflow-photo"><img src={scenario.image} alt={scenario.imageAlt} width={1536} height={1024} fetchPriority="high" /><span className="workflow-photo-label"><ScanLine size={13} aria-hidden="true" />A WORKFLOW YOU ALREADY KNOW</span><span className="workflow-photo-credit">AI-generated illustration</span></div>
       <div className="workflow-floating-prompt"><span><MessageSquareText size={15} aria-hidden="true" />IN YOUR WORDS</span><p>“{scenario.heroPrompt}”</p></div>
       <a href="#product-demo" className="workflow-floating-plan"><span className="workflow-plan-symbol"><FileCheck2 size={23} aria-hidden="true" /></span><span><strong>{scenario.title}</strong><span>3 checks. Ready for your review.</span></span><ArrowRight size={18} aria-hidden="true" /></a>
     </div>
@@ -36,7 +36,6 @@ export function WorkflowExamples() {
     <div className="section-intro"><div><span className="home-kicker">BUILT AROUND YOUR PROCEDURE</span><h2 id="workflows-title">For your business.<br />And your own projects.</h2></div><p>One platform. A different plan for each visible task.</p></div>
     <div className="workflow-examples-grid">
       <article className="workflow-example"><div className="workflow-example-photo"><img src={demoMedia.packing} alt="AI-generated example of a small business packing station" width={1536} height={1024} loading="lazy" /><span><Package size={14} aria-hidden="true" />SMALL BUSINESSES & TEAMS</span></div><div className="workflow-example-copy"><h3>Make your routine checkable.</h3><p>Packing an order. Preparing a station. Setting up the next job.</p><div className="workflow-example-tags"><span>Product visible</span><span>Slip visible</span><span>Box closed</span></div></div></article>
-      <article className="workflow-example"><div className="workflow-example-photo"><img src={demoMedia.manufacturing} alt={demoScenarios.manufacturing.imageAlt} width={1536} height={1024} loading="lazy" /><span><Factory size={14} aria-hidden="true" />MANUFACTURING & ASSEMBLY</span></div><div className="workflow-example-copy"><h3>See the assembly station clearly.</h3><p>Review visible parts, tool positions, and covers at a workbench.</p><div className="workflow-example-tags"><span>Board visible</span><span>Driver parked</span><span>Cover fitted</span></div></div></article>
       <article className="workflow-example"><div className="workflow-example-photo"><img src={demoMedia.workbench} alt="AI-generated maker workbench with tools in a tray and an open drawer" width={1536} height={1024} loading="lazy" /><span><Wrench size={14} aria-hidden="true" />MAKERS & INDIVIDUALS</span></div><div className="workflow-example-copy"><h3>Bring your own way of working.</h3><p>Resetting a workspace. Putting tools away. Following a personal checklist.</p><div className="workflow-example-tags"><span>Tools in tray</span><span>Drawer closed</span></div></div></article>
     </div>
     <p className="workflow-reuse-note">Illustrative use cases and AI-generated images. Define visible checks; update the plan without retraining.</p>

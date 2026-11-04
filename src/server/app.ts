@@ -1,3 +1,4 @@
+import { isDemoMutation } from "./demo/access";
 import { reportRoutes } from "./routes/reports";
 import type { Database } from "bun:sqlite";
 import { cors } from "@elysia/cors";
@@ -27,6 +28,9 @@ export function createApp(db: Database, config: Config, conversation?: PlanConve
       console.error("API request failed", { code, name: error instanceof Error ? error.name : "UnknownError" });
       set.status = 500;
       return { error: "The request could not be completed" };
+    })
+    .onBeforeHandle(({ request }) => {
+      if (isDemoMutation(request)) throw new PlannerError(403, "This demo is read-only. Copy the plan to use your own version.");
     })
     .use(healthRoutes(db, config, () => Boolean(worker?.ready && config.modelConfigured)))
     .use(templateRoutes)

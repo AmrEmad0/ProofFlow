@@ -15,6 +15,8 @@ Open http://localhost:5173. Configuration defaults are in `.env.example`. Keep A
 
 Run `bun run check` for type checking, tests, and the production build. For production startup, run `bun run build`, then `NODE_ENV=production bun start`.
 
+The built-in **Pack an order** demo is included in the repository and Docker image and installed automatically at startup, including `demo-1-pack.mp4`, `Person_packing_order_in_box_dc37aa78.mp4`, the approved plan, and saved Muse Spark/SAM 3.1 evidence for both videos. Anyone can inspect it without a cookie or API key. The shared example cannot be edited or deleted; copy its plan and download the sample video to run your own verification (requires model access and consent).
+
 Video verification requires an approved plan and sharing consent. MP4, MOV, and WebM uploads are limited to 30 seconds and 25 MB. Workspaces use browser cookies; losing the cookie loses access. Saved media remains until manually deleted. Model requests share submitted content with Meta; the configured Muse model may use content for training.
 
 This is a prototype, not certification of hidden outcomes. Occlusion, sampling, and model uncertainty can limit findings. Homepage walkthroughs contain scripted, illustrative results; they are not live model outputs or accuracy benchmarks. Homepage illustrations are AI-generated.

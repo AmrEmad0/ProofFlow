@@ -1,3 +1,4 @@
+import { demoVideo } from "../../../shared/demo";
 import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Film, LoaderCircle, RefreshCw, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,8 @@ export const videoStatusLabels: Record<RunState, string> = {
 };
 
 export function recordingName(runs: RunSummary[], id: string) {
+  const sample = demoVideo(id);
+  if (sample) return sample.label;
   const index = runs.findIndex((run) => run.id === id);
   const run = runs[index];
   if (run?.recordingKind === "demo" && /^DEMO-[a-f0-9]{8}$/.test(run.taskReference ?? "")) return `Demo clip ${runs.length - index}`;
@@ -100,6 +103,6 @@ function VideoThumbnail({ run }: { run: RunSummary }) {
   const canShow = run.state !== "queued" && run.state !== "preprocessing" && !failed;
   return <span className="relative flex aspect-video w-14 shrink-0 items-center justify-center overflow-hidden rounded border bg-muted">
     {canShow ? <img src={`/api/runs/${run.id}/thumbnail`} loading="lazy" alt="" className="size-full object-cover" onError={() => setFailed(true)} /> : <Film className="size-5 text-muted-foreground/50" aria-hidden="true" />}
-    {run.durationMs !== null && <span className="absolute right-0.5 bottom-0.5 rounded bg-black/70 px-1 text-xs leading-4 text-white">{(run.durationMs / 1000).toFixed(0)}s</span>}
+    {!demoVideo(run.id) && run.durationMs !== null && <span className="absolute right-0.5 bottom-0.5 rounded bg-black/70 px-1 text-xs leading-4 text-white">{(run.durationMs / 1000).toFixed(0)}s</span>}
   </span>;
 }

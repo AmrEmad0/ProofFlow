@@ -1,3 +1,4 @@
+import { PACK_DEMO } from "../../shared/demo";
 import type { Database } from "bun:sqlite";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { DEMO_FEED_STOPPED, DEMO_FEED_ID, defaultTriggerSettings, taskSessionSchema, triggerConfigurationSchema, triggerEventSchema, triggerSettingsSchema, type TriggerSource } from "../../shared/triggers";
@@ -30,11 +31,13 @@ export function triggerStore(db: Database) {
   }
   function overview(planId: string, owner: string) {
     plans.read(planId, owner);
+    if (planId === PACK_DEMO.planId) return { feed: null, sessions: [], configuration: triggerConfigurationSchema.parse({ revision: 0, settings: defaultTriggerSettings, apiKeyConfigured: false, links: { start: null, finish: null } }) };
     const rows = db.query<{ id: string }, [string]>("SELECT id FROM task_sessions WHERE plan_id = ? ORDER BY started_at DESC, rowid DESC LIMIT 30").all(planId);
     const feed = db.query<{ running: number; position: number; error_message: string | null }, [string]>("SELECT * FROM demo_feeds WHERE plan_id = ?").get(planId);
     return { feed: feed ? { running: Boolean(feed.running), position: feed.position, error: feed.error_message } : null, configuration: configuration(planId), sessions: rows.map(row => session(row.id, planId)) };
   }
   function save(planId: string, owner: string, revision: number, input: unknown) {
+    if (planId === PACK_DEMO.planId) throw new PlannerError(403, "Copy the demo plan before configuring triggers.");
     const parsed = triggerSettingsSchema.safeParse(input);
     if (!parsed.success) throw new PlannerError(400, "Choose a supported start and finish trigger.");
     if (Boolean(parsed.data.recording) !== (parsed.data.finish === "clip")) throw new PlannerError(400, "Recorded sources finish when their clip ends.");
@@ -56,6 +59,7 @@ export function triggerStore(db: Database) {
     return configuration(planId);
   }
   function rotateKey(planId: string, owner: string) {
+    if (planId === PACK_DEMO.planId) throw new PlannerError(403, "Copy the demo plan before configuring triggers.");
     plans.read(planId, owner);
     const token = randomBytes(32).toString("hex");
     db.query(`INSERT INTO plan_triggers (plan_id, settings_json, api_key_hash) VALUES (?, ?, ?)
@@ -63,6 +67,7 @@ export function triggerStore(db: Database) {
     return { token };
   }
   function revokeKey(planId: string, owner: string) {
+    if (planId === PACK_DEMO.planId) throw new PlannerError(403, "Copy the demo plan before configuring triggers.");
     plans.read(planId, owner);
     db.query("UPDATE plan_triggers SET api_key_hash = NULL WHERE plan_id = ?").run(planId);
     return { revoked: true as const };
@@ -78,6 +83,7 @@ export function triggerStore(db: Database) {
     return row.session_hash;
   }
   function regenerateLink(planId: string, owner: string, action: "start" | "finish") {
+    if (planId === PACK_DEMO.planId) throw new PlannerError(403, "Copy the demo plan before configuring triggers.");
     plans.read(planId, owner);
     if (configuration(planId).settings[action] !== "api") throw new PlannerError(409, "Choose API link for this trigger first.");
     const token = randomBytes(32).toString("hex");
@@ -102,6 +108,7 @@ export function triggerStore(db: Database) {
     })();
   }
   function dispatch(planId: string, owner: string, source: TriggerSource, input: unknown) {
+    if (planId === PACK_DEMO.planId) throw new PlannerError(403, "Copy the demo plan before configuring triggers.");
     const parsed = triggerEventSchema.safeParse(input);
     if (!parsed.success) throw new PlannerError(400, "Provide a valid trigger event and unique event ID.");
     const event = parsed.data;
@@ -150,6 +157,7 @@ export function triggerStore(db: Database) {
     })();
   }
   function setFeed(planId: string, owner: string, running: boolean) {
+    if (planId === PACK_DEMO.planId) throw new PlannerError(403, "Copy the demo plan before configuring triggers.");
     db.transaction(() => {
       const plan = plans.read(planId, owner);
       const config = configuration(planId);

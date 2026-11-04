@@ -26,3 +26,5 @@ tmp/
 *.mov
 *.webm
 .DS_Store
+
+!assets/demo/pack-order/**/*.mp4

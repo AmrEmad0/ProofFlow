@@ -1,3 +1,4 @@
+import { DEMO_OWNER, isDemoRead } from "../demo/access";
 import { createHash } from "node:crypto";
 import { PlannerError } from "../planner/store";
 import type { Config } from "../config";
@@ -8,6 +9,7 @@ export function sessionToken(request: Request): string | null {
 }
 
 export function sessionHash(request: Request): string {
+  if (isDemoRead(request)) return DEMO_OWNER;
   const token = sessionToken(request);
   if (!token) throw new PlannerError(404, "This item could not be found in your workspace.");
   return createHash("sha256").update(token).digest("hex");

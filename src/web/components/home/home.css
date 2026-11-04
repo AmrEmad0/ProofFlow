@@ -330,7 +330,7 @@
 .workflow-hero-examples .workflow-photo > img { display:block; }
 .workflow-hero-examples .workflow-photo-credit { top:16px; bottom:auto; }
 .packing-demo-section > .home-demo-selector { max-width:480px; margin-bottom:18px; }
-.workflow-examples-grid { grid-template-columns:repeat(3,minmax(0,1fr)); gap:19px; }
+.workflow-examples-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:19px; }
 .workflow-example h3 { font-size:20px; }
 .workflow-example-photo > span { left:10px; bottom:10px; font-size:8px; padding:6px; }
 @media (max-width:1050px) {

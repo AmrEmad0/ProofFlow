@@ -1,3 +1,4 @@
+import { demoVideo } from "../../shared/demo";
 import type { Database } from "bun:sqlite";
 import { chmod, copyFile, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -198,6 +199,14 @@ export function runRoutes(db: Database, config: Config, worker?: VerificationWor
       if (query.download && response.ok) response.headers.set("content-disposition", `attachment; filename="proofflow-${run.id}-${query.variant === "analysis" ? "analysis" : "tracked"}.mp4"`);
       return response;
     }, { params: idParams, query: t.Object({ download: t.Optional(t.Literal("true")), variant: t.Optional(t.Union([t.Literal("analysis"), t.Literal("tracked")])) }) })
+    .get("/api/runs/:id/source", ({ params, request }) => {
+      const video = demoVideo(params.id);
+      if (!video) throw new PlannerError(404, "Sample video not found.");
+      const run = store.row(params.id, sessionHash(request));
+      const response = videoResponse(Bun.file(run.video_path), request.headers.get("range"));
+      response.headers.set("content-disposition", `attachment; filename="${video.filename}"`);
+      return response;
+    }, { params: idParams })
     .get("/api/runs/:id/thumbnail", async ({ params, request }) => {
       const run = store.row(params.id, sessionHash(request));
       const path = join(runDirectory(config, params.id), "thumbnail.jpg");
