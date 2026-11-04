@@ -1,3 +1,4 @@
+import { createOutgoingWorker } from "./outgoing/worker";
 import { seedPackDemo } from "./demo/seed";
 import { createCaptureWorker } from "./triggers/capture-worker";
 import { staticPlugin } from "@elysia/static";
@@ -14,6 +15,7 @@ const db = openDatabase(config.DATABASE_PATH);
 seedPackDemo(db, config);
 const worker = createVerificationWorker(db, config);
 await worker.startWhenAvailable();
+const outgoing = createOutgoingWorker(db);
 const captures = createCaptureWorker(db, config, worker);
 const app = createApp(db, config, undefined, worker);
 
@@ -43,6 +45,7 @@ async function shutdown() {
   await app.stop();
   await captures.stop();
   await worker.stop();
+  await outgoing.stop();
   db.close();
   process.exit(0);
 }

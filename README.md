@@ -19,6 +19,8 @@ The built-in **Pack an order** demo is included in the repository and Docker ima
 
 Video verification requires an approved plan and sharing consent. MP4, MOV, and WebM uploads are limited to 30 seconds and 25 MB. Workspaces use browser cookies; losing the cookie loses access. Saved media remains until manually deleted. Model requests share submitted content with Meta; the configured Muse model may use content for training.
 
+**Videos & evidence → Send results** can POST typed JSON results to a public HTTPS endpoint after each new video completes. Reports include the run ID, optional task reference, and each task’s ID, label, and status, with up to three delivery attempts and a stable `Idempotency-Key`. Destination settings are frozen when each video is added. Payloads can be previewed and downloaded; evidence paths still require workspace access. Custom authentication headers and webhook signatures are not supported.
+
 This is a prototype, not certification of hidden outcomes. Occlusion, sampling, and model uncertainty can limit findings. Homepage walkthroughs contain scripted, illustrative results; they are not live model outputs or accuracy benchmarks. Homepage illustrations are AI-generated.
 
 Built with Meta Model API, React, TanStack, Elysia, Bun SQLite, Tailwind, shadcn/ui, FFmpeg, and FFprobe.

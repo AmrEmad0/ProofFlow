@@ -240,6 +240,7 @@ export function plannerStore(db: Database) {
       db.query("DELETE FROM trigger_events WHERE plan_id = ?").run(id);
       db.query("DELETE FROM task_sessions WHERE plan_id = ?").run(id);
       db.query("DELETE FROM plan_triggers WHERE plan_id = ?").run(id);
+      db.query("DELETE FROM plan_outgoing WHERE plan_id = ?").run(id);
       db.query("UPDATE plans SET reference_media_json = NULL WHERE id = ?").run(id);
       db.query("DELETE FROM planner_messages WHERE plan_id = ?").run(id);
       db.query("DELETE FROM plan_versions WHERE plan_id = ? AND status = 'draft'").run(id);

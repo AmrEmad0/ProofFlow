@@ -1,3 +1,4 @@
+import { OutgoingApi } from "./outgoing-api";
 import { PACK_DEMO, demoVideo } from "../../../shared/demo";
 import { Link } from "@tanstack/react-router";
 import { needsManualReview } from "../../../shared/manual-review";
@@ -179,7 +180,7 @@ export function VerificationWorkspace({ saved, heading, visible, startNewUpload,
   return <div ref={container} className="min-w-0">
     <input ref={chooser} type="file" accept=".mp4,.mov,.webm,video/mp4,video/quicktime,video/webm" aria-label="Upload another video" className="sr-only" tabIndex={-1} disabled={upload.isPending} onChange={event => { const selected = event.target.files?.[0]; if (choose(selected, false)) upload.mutate(selected); event.target.value = ""; }} />
     <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-      <div className="min-w-0">{heading}<Link to="/reports" search={{ planId: saved.id }} className="mt-1 inline-flex min-h-9 items-center text-xs font-medium text-muted-foreground underline underline-offset-4">View plan report</Link></div>
+      <div className="min-w-0">{heading}<div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1"><Link to="/reports" search={{ planId: saved.id }} className="inline-flex min-h-9 items-center text-xs font-medium text-muted-foreground underline underline-offset-4">View plan report</Link><OutgoingApi planId={saved.id} run={run} readOnly={pinnedDemo} /></div></div>
       {runId && run && <div className="min-w-0 sm:text-right"><h2 className="text-[14px] font-semibold tracking-tight">{recordingName(recordings, run.id)}</h2><p className="mt-1 text-[12px] leading-5 text-muted-foreground">{new Date(run.createdAt).toLocaleString()}{!demoVideo(run.id) && run.durationMs ? ` · ${(run.durationMs / 1000).toFixed(1)} seconds` : ""} · Plan v{run.planVersion}</p>{demoVideo(run.id) && <a href={`/api/runs/${run.id}/source`} download={demoVideo(run.id)!.filename} className="inline-flex min-h-9 items-center gap-1.5 text-xs underline underline-offset-4"><ArrowDownToLine className="size-3.5" />Download sample video</a>}
       </div>}
     </div>

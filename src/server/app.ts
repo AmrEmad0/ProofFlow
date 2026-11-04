@@ -1,3 +1,4 @@
+import { outgoingRoutes } from "./routes/outgoing";
 import { isDemoMutation } from "./demo/access";
 import { reportRoutes } from "./routes/reports";
 import type { Database } from "bun:sqlite";
@@ -37,6 +38,7 @@ export function createApp(db: Database, config: Config, conversation?: PlanConve
     .use(eventRoutes(db, config, worker))
     .use(planRoutes(db, config, conversation, worker, analyzeReference))
     .use(triggerRoutes(db, config))
+    .use(outgoingRoutes(db, config))
     .use(runRoutes(db, config, worker))
     .use(reportRoutes(db));
 }

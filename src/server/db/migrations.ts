@@ -236,6 +236,29 @@ const migrations = [{
 }, {
   version: 18,
   sql: `ALTER TABLE planner_messages ADD COLUMN answer_options_json TEXT CHECK (answer_options_json IS NULL OR json_valid(answer_options_json));`,
+}, {
+  version: 19,
+  sql: `CREATE TABLE plan_outgoing (
+    plan_id TEXT PRIMARY KEY REFERENCES plans(id) ON DELETE CASCADE, endpoint TEXT NOT NULL
+  );
+  ALTER TABLE runs ADD COLUMN outgoing_endpoint TEXT;
+  CREATE TRIGGER snapshot_outgoing AFTER INSERT ON runs BEGIN
+    UPDATE runs SET outgoing_endpoint = (SELECT endpoint FROM plan_outgoing WHERE plan_id =
+      (SELECT plan_id FROM plan_versions WHERE id = NEW.plan_version_id)) WHERE id = NEW.id;
+  END;
+  CREATE TABLE outgoing_deliveries (
+    run_id TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
+    event_id TEXT NOT NULL UNIQUE, endpoint TEXT NOT NULL, payload_json TEXT,
+    state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','sending','delivered','failed')),
+    attempts INTEGER NOT NULL DEFAULT 0, next_at INTEGER NOT NULL DEFAULT 0,
+    http_status INTEGER, error TEXT, delivered_at TEXT
+  );
+  CREATE TRIGGER enqueue_outgoing AFTER UPDATE OF state ON runs
+    WHEN NEW.state = 'completed' AND OLD.state != 'completed' AND NEW.outgoing_endpoint IS NOT NULL
+      AND NEW.receipt_json IS NOT NULL BEGIN
+    INSERT OR IGNORE INTO outgoing_deliveries (run_id, event_id, endpoint)
+      VALUES (NEW.id, 'verification.completed:' || NEW.id, NEW.outgoing_endpoint);
+  END;`,
 }];
 
 export function migrate(db: Database): void {
