@@ -18,6 +18,7 @@ type Props = {
   partialReply: string;
   planPreview: PlannerPreview | null;
   configured: boolean;
+  configurationLoading: boolean;
   error: string | null;
   input: string;
   onInputChange: (value: string) => void;
@@ -27,7 +28,7 @@ type Props = {
   onReload: () => void;
 };
 
-export function PlannerChat({ saved, starter, pending, sending, referenceSending, pendingMessage, partialReply, planPreview, configured, error, input, onInputChange: setInput, onSend, onStarter, onManual, onReload }: Props) {
+export function PlannerChat({ saved, starter, pending, sending, referenceSending, pendingMessage, partialReply, planPreview, configured, configurationLoading, error, input, onInputChange: setInput, onSend, onStarter, onManual, onReload }: Props) {
   const [media, setMedia] = useState<File | null>(null);
   const [localUrl, setLocalUrl] = useState<string | null>(null);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
@@ -97,7 +98,7 @@ export function PlannerChat({ saved, starter, pending, sending, referenceSending
       {!isStarting && <div className="chat-header">
         <span className="chat-avatar"><Sparkles className="size-5" aria-hidden="true" /></span>
         <div className="min-w-0 flex-1"><h2 className="text-sm font-semibold">AI plan assistant</h2></div>
-        <span className="chat-header-status"><span className={`size-1.5 rounded-full ${sending ? "bg-primary animate-pulse" : configured ? "bg-emerald-500" : "bg-muted-foreground"}`} />{configured ? "Muse Spark" : "Offline"}</span>
+        <span className="chat-header-status"><span className={`size-1.5 rounded-full ${sending ? "bg-primary animate-pulse" : configured ? "bg-emerald-500" : "bg-muted-foreground"}`} />{configurationLoading ? "Connecting…" : configured ? "Muse Spark" : "Offline"}</span>
       </div>}
       {!hasPlan && !isStarting && messages.length === 0 && !sending && !partialReply && <div className="chat-welcome"><h3 className="text-xl font-semibold tracking-tight">{hasPlan ? "What would you like to refine?" : "What should we check?"}</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{hasPlan ? "Change a check or ask for filming tips." : "Describe your process. We’ll draft the visual checks for your approval. No model training required."}</p></div>}
       {hasPlan && <p className="ai-planner-hint">Tell me what to change, or ask how to film.</p>}
@@ -129,10 +130,9 @@ export function PlannerChat({ saved, starter, pending, sending, referenceSending
       {showLatest && <div className="flex justify-center border-t py-2"><Button variant="outline" className="h-9 rounded-full text-xs" onClick={scrollToLatest}><ArrowDown className="size-3.5" />Latest message</Button></div>}
       <p className="sr-only" role="status">{sending ? "Assistant is responding." : error ? "Message failed. Your draft is preserved." : messages.length ? "Assistant response complete." : ""}</p>
       <div className="chat-composer-area p-4 sm:p-5">
-        {isStarting && <PlannerExamples input={input} disabled={pending} onSelect={prompt => { setInput(prompt); composer.current?.focus({ preventScroll: true }); }} />}
-
         {error && <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/5 p-3" role="alert"><p className="text-sm leading-5 text-destructive">{error}</p>{saved && <button onClick={onReload} disabled={pending} className="mt-2 text-xs font-medium underline underline-offset-4">Reload saved draft</button>}</div>}
-        {!configured && <p className="mb-4 text-sm leading-6 text-muted-foreground">The assistant is unavailable right now. {hasPlan ? "You can still change your checks directly." : "You can build your plan manually or use an example."}</p>}
+        {configurationLoading && <p role="status" className="mb-4 text-sm leading-6 text-muted-foreground">Connecting to the plan assistant…</p>}
+        {!configurationLoading && !configured && <p className="mb-4 text-sm leading-6 text-muted-foreground">The assistant is unavailable right now. {hasPlan ? "You can still change your checks directly." : "You can build your plan manually or use an example."}</p>}
         {hasPlan && !sending && !input.trim() && <div className="mb-3 flex flex-wrap gap-2" role="group" aria-label="Suggestions for your assistant">{[
           { label: "Add a check", message: "Add a check for " },
           { label: "Change a check", message: "Change check 1: " },
@@ -164,6 +164,7 @@ export function PlannerChat({ saved, starter, pending, sending, referenceSending
             <Button variant="ghost" className="gap-2 text-xs text-muted-foreground" disabled={pending} onClick={onStarter}><Package className="size-3.5" />Explore a sample plan</Button>
           </div>
         </>}
+        {isStarting && <PlannerExamples input={input} disabled={pending} onSelect={prompt => { setInput(prompt); composer.current?.focus({ preventScroll: true }); }} />}
       </div>
     </section>
   );

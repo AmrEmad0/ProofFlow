@@ -10,7 +10,7 @@ type Phase = "describe" | "plan" | "review";
 export function ProductWalkthrough({ demoId, onSelect }: { demoId: DemoId; onSelect: (id: DemoId) => void }) {
   const scenario = demoScenarios[demoId];
   return <section id="product-demo" className="home-container packing-demo-section" aria-labelledby="packing-demo-title">
-    <div className="section-intro"><div><span className="home-kicker">TWO WORKFLOWS. THE SAME SIMPLE START.</span><h2 id="packing-demo-title">{scenario.heading}</h2></div><p>Choose an example. Describe, approve, then inspect.</p></div>
+    <div className="section-intro"><div><span className="home-kicker">YOUR WORKFLOW. A SIMPLE START.</span><h2 id="packing-demo-title">{scenario.heading}</h2></div><p>Try order packing. Describe, approve, then inspect.</p></div>
     <DemoSelector selected={demoId} onSelect={onSelect} label="Walkthrough example" />
     <ScenarioWalkthrough key={demoId} scenario={scenario} />
   </section>;

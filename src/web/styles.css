@@ -188,14 +188,14 @@
   .chat-panel-start textarea { @apply min-h-24 pt-2 text-base leading-7 placeholder:text-muted-foreground/80; }
   .chat-panel-start .composer-toolbar { @apply gap-2 px-0 pb-0; }
   .composer-submit { @apply shadow-sm; }
-  .process-examples { @apply mb-5; }
+  .process-examples { @apply mt-5 border-t pt-5; }
   .process-examples-heading { @apply mb-3 flex flex-wrap items-center justify-between gap-1; }
   .process-examples-heading h2 { @apply text-sm font-medium; }
   .process-examples-heading > span { @apply text-[11px] text-muted-foreground; }
   .process-example-grid { @apply grid gap-3 sm:grid-cols-3; }
   .process-example { @apply flex min-w-0 flex-col items-start overflow-hidden rounded-xl border bg-background/50 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 disabled:opacity-50; }
   .process-example[aria-pressed="true"] { @apply border-primary/60 bg-primary/5 ring-2 ring-primary/8; }
-  .process-example-art { @apply relative block w-full shrink-0 overflow-hidden; aspect-ratio: 1.15; background: #f2ece2; }
+  .process-example-art { @apply relative block w-full shrink-0 overflow-hidden; aspect-ratio: 2.4; background: #f2ece2; }
   .process-example-art img { position: absolute; top: 50%; width: 300%; max-width: none; height: auto; transform: translateY(-50%); }
   .process-example-copy { @apply flex w-full min-w-0 flex-1 flex-col gap-1 px-3.5 pt-3 pb-4; }
   .process-example-category { @apply text-[10px] font-medium tracking-wide text-primary; }
