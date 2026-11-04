@@ -1,6 +1,7 @@
+import { PACK_DEMO } from "../../../shared/demo";
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowDown, ArrowRight, Check, CircleHelp, Eye, FileCheck2, Film, Focus, Layers3, MessageSquareText, Minus, ScanLine } from "lucide-react";
+import { ArrowRight, Check, CircleHelp, Eye, FileCheck2, Film, Focus, Layers3, MessageSquareText, Minus, ScanLine } from "lucide-react";
 import { ProductWalkthrough } from "./product-walkthrough";
 import { DevelopmentStory, WorkflowExamples } from "./workflow-story";
 import { TrackedVideo } from "./tracked-video";
@@ -24,7 +25,7 @@ export function HomePage() {
     <header className="home-header home-container"><Brand /><nav aria-label="Main navigation"><a href="#why-proofflow">Why ProofFlow</a><a href="#product-demo">See it work</a><a href="#workflows">Use cases</a></nav><Link to="/new" className="home-button home-button-dark home-nav-cta">Open ProofFlow<ArrowRight size={16} aria-hidden="true" /></Link></header>
     <main id="main-content">
       <section className="home-hero home-container">
-        <div className="home-hero-copy"><div className="hero-eyebrow"><span />VISUAL AI FOR EVERYDAY WORK</div><h1>Your workflow.<br />Your know-how.<br /><span>Now, checkable.</span></h1><p>Turn the procedures you know into visual checks. Describe the task, approve the plan, and review your video evidence.</p><div className="hero-actions"><Link to="/new" className="home-button home-button-primary">Create your Proof Plan<ArrowRight size={17} aria-hidden="true" /></Link><a href="#product-demo" className="home-button home-button-outline">Try the example<ArrowDown size={16} aria-hidden="true" /></a></div><div className="hero-footnote"><span><Check size={14} aria-hidden="true" />No custom model training</span><span><Check size={14} aria-hidden="true" />No labeled training dataset required</span></div></div>
+        <div className="home-hero-copy"><div className="hero-eyebrow"><span />VISUAL AI FOR EVERYDAY WORK</div><h1>Your workflow.<br />Your know-how.<br /><span>Now, checkable.</span></h1><p>Turn the procedures you know into visual checks. Describe the task, approve the plan, and review your video evidence.</p><div className="hero-actions"><Link to="/new" className="home-button home-button-primary">Create your Proof Plan<ArrowRight size={17} aria-hidden="true" /></Link><Link to="/plans/$planId" params={{ planId: PACK_DEMO.planId }} className="home-button home-button-outline">Try the example<ArrowRight size={16} aria-hidden="true" /></Link></div><div className="hero-footnote"><span><Check size={14} aria-hidden="true" />No custom model training</span><span><Check size={14} aria-hidden="true" />No labeled training dataset required</span></div></div>
         <TrackedVideo />
       </section>
       <div className="home-model-strip home-container"><span>POWERED BY META MODELS</span><div><span className="meta-mark" aria-hidden="true">∞</span><strong>Muse Spark</strong><span className="model-strip-plus">+</span><Focus size={19} aria-hidden="true" /><strong>SAM 3.1</strong></div><p>Existing models. Your procedure.</p></div>
