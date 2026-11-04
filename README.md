@@ -62,6 +62,14 @@ Fresh requests use the server's configured Meta key. Availability and processing
 
 All configuration defaults are in [`.env.example`](.env.example). `DATABASE_PATH` and `STORAGE_PATH` control local persistence; `FFMPEG_PATH` and `FFPROBE_PATH` override binary locations. Run one application process per database. For deployment, set `WEB_ORIGIN` to the public HTTPS origin. Check `/api/health` for database/media readiness and whether a model key is configured; a healthy response alone does not prove model invocation access.
 
+## Hackathon contributions
+
+During the event, we built the Proof Plan editor and approval/versioning flow, Muse Spark and SAM 3.1 integrations, video processing and evidence evaluation, timestamped evidence review, human review tools, reports, and task triggers.
+
+We reused existing libraries and components: React, Vite, TanStack Router/Query, Elysia/Eden, Bun SQLite, Tailwind, shadcn/ui, Lucide icons, FFmpeg, FFprobe, and Meta's existing models. No custom model training or fine-tuning was performed.
+
+Both bundled packing videos—`demo-1-pack.mp4` and `Person_packing_order_in_box_dc37aa78.mp4`—are AI-generated demonstrations, not filmed recordings of real work. Their saved Muse Spark/SAM results show analysis of those synthetic inputs, not measured performance on real-world footage. Homepage illustrations are also AI-generated; the homepage's interactive walkthrough uses scripted results. The social preview uses a screenshot of the saved demo workspace.
+
 ## Limitations and attribution
 
 - This prototype assesses visible evidence and does not certify hidden outcomes. Occlusion, sampling, and model uncertainty can limit findings.
