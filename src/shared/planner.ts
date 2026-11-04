@@ -61,14 +61,21 @@ export function describeEditedCheck(original: ProofStep, edit: EditableCheck): P
   }
 }
 
+export const plannerAnswerOptionsSchema = z.array(z.strictObject({
+  label: z.string().trim().min(1).max(60),
+  message: z.string().trim().min(1).max(500),
+})).min(2).max(3).nullable();
+
 export const plannerMessageSchema = z.strictObject({
   role: z.enum(["user", "assistant"]),
   content: z.string().trim().min(1).max(4000),
+  answerOptions: plannerAnswerOptionsSchema.optional(),
 });
 
 export const plannerReplySchema = z.strictObject({
   reply: z.string().trim().min(1).max(4000),
   plan: proofPlanSchema.nullable(),
+  answerOptions: plannerAnswerOptionsSchema.optional(),
 });
 
 export const referenceMediaSchema = z.strictObject({

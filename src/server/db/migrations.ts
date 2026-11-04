@@ -233,6 +233,9 @@ const migrations = [{
     CHECK (decision != 'observed' OR timestamp_ms IS NOT NULL)
   );
   CREATE INDEX manual_reviews_run_step ON manual_reviews(run_id, step_id, id);`,
+}, {
+  version: 18,
+  sql: `ALTER TABLE planner_messages ADD COLUMN answer_options_json TEXT CHECK (answer_options_json IS NULL OR json_valid(answer_options_json));`,
 }];
 
 export function migrate(db: Database): void {

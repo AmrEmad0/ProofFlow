@@ -25,7 +25,8 @@ export function plannerStore(db: Database) {
       schemaVersion: row.schema_version, title: row.title_snapshot, goal: row.goal_snapshot,
       steps: JSON.parse(row.steps_json), limitations: JSON.parse(row.limitations_json),
     }) : null;
-    const messages = db.query<PlannerMessage, [string]>("SELECT role, content FROM planner_messages WHERE plan_id = ? ORDER BY id").all(id);
+    const messages = db.query<PlannerMessage & { answer_options_json: string | null }, [string]>("SELECT role, content, answer_options_json FROM planner_messages WHERE plan_id = ? ORDER BY id").all(id)
+      .map(({ role, content, answer_options_json }) => ({ role, content, ...(answer_options_json ? { answerOptions: JSON.parse(answer_options_json) } : {}) }));
     return savedPlanSchema.parse({
       id, revision: owner.revision, version: row?.version ?? null, versionId: row?.id ?? null,
       status: row?.status ?? "draft", contractHash: plan ? hashContract(plan) : null,
@@ -109,9 +110,9 @@ export function plannerStore(db: Database) {
       const current = read(id, sessionHash);
       if (current.revision !== revision) throw new PlannerError(409, "This template changed. Reload it before sending again.");
       if (reply.plan && hashContract(reply.plan) !== current.contractHash) addVersion(id, (current.version ?? 0) + 1, reply.plan);
-      const insert = db.query("INSERT INTO planner_messages (plan_id, role, content) VALUES (?, ?, ?)");
-      insert.run(id, "user", message);
-      insert.run(id, "assistant", reply.reply);
+      const insert = db.query("INSERT INTO planner_messages (plan_id, role, content, answer_options_json) VALUES (?, ?, ?, ?)");
+      insert.run(id, "user", message, null);
+      insert.run(id, "assistant", reply.reply, reply.answerOptions ? JSON.stringify(reply.answerOptions) : null);
       if (reference) db.query("UPDATE plans SET reference_media_json = ? WHERE id = ?").run(JSON.stringify(reference), id);
       db.query("UPDATE planner_owners SET revision = revision + 1 WHERE plan_id = ?").run(id);
     })();

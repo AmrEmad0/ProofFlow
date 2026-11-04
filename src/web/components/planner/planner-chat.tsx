@@ -82,6 +82,14 @@ export function PlannerChat({ saved, starter, pending, sending, referenceSending
     finally { submitting.current = false; }
   }
 
+  async function answer(message: string) {
+    if (submitting.current || pending || !configured) return;
+    submitting.current = true;
+    try { await onSend(message); }
+    catch { /* The shared error offers retry; keep the answer buttons available. */ }
+    finally { submitting.current = false; }
+  }
+
   return (
     <section className={`chat-panel min-w-0 ${messages.length || sending ? "chat-panel-active" : ""} ${isStarting ? "chat-panel-start" : ""} ${hasPlan ? "chat-panel-review" : ""}`} aria-label="Template planning chat">
       {!isStarting && <div className="chat-header">
@@ -95,6 +103,9 @@ export function PlannerChat({ saved, starter, pending, sending, referenceSending
         {messages.map((message, index) => <div key={`${saved?.id}-${index}`} className={message.role === "user" ? "chat-message-user" : "chat-message-assistant"}>
           {message.role === "assistant" && <p className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-primary"><Sparkles className="size-3" aria-hidden="true" />ProofFlow</p>}
           <MessageContent content={message.content} user={message.role === "user"} />
+          {message.role === "assistant" && index === messages.length - 1 && message.answerOptions && !sending && <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Answer the assistant’s question">
+            {message.answerOptions.map(option => <Button key={option.label} type="button" variant="outline" className="h-auto min-h-11 max-w-full whitespace-normal px-4 py-2 text-sm" disabled={pending || !configured} onClick={() => void answer(option.message)}>{option.label}</Button>)}
+          </div>}
         </div>)}
         {(sending || partialReply || planPreview) && <>
           <div className="chat-message-user">
