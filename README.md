@@ -4,6 +4,8 @@ Built for the [Meta Global AI Developer Hackathon 2026](https://dev.meta.ai/even
 
 **[Working demo → proofflow.amremad.com](https://proofflow.amremad.com/)**
 
+**[Watch the demo on YouTube](https://www.youtube.com/watch?v=wi8pMcWhSlk)**
+
 Turn visible procedures into user-approved Proof Plans, then review short videos with timestamped findings and tracked object evidence. Meta Muse Spark 1.3 proposes visual events, SAM 3.1 supplies tracked object geometry, and application rules classify evidence as **observed**, **not observed**, or **uncertain**.
 
 ## For judges: try the demo
@@ -68,6 +70,8 @@ All configuration defaults are in [`.env.example`](.env.example). `DATABASE_PATH
 - **Videos & evidence → Send results** can POST JSON reports to a public HTTPS endpoint after a new video completes, with up to three delivery attempts and a stable `Idempotency-Key`. Destination settings are frozen per video; evidence paths still require workspace access. Custom authentication headers and webhook signatures are not supported.
 
 Built with Meta Model API (Muse Spark and SAM 3.1), React, Vite, TanStack Router/Query, Elysia/Eden, Bun SQLite, Tailwind, shadcn/ui, FFmpeg, and FFprobe. Homepage illustrations are AI-generated.
+
+Application code is licensed under the [MIT License](LICENSE). Third-party components retain their own licenses; use of Meta models and services remains subject to Meta's applicable terms.
 
 ## Run with Docker
 
